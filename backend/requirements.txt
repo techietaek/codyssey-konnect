@@ -1,0 +1,39 @@
+# KONNECT Backend — Python 3.12+ (가상환경 사용)
+#   python3.12 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+# 실제 설치 후에는 `pip freeze > requirements.lock.txt` 로 정확한 버전을 고정 권장.
+
+# ── Web / API ─────────────────────────────
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+python-multipart>=0.0.9        # multipart/form-data 처리(필요 시)
+
+# ── Auth / JWT (Supabase 세션 JWT 검증) ────
+pyjwt[crypto]>=2.8
+
+# ── AI / Agent (OpenAI + LangChain) ────────
+openai>=1.40
+langchain>=0.3
+langchain-openai>=0.2
+langchain-community>=0.3
+tiktoken>=0.7                  # 토큰 계산·청크 분할
+
+# ── Supabase (DB · pgvector · Auth 연동) ───
+supabase>=2.6
+vecs>=0.4                      # Supabase pgvector 컬렉션(RAG 임베딩 저장·검색)
+
+# ── 외부 API 호출 (TourAPI·서울문화포털·KOPIS·기상청·AirKorea·Tmap·Google Places) ──
+httpx>=0.27                    # 비동기 HTTP 클라이언트
+tenacity>=8.2                  # 재시도(내결함성)
+
+# ── 설정·환경 ──────────────────────────────
+python-dotenv>=1.0
+
+# ── 개발·테스트 ────────────────────────────
+pytest>=8.2
+pytest-asyncio>=0.23
+respx>=0.21                    # httpx 외부 API 모킹
+ruff>=0.5
+black>=24.4

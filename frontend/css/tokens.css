@@ -1,0 +1,75 @@
+/* ============================================================
+   KONNECT — Design Tokens (값 정본)
+   출처: Figma `Konnect-Design` (DESIGN.md §2에서 추출)
+   규칙: 프론트 전역에서 하드코딩 금지, 항상 var(--token) 참조.
+         값이 바뀌면 이 파일만 수정 → 전체 반영.
+         "왜/언제 어떤 상태"의 설명은 DESIGN.md를 본다.
+   ============================================================ */
+
+:root {
+  /* ---------- Color · Brand ---------- */
+  --c-primary: #007385;        /* 브랜드 teal: 버튼·선택 테두리·핀·링크·경로선 */
+  --c-primary-ink: #1f6670;    /* teal 텍스트(추천 이유·walk time·보조) */
+  --c-primary-tint: #e3f1f3;   /* 선택된 칩·비강조 버튼 배경 */
+  --c-primary-tint-2: #dff3e7; /* 연초록(Fits 계열) */
+
+  /* ---------- Color · Text / Surface / Border ---------- */
+  --c-text: #1a2429;           /* 기본 텍스트·제목·Fact */
+  --c-text-muted: #6b787d;     /* 보조·placeholder·비활성 */
+  --c-surface: #ffffff;        /* 카드·시트·칩 배경 */
+  --c-bg: #f4f6f7;             /* 페이지 배경 (근사치 — Figma 확정 시 갱신) */
+  --c-border: #dfe4e6;         /* 기본 테두리(칩·입력·구분선) */
+  --c-ink-pin: #2a2f45;        /* 지도 Start 핀 (근사치) */
+  --c-on-primary: #ffffff;     /* teal 위 텍스트 */
+
+  /* ---------- Color · Result State (상태 배지) ---------- */
+  --c-fits-bg: #dff3e7;   --c-fits-text: #2e7d4f;   /* Fits your conditions */
+  --c-check-bg: #fdf0d0;  --c-check-text: #a8660a;  /* Check needed */
+  --c-alt-bg: #e6e8f2;    --c-alt-text: #454773;    /* Alternative / 중립 안내 */
+
+  /* ---------- Color · Unconfirmed flag 칩 ---------- */
+  --c-flag-bg: #fbf1de;   --c-flag-text: #9a5b00;
+
+  /* ---------- Typography ---------- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* 한글 Reference 필요 시: "Pretendard" 등을 앞에 추가 (EN 우선) */
+  --fw-bold: 700;
+  --fw-semibold: 600;
+  --fw-medium: 500;
+
+  --fs-title: 16px;    /* 카드 제목·결과 타이틀 */
+  --fs-meta: 13px;     /* 시간·가격·이동 Fact */
+  --fs-body: 12px;     /* 추천 이유·링크·버튼 */
+  --fs-badge: 11px;    /* 상태 배지·flag·보조 */
+  --fs-pin: 10px;      /* 지도 핀 번호 */
+
+  --lh-tight: 1.25;
+
+  /* ---------- Radius ---------- */
+  --r-card: 18px;      /* 결과 카드·바텀시트 */
+  --r-md: 14px;        /* 카드 내 이미지 */
+  --r-badge: 10px;     /* 상태 배지 */
+  --r-flag: 8px;       /* 미확인 flag 칩 */
+  --r-pill: 20px;      /* 버튼(pill) */
+  --r-full: 999px;     /* 예시 칩·태그·No 배지 */
+
+  /* ---------- Shadow ---------- */
+  --shadow-card: 0 4px 8px rgba(13, 38, 46, 0.10);
+  --shadow-card-focus: 0 4px 8px rgba(13, 38, 46, 0.18);
+  --shadow-pin: 0 2px 3px rgba(0, 0, 0, 0.20);
+
+  /* ---------- Spacing scale ---------- */
+  --space-2: 2px;
+  --space-3: 3px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-14: 14px;
+  --space-20: 20px;
+
+  /* ---------- Layout ---------- */
+  --frame-w: 390px;    /* 모바일 기준 프레임 폭 */
+  --card-w: 330px;     /* 결과 카드 폭 */
+}
