@@ -30,6 +30,9 @@
   /* ---------- Color · Unconfirmed flag 칩 ---------- */
   --c-flag-bg: #fbf1de;   --c-flag-text: #9a5b00;
 
+  /* ---------- Color · Error (입력 검증 — Field Row 에러 상태) ---------- */
+  --c-error: #c23b3b;     --c-error-bg: #fdeeee;   --c-error-border: #e4a9a9;
+
   /* ---------- Typography ---------- */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   /* 한글 Reference 필요 시: "Pretendard" 등을 앞에 추가 (EN 우선) */

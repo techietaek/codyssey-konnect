@@ -10,13 +10,30 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.agent.context import RequestContext
+from app.agent.note_parser import parse_note
 from app.agent.orchestrator import recommend_a
 from app.core.trace import Trace
 from app.domain.input_validation import validate_available_time
 from app.models.envelope import Envelope
-from app.models.recommend import RecommendData, RecommendRequest
+from app.models.recommend import (
+    ParsedConditions,
+    ParseRequest,
+    RecommendData,
+    RecommendRequest,
+)
 
 router = APIRouter(prefix="/api", tags=["recommend"])
+
+
+@router.post("/parse", response_model=Envelope[ParsedConditions])
+async def parse(req: ParseRequest) -> Envelope[ParsedConditions]:
+    """확인 시트용 — note 를 '이해한 조건'으로 구조화(추천 조회 없음, 경량).
+
+    사용자가 확인/수정한 뒤 /recommend 에 conditions 로 돌려보낸다.
+    """
+    trace = Trace()
+    cond = await parse_note(req.note)
+    return Envelope.success(data=cond, trace_id=trace.trace_id)
 
 
 @router.post("/recommend", response_model=Envelope[RecommendData])
@@ -33,6 +50,7 @@ async def recommend(req: RecommendRequest) -> Envelope[RecommendData]:
         start_at=req.start_at,
         end_at=req.end_at,
         note=req.note,
+        conditions=req.conditions,
     )
 
     # [fetch → judge → route] 조회·정규화·판정·도보 이동. 시스템 예외

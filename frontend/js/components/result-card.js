@@ -1,11 +1,20 @@
-// Result Card v2 (DESIGN §3.1) — 최소형.
-// Fact · Reason · 미확인을 '시각적으로 분리' 렌더하는 것이 1차 목표(신뢰 UX).
-// 상태 배지는 후보당 1개, Reason 0~2개, 미확인은 별도 flag 칩.
+// Result Card v3 (LF-03 카드 캐러셀) — Fact · Reason · 미확인을 시각 분리(신뢰 UX).
+// 상태 배지 후보당 1개, Reason 0~2개, 미확인은 별도 flag 칩. 썸네일에 번호 배지.
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
   check_needed: "Check needed",
   alternative: "Alternative",
+};
+
+// 문화경험 유형 글리프(썸네일·핀 공용). 모양 바뀌어도 key 고정(DESIGN §3.4).
+export const TYPE_GLYPH = {
+  historic_visit: "🏛",
+  exhibition: "🖼",
+  performance: "🎭",
+  hands_on: "✋",
+  festival_event: "🎉",
+  default: "📍",
 };
 
 function el(tag, className, text) {
@@ -25,15 +34,21 @@ function directionsUrl(origin, c) {
   );
 }
 
-export function renderResultCard(c, origin) {
+export function renderResultCard(c, origin, index = 0) {
   const card = el("article", "card");
   card.dataset.status = c.status;
 
-  // 1. Head: 상태 배지 + 제목
+  // 1. Head: 썸네일(번호 배지) + 상태 배지 + 제목
   const head = el("div", "card-head");
+  const thumb = el("div", "card-thumb");
+  if (c.image_url) thumb.style.backgroundImage = `url("${c.image_url}")`;
+  else thumb.append(el("span", "card-thumb-glyph", TYPE_GLYPH[c.type] ?? TYPE_GLYPH.default));
+  thumb.append(el("span", "card-num", String(index + 1)));
+  const headText = el("div", "card-head-text");
   const badge = el("span", "badge", STATUS_LABEL[c.status] ?? c.status);
   badge.dataset.status = c.status;
-  head.append(badge, el("h2", "card-title", c.title));
+  headText.append(badge, el("h2", "card-title", c.title));
+  head.append(thumb, headText);
   card.append(head);
 
   // 2. Reasons (0~2) — teal check. 0개면 영역 생략.
@@ -50,9 +65,8 @@ export function renderResultCard(c, origin) {
   // 3. Meta (Fact) — 시간·가격·이동. provenance 를 문구로 구분.
   const meta = el("div", "meta");
   if (c.time) meta.append(el("span", "meta-item", c.time.display));
-  if (c.price && c.price.status !== "unknown") {
+  if (c.price && c.price.status !== "unknown")
     meta.append(el("span", "meta-item", c.price.display));
-  }
   if (c.movement) {
     const m = el("span", "meta-item", c.movement.display);
     if (c.movement.provenance === "estimate") m.classList.add("is-estimate");
