@@ -18,14 +18,14 @@
 ### 현재 상태 (Current Status) — ⚠️ 작업 시작·종료 때 갱신할 것
 - [x] **사전 준비 완료**: 문서(PRD/CLAUDE/DESIGN/tokens.css) · `backend/.venv`(3.12, 의존성 OK) · `.env` 전 키 **라이브 스모크 Green** · Supabase(Google·Anonymous·pgvector) 활성 · Figma MCP 연결 · GitHub repo/Projects.
 - [x] **Phase 0 — Walking Skeleton** (branch `phase0-walking-skeleton`): 프론트(:5500)→백(:8000)→프론트 관통 로컬 검증 Green. `GET /health`·`POST /api/recommend` 스텁(계약 고정)·CORS·공통 봉투(Envelope)·trace·ruff/black 통과. ⚠️ 조기 배포(Render/Vercel)는 **미완** — Phase 1 중 수행.
-- [ ] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) ← **진행 중**
+- [x] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) — A1~A6 완료(입력→조회→정규화→판정→지도/도보→Reason·LLM→선택). 날씨·배포는 보류.
   - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시). UI 다듬기(버튼 인터랙션 포함).
   - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·curation·agent/orchestrator). 실 후보 반환·신뢰 게이트·cat3 큐레이션.
   - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무·행사기간 판정으로 fits/check 산정, Hard 충돌 제외+대체. 54 pytest. (날씨 Context는 이후)
   - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b) + Google Map 딥링크(대중교통).
   - [x] A5 Reason+LLM — note LLM 구조화(LangChain) + Reason Copy 선택 + 예산→alternative + parsed chips. 74 pytest.
-  - [ ] A6 선택상태 ← **다음 슬라이스(Phase 1 마지막)**
-- [ ] Phase 2 — 로그인·개인화
+  - [x] A6 선택상태 — Select 확정·Current choice 배지·홈 재접근 배너(localStorage). **Phase 1 완료.**
+- [ ] Phase 2 — 로그인·개인화 ← **다음 Phase**
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
 
@@ -143,12 +143,14 @@
 - [x] trace: structure(파싱결과)·judge(fits/alt/check)·explain(reason수). 단위 테스트 24개(budget 9·reasons 8·status +7)
 - **Done when:** ✅ 각 후보에 근거 있는 Reason 0~2개, Fact 분리 렌더, 근거 없는 Fit 없음(게이트). 라이브(실 LLM+데이터+지도) 확인: 관심사·예산 reason, 예산초과 alternative, 미확인은 무료/충족 주장 안 함. 다음 **A6 선택 상태**.
 
-### A6 — 선택 상태 (LF-09, 비로그인)
-- [ ] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
-- [ ] LF-03에 남아 완료 피드백(Toast), 자동 이동·추가 저장 버튼 없음
-- [ ] 현재 선택 상태 유지·재접근(LF-09 A variant), 선택≠방문 (FR-C6)
-- [ ] 비로그인 임시 보존(로컬/익명) — Phase 2에서 계정 연결
-- **Done when:** 선택이 확정·유지되고 홈에서 다시 볼 수 있다. GPS 방문판정 없음(게이트).
+### A6 — 선택 상태 (LF-09, 비로그인) ✅
+- [x] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
+- [x] LF-03에 남아 완료 피드백(Toast) + Current choice 배지·Selected 버튼, 자동 이동·추가 저장 버튼 없음
+- [x] 현재 선택 유지·재접근: 홈(입력 뷰) 상단 "Current choice" 배너(View/Clear), 재오픈 시 확정 복원 (LF-09 A variant), 선택≠방문 (FR-C6)
+- [x] 비로그인 localStorage 영속 — Phase 2에서 계정 연결(익명→Google identity linking)
+- **Done when:** ✅ 선택이 확정·유지되고 홈에서 다시 볼 수 있다. GPS 방문판정 없음(게이트). 라이브 확인.
+
+**Phase 1(A 즉시추천) 완료:** A1~A6 전 슬라이스 통과(PRD §10 A 완료기준). 입력→조회→정규화→판정(3상태·Hard제외)→지도/도보→Reason/LLM→선택까지 end-to-end. **보류(의도적):** 날씨·대기질 Context(§6.6), 자유텍스트 정밀 지오코딩, 조기 배포(Render/Vercel — Phase 4).
 
 **Phase 1 완료 기준(PRD §10 A):** Start Anchor·가용시간 반영, Hard 충돌 미표시, 상태·이유·실행조건·미확인 구분, LF-03에서 Select로 확정·완료 피드백.
 
