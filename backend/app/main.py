@@ -25,6 +25,9 @@ from app.models.envelope import Envelope
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
 )
+# httpx/httpcore INFO 로그는 요청 URL(=serviceKey 포함)을 남긴다 → 시크릿 노출 방지(NFR-04)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("konnect")
 
 
