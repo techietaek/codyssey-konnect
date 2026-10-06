@@ -25,12 +25,17 @@ body {
   overflow-x: hidden;                  /* 가로 넘침 차단 */
 }
 
-/* 데스크톱: 디자인 폭(390) 중앙 컬럼, 전체 높이. 폰 목업 크롬 없음(a-bly식). */
+/* 데스크톱: Figma 프로토와 동일한 390×844 폰 비율 박스를 화면 중앙 정렬.
+   무거운 폰 크롬 없이 가벼운 테두리+그림자. 내부는 세로로 꽉 채움(CTA 바닥). */
 @media (min-width: 600px) {
-  body { display: flex; justify-content: center; }
+  body { display: flex; align-items: center; justify-content: center; padding: var(--space-20); }
   .device-frame {
-    width: var(--frame-w);                   /* 390px */
-    box-shadow: 0 0 0 1px var(--c-border);   /* 좌우 은은한 경계만 */
+    width: var(--frame-w);                                   /* 390px (Figma 기준) */
+    min-height: 0;
+    height: min(844px, calc(100dvh - 2 * var(--space-20)));  /* 844 (Figma), 작은 화면엔 맞춤 */
+    border-radius: 20px;
+    overflow: hidden;                                        /* 라운드 클립 → 내부 스크롤 */
+    box-shadow: 0 0 0 1px var(--c-border), 0 12px 32px rgba(13, 38, 46, 0.14);
   }
 }
 
@@ -38,18 +43,24 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: var(--space-20) var(--space-14);
+  padding: var(--space-20);
   /* 본문은 프레임 안에서만 스크롤 */
   overflow-y: auto;
 }
+@media (min-width: 600px) {
+  .app { padding: 28px 24px var(--space-20); }  /* 데스크톱은 여백을 더 넉넉히 */
+}
+
+/* 입력 뷰: 높이를 꽉 채우고 CTA를 바닥에 고정(모바일·데스크톱 공통) */
+.input-view { flex: 1; display: flex; flex-direction: column; }
 
 /* ── 공통 헤더 ── */
 .app-header h1 { font-size: var(--fs-title); font-weight: var(--fw-bold); margin: 0 0 var(--space-4); }
 .app-header p { margin: 0; font-size: var(--fs-body); color: var(--c-text-muted); }
 
 /* ── 입력 폼 (LF-02) ── */
-.form { display: flex; flex-direction: column; gap: var(--space-20); margin-top: var(--space-20); }
-.section { display: flex; flex-direction: column; gap: var(--space-10); }
+.form { flex: 1; display: flex; flex-direction: column; gap: var(--space-20); margin-top: var(--space-20); }
+.section { display: flex; flex-direction: column; gap: var(--space-12); }
 .section-head { display: flex; align-items: center; gap: var(--space-8); }
 .section-head h2 { font-size: var(--fs-meta); font-weight: var(--fw-bold); margin: 0; }
 .tag {
@@ -59,12 +70,12 @@ body {
 .tag--required { background: var(--c-primary-tint); color: var(--c-primary); }
 .tag--optional { background: var(--c-bg); color: var(--c-text-muted); border: 1px solid var(--c-border); }
 
-.field { display: flex; flex-direction: column; gap: var(--space-4); }
+.field { display: flex; flex-direction: column; gap: var(--space-6); }
 .field > label { font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text-muted); }
 .field input, .field textarea {
   font-family: inherit; font-size: var(--fs-meta); color: var(--c-text);
   background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: var(--r-flag); padding: var(--space-10) var(--space-12);
+  border-radius: var(--r-flag); padding: var(--space-12) var(--space-14);
   width: 100%; min-width: 0;  /* UA 기본 min-width 무력화(모바일 가로 넘침 방지) */
 }
 .field input:focus, .field textarea:focus { outline: 2px solid var(--c-primary); border-color: var(--c-primary); }

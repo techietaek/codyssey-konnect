@@ -38,7 +38,7 @@ function localNowValue() {
 }
 
 export function renderInputView({ prefill, onResults }) {
-  const root = el("section");
+  const root = el("section", "view input-view");
 
   const header = el("header", "app-header");
   header.append(
