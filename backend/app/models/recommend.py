@@ -1,0 +1,117 @@
+"""즉시 추천(A) 요청/응답 계약.
+
+신뢰 불변식(CLAUDE.md §6)을 스키마에 녹인다:
+- 가격은 boolean(무료 여부)이 아니라 '상태값'. 빈값→free 매핑 불가.
+- 모든 사실값에 provenance(confirmed/estimate/planned/unconfirmed).
+- reasons 최대 2개, candidates 최대 4개(강제 채움 방지).
+Phase 0 에서는 입력 검증을 느슨히 두고(스텁), A1 슬라이스에서 FR-A1~A4 로 강화한다.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import BaseModel, Field
+
+
+class ResultStatus(str, Enum):
+    """사용자-facing 3상태 (FR-C3). '추천 제외'는 내부값이라 여기 없음."""
+
+    FITS = "fits"
+    CHECK_NEEDED = "check_needed"
+    ALTERNATIVE = "alternative"
+
+
+class ExperienceType(str, Enum):
+    """D-06 유형 키 (DESIGN §3.4 icon-type-{key}). 모양 바뀌어도 키 고정."""
+
+    HANDS_ON = "hands_on"
+    PERFORMANCE = "performance"
+    EXHIBITION = "exhibition"
+    HISTORIC_VISIT = "historic_visit"
+    FESTIVAL_EVENT = "festival_event"
+    DEFAULT = "default"
+
+
+class PriceStatus(str, Enum):
+    """가격 정규화 (PRD §6.2). unknown/partial 을 free 로 바꾸지 않는다."""
+
+    FREE = "free"
+    PAID = "paid"
+    UNKNOWN = "unknown"
+    PARTIAL_OR_AMBIGUOUS = "partial_or_ambiguous"
+
+
+class Provenance(str, Enum):
+    """사실값 출처/신뢰 수준 (DESIGN §1·§5)."""
+
+    CONFIRMED = "confirmed"  # 공식 확인값
+    ESTIMATE = "estimate"  # ≈ 계산된 예상값
+    PLANNED = "planned"  # 예정 (KONNECT 계획값)
+    UNCONFIRMED = "unconfirmed"  # 미확인
+
+
+class Reason(BaseModel):
+    """추천 이유 (FR-C4). Reason Copy Dictionary v1.0 코드+문구만."""
+
+    code: str  # 예: T01, I02, M03
+    text: str
+
+
+class TimeInfo(BaseModel):
+    display: str
+    provenance: Provenance
+
+
+class PriceInfo(BaseModel):
+    status: PriceStatus
+    display: str  # 예: "Free", "유료·금액 미확인"
+    raw: str | None = None  # 원본 문자열 보존(합성 금지)
+    provenance: Provenance
+
+
+class MovementInfo(BaseModel):
+    walk_minutes: int | None = None
+    distance_m: int | None = None
+    display: str  # 예: "≈12 min walk", "Route unavailable"
+    provenance: Provenance
+
+
+class UnconfirmedFlag(BaseModel):
+    """미확인 flag 칩 (예: 'Price needs checking')."""
+
+    text: str
+
+
+class OfficialLink(BaseModel):
+    label: str  # 예: "View official details"
+    url: str
+
+
+class Candidate(BaseModel):
+    id: str
+    title: str
+    type: ExperienceType = ExperienceType.DEFAULT
+    status: ResultStatus
+    reasons: list[Reason] = Field(default_factory=list, max_length=2)
+    time: TimeInfo | None = None
+    price: PriceInfo | None = None
+    movement: MovementInfo | None = None
+    flags: list[UnconfirmedFlag] = Field(default_factory=list)
+    image_url: str | None = None  # 공식 소스만. 없다고 제외하지 않는다.
+    official_links: list[OfficialLink] = Field(default_factory=list)
+
+
+class RecommendRequest(BaseModel):
+    """FR-A1 필수 입력(+ FR-A4 자연어 선택조건). Phase 0 스텁은 느슨히 받는다."""
+
+    start_location: str
+    start_time: str
+    end_time: str
+    note: str | None = None  # 자연어 선택조건 1영역
+
+
+class RecommendData(BaseModel):
+    candidates: list[Candidate] = Field(default_factory=list, max_length=4)
+    # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
+    ai_notice: str = "AI-assisted results · unconfirmed details marked"

@@ -1,0 +1,1 @@
+"""KONNECT backend application package."""
