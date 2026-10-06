@@ -25,16 +25,12 @@ body {
   overflow-x: hidden;                  /* 가로 넘침 차단 */
 }
 
-/* 데스크톱: 폰 비율(390×844) 프레임을 화면 중앙에 세로 정렬(a-bly 느낌). */
+/* 데스크톱: 디자인 폭(390) 중앙 컬럼, 전체 높이. 폰 목업 크롬 없음(a-bly식). */
 @media (min-width: 600px) {
-  body { display: flex; align-items: center; justify-content: center; padding: var(--space-20); }
+  body { display: flex; justify-content: center; }
   .device-frame {
-    width: var(--frame-w);                                   /* 390px */
-    min-height: 0;
-    height: min(844px, calc(100dvh - 2 * var(--space-20)));  /* 폰 높이, 뷰포트에 맞춤 */
-    border-radius: 28px;
-    overflow: hidden;                                        /* 라운드 클립 → 내부 스크롤 */
-    box-shadow: 0 0 0 1px var(--c-border), 0 18px 50px rgba(13, 38, 46, 0.22);
+    width: var(--frame-w);                   /* 390px */
+    box-shadow: 0 0 0 1px var(--c-border);   /* 좌우 은은한 경계만 */
   }
 }
 
