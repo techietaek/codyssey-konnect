@@ -1,26 +1,30 @@
-// LF-02 — 즉시 추천(A) 입력. FR-A1·A2·A4·A5·A6.
-// 필수: 시작 위치·시작 시각·종료 시각. 자연어 선택조건은 1영역(구조화는 이후 LLM).
-// 종료는 자동 기본값 없음(FR-A2). 경계 검증은 백엔드 domain/ 이 정본, 여기선 보조.
-import { postRecommend } from "../api.js";
-import { clearChoice, loadChoice, setResults } from "../state.js";
+// LF-02 — 즉시 추천(A) 입력. Figma 정본(274:2272 + 인터랙션) 정확 반영.
+// Field Row(탭→바텀시트) · 시간 휠 시트 · 예시 칩 · note 포커스 시 Where&when 접힘 ·
+// 제출 시 "Here's what we understood" 확인 시트(4a). FR-A1·A2·A4·A5·A6.
+import { postParse, postRecommend } from "../api.js";
+import { openConfirmSheet } from "../components/confirm-sheet.js";
+import { openLocationSheet } from "../components/location-sheet.js";
+import { openTimeSheet } from "../components/time-sheet.js";
+import { setResults } from "../state.js";
 
-// FR-A5 대표 시작점 5개 (지역 전용 모드/Hard Filter 아님 — 보조 Quick Select)
-const QUICK_STARTS = [
-  "Gyeongbokgung Palace",
-  "Anguk · Insadong",
-  "City Hall · Deoksugung",
-  "Myeongdong",
-  "DDP",
-];
-
-// FR-A4 예시 칩: 탭하면 자연어 입력에 문구를 추가/제거(말 안 한 조건은 추정 금지).
+// FR-A4 예시 칩 (Figma 문구)
 const EXAMPLE_CONDITIONS = [
-  "Indoor",
-  "Free only",
-  "Under ₩20,000",
-  "Within 1 km",
-  "Quiet place",
+  "Indoor only",
+  "Free or cheap",
+  "Less walking",
+  "Traditional culture",
+  "Live performances",
+  "I have plans later",
 ];
+
+const ICONS = {
+  pin: '<path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  flag: '<path d="M5 22V4M5 4h12l-2.5 4L17 12H5"/>',
+  sparkle: '<path d="M12 3l1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7z"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/>',
+  chevron: '<path d="M15 5l-7 7 7 7"/>',
+};
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -29,7 +33,12 @@ function el(tag, className, text) {
   return n;
 }
 
-// 로컬 now → datetime-local 값("YYYY-MM-DDTHH:MM")
+function icon(name, className = "fr-icon") {
+  const s = el("span", className);
+  s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">${ICONS[name]}</svg>`;
+  return s;
+}
+
 function localNowValue() {
   const d = new Date();
   d.setSeconds(0, 0);
@@ -37,137 +46,189 @@ function localNowValue() {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
 }
 
-export function renderInputView({ prefill, onResults, onViewChoice }) {
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+function fmtValue(iso, isStart) {
+  const d = new Date(iso);
+  const today = new Date();
+  if (isStart && Math.abs(d - today) < 150000) return `Now · ${fmtTime(iso)}`;
+  if (d.toDateString() === today.toDateString()) return fmtTime(iso);
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${fmtTime(iso)}`;
+}
+function durText(startIso, endIso) {
+  const min = Math.round((new Date(endIso) - new Date(startIso)) / 60000);
+  if (min <= 0) return "";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `You have ${[h ? `${h} hr` : "", m ? `${m} min` : ""].filter(Boolean).join(" ")}`;
+}
+
+export function renderInputView({ prefill, onBack, onResults }) {
   const root = el("section", "view input-view");
 
-  const header = el("header", "app-header");
-  header.append(
-    el("h1", null, "KONNECT"),
-    el("p", null, "What can you actually do in Seoul right now?"),
-  );
-  root.append(header);
+  // 상태값
+  let geoCoords = prefill?.start_location?.lat != null
+    ? { lat: prefill.start_location.lat, lng: prefill.start_location.lng }
+    : null;
+  let locationLabel = prefill?.start_location?.label ?? "Current location";
+  let startValue = prefill?.start_at?.slice(0, 16) ?? localNowValue();
+  let endValue = prefill?.end_at?.slice(0, 16) ?? "";
 
-  // 현재 선택 재접근 (A6, LF-09 A variant). 선택 ≠ 방문.
-  const saved = loadChoice();
-  const savedCand = saved?.env?.data?.candidates?.find(
-    (c) => c.id === saved.candidateId,
+  // ── Nav: chevron + 타이틀 ──
+  const nav = el("div", "input-nav");
+  const back = el("button", "nav-back");
+  back.type = "button";
+  back.setAttribute("aria-label", "Back");
+  back.append(icon("chevron", "nav-back-icon"));
+  if (onBack) back.addEventListener("click", onBack);
+  nav.append(back, el("span", "nav-title", "Immediate recommendation"));
+  root.append(nav);
+
+  // ── 접힘 pill (note 편집 중 Where&when 대체) ──
+  const collapsePill = el("div", "cond-pill cond-pill--collapse");
+  const collapseText = el("span", "cond-text");
+  const collapseEdit = el("button", "cond-edit", "Edit");
+  collapseEdit.type = "button";
+  collapsePill.append(icon("pin", "cond-pill-icon"), collapseText, collapseEdit);
+
+  // ── Heading ──
+  const header = el("header", "input-head");
+  header.append(
+    el("h1", "input-title", "What fits your time now?"),
+    el("p", "input-sub", "We'll find up to 4 cultural experiences nearby."),
   );
-  if (savedCand && onViewChoice) {
-    const banner = el("div", "choice-banner");
-    const info = el("div", "choice-info");
-    info.append(
-      el("span", "choice-label", "Current choice"),
-      el("span", "choice-title", savedCand.title),
-    );
-    const view = el("button", "choice-view", "View");
-    view.type = "button";
-    view.addEventListener("click", () =>
-      onViewChoice({ request: saved.request, env: saved.env }),
-    );
-    const clear = el("button", "choice-clear", "✕");
-    clear.type = "button";
-    clear.title = "Clear current choice";
-    clear.addEventListener("click", () => {
-      clearChoice();
-      banner.remove();
-    });
-    banner.append(info, view, clear);
-    root.append(banner);
-  }
 
   const form = el("form", "form");
 
   // ── Where & when (required) ──
-  const whereSec = el("div", "section");
+  const whereSec = el("div", "section where-section");
   const whereHead = el("div", "section-head");
-  whereHead.append(el("h2", null, "Where & when"), el("span", "tag tag--required", "required"));
+  whereHead.append(
+    el("h2", null, "Where & when"),
+    el("span", "tag tag--required", "Required"),
+  );
   whereSec.append(whereHead);
 
-  // 시작 위치 + 현재 위치 버튼(FR-A6: 필요 시점에만 권한 요청, 선요청 금지)
-  let geoCoords = null; // {lat,lng} — 현재위치 사용 시에만
-  const locField = el("div", "field");
-  locField.append(el("label", null, "Start from"));
-  const locRow = el("div", "loc-row");
-  const locInput = el("input");
-  locInput.type = "text";
-  locInput.placeholder = "e.g. Chungmuro, Seoul";
-  locInput.value = prefill?.start_location?.label ?? "Current location";
-  const geoBtn = el("button", "btn-geo", "📍 Use current");
-  geoBtn.type = "button";
-  geoBtn.addEventListener("click", () => {
-    if (!navigator.geolocation) {
-      locInput.focus();
-      return;
-    }
-    geoBtn.textContent = "…";
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        geoCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        locInput.value = "Current location";
-        geoBtn.textContent = "📍 Pinned";
-      },
-      () => {
-        // 거부/실패 → 직접 입력으로 폴백
-        geoBtn.textContent = "📍 Use current";
-        locInput.value = "";
-        locInput.focus();
-      },
-    );
-  });
-  // 사용자가 직접 수정하면 좌표는 무효화(라벨과 좌표 불일치 방지)
-  locInput.addEventListener("input", () => {
-    geoCoords = null;
-    if (geoBtn.textContent === "📍 Pinned") geoBtn.textContent = "📍 Use current";
-  });
-  locRow.append(locInput, geoBtn);
-  locField.append(locRow);
-  whereSec.append(locField);
-
-  // Quick Select 대표 시작점
-  const quick = el("div", "chips");
-  for (const name of QUICK_STARTS) {
-    const chip = el("button", "chip", name);
-    chip.type = "button";
-    chip.addEventListener("click", () => {
-      locInput.value = name;
-      geoCoords = null;
-    });
-    quick.append(chip);
+  // Field Row 공통 생성기 (탭 → onOpen)
+  function fieldRow(iconName, label, onOpen) {
+    const row = el("div", "field-row");
+    row.append(icon(iconName));
+    const text = el("div", "fr-text");
+    const lbl = el("span", "fr-label", label);
+    const val = el("span", "fr-value");
+    text.append(lbl, val);
+    const action = el("button", "fr-action", "Change");
+    action.type = "button";
+    row.append(text, action);
+    const open = () => onOpen();
+    text.addEventListener("click", open);
+    action.addEventListener("click", open);
+    return { row, val, action };
   }
-  whereSec.append(quick);
 
-  // 시작/종료 시각 (네이티브 피커). 시작=now 기본값, 종료=비움(자동 기본값 금지).
-  const timeRow = el("div", "time-row");
-  const startField = el("div", "field");
-  startField.append(el("label", null, "Start"));
-  const startInput = el("input");
-  startInput.type = "datetime-local";
-  startInput.value = prefill?.start_at?.slice(0, 16) ?? localNowValue();
-  startField.append(startInput);
+  // Start from
+  const loc = fieldRow("pin", "Start from", () =>
+    openLocationSheet({
+      currentLabel: locationLabel,
+      onPick: (label, coords) => {
+        locationLabel = label;
+        geoCoords = coords;
+        refreshLoc();
+        loc.row.classList.remove("is-error");
+        validate();
+      },
+    }),
+  );
+  function refreshLoc() {
+    loc.val.textContent = locationLabel;
+  }
+  refreshLoc();
 
-  const endField = el("div", "field");
-  endField.append(el("label", null, "Done by"));
-  const endInput = el("input");
-  endInput.type = "datetime-local";
-  if (prefill?.end_at) endInput.value = prefill.end_at.slice(0, 16);
-  endField.append(endInput);
+  // Start
+  const start = fieldRow("clock", "Start", () =>
+    openTimeSheet({
+      kind: "start",
+      startValue,
+      endValue,
+      onDone: (v) => {
+        startValue = v;
+        refreshStart();
+        refreshHint();
+        validate();
+      },
+    }),
+  );
+  function refreshStart() {
+    start.val.textContent = fmtValue(startValue, true);
+    start.action.textContent = "Change";
+  }
+  refreshStart();
 
-  timeRow.append(startField, endField);
-  whereSec.append(timeRow);
+  // Done by
+  const end = fieldRow("flag", "Done by", () =>
+    openTimeSheet({
+      kind: "end",
+      startValue,
+      endValue,
+      onDone: (v) => {
+        endValue = v;
+        end.row.classList.remove("is-error");
+        refreshEnd();
+        validate();
+      },
+    }),
+  );
+  function refreshEnd() {
+    if (endValue) {
+      end.val.textContent = fmtValue(endValue, false);
+      end.val.classList.remove("is-empty");
+      end.action.textContent = "Change";
+    } else {
+      end.val.textContent = "Choose an end time";
+      end.val.classList.add("is-empty");
+      end.action.textContent = "Set";
+    }
+    refreshHint();
+  }
+
+  // 시간 안내: 종료 선택 시 "You have Xh Ym"(teal), 미선택 시 amber 안내
+  const timeHint = el("p", "field-hint-amber", "Pick when you need to be done");
+  function refreshHint() {
+    if (endValue) {
+      timeHint.textContent = durText(startValue, endValue);
+      timeHint.className = "field-duration";
+    } else {
+      timeHint.textContent = "Pick when you need to be done";
+      timeHint.className = "field-hint-amber";
+    }
+  }
+  refreshEnd();
+
+  whereSec.append(loc.row, start.row, end.row, timeHint);
   form.append(whereSec);
 
   // ── Anything else (optional) ──
   const elseSec = el("div", "section");
   const elseHead = el("div", "section-head");
-  elseHead.append(el("h2", null, "Anything else"), el("span", "tag tag--optional", "optional"));
+  elseHead.append(
+    el("h2", null, "Anything else?"),
+    el("span", "tag tag--optional", "Optional"),
+  );
   elseSec.append(elseHead);
 
-  const noteField = el("div", "field");
-  const noteInput = el("textarea");
-  noteInput.placeholder = "Interests, budget, how far you'll walk… in your own words.";
+  const nlCard = el("div", "nl-input");
+  const noteInput = el("textarea", "nl-textarea");
+  noteInput.placeholder =
+    'In your own words — e.g. "Indoors please, under ₩20,000. Dinner at 7 in Myeongdong."';
   if (prefill?.note) noteInput.value = prefill.note;
-  noteField.append(noteInput);
-  elseSec.append(noteField);
+  const nlFooter = el("div", "nl-footer");
+  nlFooter.append(
+    icon("sparkle", "nl-sparkle"),
+    el("span", null, "We'll turn this into conditions you can check"),
+  );
+  nlCard.append(noteInput, nlFooter);
+  elseSec.append(nlCard);
 
   const examples = el("div", "chips");
   for (const phrase of EXAMPLE_CONDITIONS) {
@@ -180,29 +241,58 @@ export function renderInputView({ prefill, onResults, onViewChoice }) {
       if (on) {
         chip.setAttribute("aria-pressed", "false");
         chip.textContent = `+ ${phrase}`;
-        noteInput.value = parts.filter((p) => p.toLowerCase() !== phrase.toLowerCase()).join(", ");
+        noteInput.value = parts
+          .filter((p) => p.toLowerCase() !== phrase.toLowerCase())
+          .join(", ");
       } else {
         chip.setAttribute("aria-pressed", "true");
         chip.textContent = `✓ ${phrase}`;
-        if (!parts.some((p) => p.toLowerCase() === phrase.toLowerCase())) parts.push(phrase);
+        if (!parts.some((p) => p.toLowerCase() === phrase.toLowerCase()))
+          parts.push(phrase);
         noteInput.value = parts.join(", ");
       }
     });
     examples.append(chip);
   }
   elseSec.append(examples);
-  form.append(elseSec);
 
-  // ── 오류 + CTA ──
+  const otherPlans = el("button", "other-plans-link", "+ Other plans today? (optional)");
+  otherPlans.type = "button";
+  otherPlans.addEventListener("click", () => noteInput.focus());
+  elseSec.append(otherPlans);
+
+  // ── note 편집 중 Where&when → 접힘 pill ──
+  function updateCollapse() {
+    collapseText.textContent = `${locationLabel} · ${fmtTime(startValue)}${endValue ? `–${fmtTime(endValue)}` : ""}`;
+  }
+  noteInput.addEventListener("focus", () => {
+    updateCollapse();
+    root.classList.add("note-editing");
+  });
+  collapseEdit.addEventListener("click", () => {
+    root.classList.remove("note-editing");
+    noteInput.blur();
+  });
+
+  // ── 오류 + Bottom bar ──
   const errorBox = el("div", "form-error");
   errorBox.hidden = true;
-  form.append(errorBox);
+  form.append(elseSec, errorBox);
 
   const ctaWrap = el("div", "cta");
   const cta = el("button", "btn-cta", "Find experiences");
   cta.type = "submit";
   ctaWrap.append(cta);
+  const about = el("p", "about-info");
+  about.append(icon("info", "about-icon"), el("span", null, "About the information"));
+  ctaWrap.append(about);
   form.append(ctaWrap);
+
+  function validate() {
+    const ok = !!locationLabel.trim() && !!startValue && !!endValue;
+    cta.disabled = !ok;
+    return ok;
+  }
 
   function showError(msg) {
     errorBox.textContent = msg;
@@ -210,31 +300,25 @@ export function renderInputView({ prefill, onResults, onViewChoice }) {
     errorBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    errorBox.hidden = true;
-
-    const label = locInput.value.trim();
-    if (!label) return showError("Please enter where you'll start from.");
-    if (!startInput.value) return showError("Please choose a start time.");
-    // 종료 자동 기본값 없음 → 사용자가 반드시 선택 (FR-A2)
-    if (!endInput.value) return showError("Please choose an end time (we don't assume one).");
-
-    const start_location = { label };
+  function basePayload() {
+    const start_location = { label: locationLabel.trim() };
     if (geoCoords) Object.assign(start_location, geoCoords);
-    const payload = {
+    return {
       start_location,
-      start_at: `${startInput.value}:00`,
-      end_at: `${endInput.value}:00`,
+      start_at: `${startValue}:00`,
+      end_at: `${endValue}:00`,
       note: noteInput.value.trim() || null,
     };
+  }
 
+  async function runRecommend(conditions) {
+    const payload = basePayload();
+    if (conditions) payload.conditions = conditions;
     cta.disabled = true;
     cta.textContent = "Finding…";
     try {
       const env = await postRecommend(payload);
       if (!env.ok) {
-        // 입력오류(검증)·시스템예외 모두 봉투 error 로 옴 → 추천 전 인라인 표시
         showError(env.error?.message ?? "Please check your input and try again.");
         return;
       }
@@ -243,11 +327,43 @@ export function renderInputView({ prefill, onResults, onViewChoice }) {
     } catch {
       showError("Could not reach the server. Please try again.");
     } finally {
-      cta.disabled = false;
       cta.textContent = "Find experiences";
+      validate();
     }
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.hidden = true;
+    if (!validate()) {
+      if (!endValue) end.row.classList.add("is-error");
+      return;
+    }
+    const note = noteInput.value.trim();
+    // note 없으면 확인할 게 없으니 바로 추천. 있으면 '이해한 조건' 확인 시트.
+    if (!note) return runRecommend(null);
+
+    cta.disabled = true;
+    cta.textContent = "Reading…";
+    let conditions = null;
+    try {
+      const env = await postParse(note);
+      conditions = env.ok ? env.data : {};
+    } catch {
+      conditions = {};
+    } finally {
+      cta.textContent = "Find experiences";
+      validate();
+    }
+    openConfirmSheet({
+      request: basePayload(),
+      conditions,
+      onShow: (edited) => runRecommend(edited),
+      onEdit: () => noteInput.focus(),
+    });
   });
 
-  root.append(form);
+  root.append(collapsePill, header, form);
+  validate();
   return root;
 }

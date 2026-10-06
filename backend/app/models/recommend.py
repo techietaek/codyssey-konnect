@@ -163,6 +163,15 @@ class RecommendRequest(BaseModel):
     start_at: datetime  # 시작 시각 (날짜 포함)
     end_at: datetime  # 종료 시각
     note: str | None = None  # 자연어 선택조건 1영역 (FR-A4). 구조화는 이후 LLM 단계.
+    # 확인 시트에서 사용자가 이해한 조건을 확인/수정(✕ 제거)한 경우, 그 결과를
+    # 넘겨 재파싱 대신 그대로 사용(사용자 교정 우선). None 이면 note 를 파싱한다.
+    conditions: ParsedConditions | None = None
+
+
+class ParseRequest(BaseModel):
+    """확인 시트용 — note 를 '이해한 조건'으로만 구조화(추천 조회 없음)."""
+
+    note: str | None = None
 
 
 class RecommendData(BaseModel):

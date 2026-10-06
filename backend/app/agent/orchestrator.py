@@ -140,9 +140,14 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
     lat, lng = resolve_start_coords(ctx.start_location)
 
     # [structure] 좌표 해석 + note 자연어 구조화(LLM)를 조회와 병렬로.
-    cond, pool = await asyncio.gather(
-        parse_note(ctx.note), _fetch_pool(lat, lng, trace)
-    )
+    # 확인 시트에서 교정한 조건이 오면 재파싱하지 않고 그대로 사용(사용자 교정 우선).
+    if ctx.conditions is not None:
+        cond = ctx.conditions
+        pool = await _fetch_pool(lat, lng, trace)
+    else:
+        cond, pool = await asyncio.gather(
+            parse_note(ctx.note), _fetch_pool(lat, lng, trace)
+        )
     trace.step(
         "structure",
         start=ctx.start_location.label,

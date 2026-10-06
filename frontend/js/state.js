@@ -6,6 +6,13 @@ export const state = {
   selectedId: null, // Select experience 로 확정한 현재 선택 (선택 ≠ 방문)
 };
 
+// 로그인 상태 스텁 — Phase 2에서 Supabase Auth(Google OAuth)로 교체.
+// 지금은 비회원 전용 흐름이라 항상 false. 이 값으로 B·Login·Find new options
+// 의 '비활성/로그인 유도'를 분기한다(디자인은 구현, 기능만 보류).
+export function isLoggedIn() {
+  return false;
+}
+
 export function setResults(request, candidates) {
   state.request = request;
   state.candidates = candidates;

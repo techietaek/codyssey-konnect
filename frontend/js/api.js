@@ -20,3 +20,11 @@ export function postRecommend(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+// 확인 시트용 — note 를 '이해한 조건'으로만 구조화(추천 조회 없음).
+export function postParse(note) {
+  return request("/api/parse", {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
