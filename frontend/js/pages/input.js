@@ -2,7 +2,7 @@
 // 필수: 시작 위치·시작 시각·종료 시각. 자연어 선택조건은 1영역(구조화는 이후 LLM).
 // 종료는 자동 기본값 없음(FR-A2). 경계 검증은 백엔드 domain/ 이 정본, 여기선 보조.
 import { postRecommend } from "../api.js";
-import { setResults } from "../state.js";
+import { clearChoice, loadChoice, setResults } from "../state.js";
 
 // FR-A5 대표 시작점 5개 (지역 전용 모드/Hard Filter 아님 — 보조 Quick Select)
 const QUICK_STARTS = [
@@ -37,7 +37,7 @@ function localNowValue() {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
 }
 
-export function renderInputView({ prefill, onResults }) {
+export function renderInputView({ prefill, onResults, onViewChoice }) {
   const root = el("section", "view input-view");
 
   const header = el("header", "app-header");
@@ -46,6 +46,34 @@ export function renderInputView({ prefill, onResults }) {
     el("p", null, "What can you actually do in Seoul right now?"),
   );
   root.append(header);
+
+  // 현재 선택 재접근 (A6, LF-09 A variant). 선택 ≠ 방문.
+  const saved = loadChoice();
+  const savedCand = saved?.env?.data?.candidates?.find(
+    (c) => c.id === saved.candidateId,
+  );
+  if (savedCand && onViewChoice) {
+    const banner = el("div", "choice-banner");
+    const info = el("div", "choice-info");
+    info.append(
+      el("span", "choice-label", "Current choice"),
+      el("span", "choice-title", savedCand.title),
+    );
+    const view = el("button", "choice-view", "View");
+    view.type = "button";
+    view.addEventListener("click", () =>
+      onViewChoice({ request: saved.request, env: saved.env }),
+    );
+    const clear = el("button", "choice-clear", "✕");
+    clear.type = "button";
+    clear.title = "Clear current choice";
+    clear.addEventListener("click", () => {
+      clearChoice();
+      banner.remove();
+    });
+    banner.append(info, view, clear);
+    root.append(banner);
+  }
 
   const form = el("form", "form");
 

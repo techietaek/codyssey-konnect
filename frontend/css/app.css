@@ -158,6 +158,17 @@ body {
 }
 /* Focus=Yes (스와이프/탭·핀 포커스) — DESIGN §3.1 */
 .card.is-focused { box-shadow: var(--shadow-card-focus); outline: 2px solid var(--c-primary); outline-offset: -2px; }
+/* Confirmed=Yes (현재 선택 확정) */
+.card.is-choice { box-shadow: 0 0 0 2px var(--c-primary), var(--shadow-card-focus); }
+.current-choice { align-self: flex-start; background: var(--c-primary); color: var(--c-on-primary); border-radius: var(--r-badge); padding: var(--space-2) var(--space-8); font-size: var(--fs-badge); font-weight: var(--fw-bold); }
+
+/* 현재 선택 재접근 배너 (홈/입력 뷰 상단) */
+.choice-banner { display: flex; align-items: center; gap: var(--space-8); margin-top: var(--space-14); padding: var(--space-10) var(--space-12); background: var(--c-primary-tint); border: 1px solid var(--c-primary); border-radius: var(--r-flag); }
+.choice-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.choice-label { font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-primary-ink); }
+.choice-title { font-size: var(--fs-meta); font-weight: var(--fw-bold); color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.choice-view { border: 0; cursor: pointer; background: var(--c-primary); color: var(--c-on-primary); border-radius: var(--r-pill); padding: var(--space-6) var(--space-14); font-size: var(--fs-body); font-weight: var(--fw-bold); }
+.choice-clear { border: 0; cursor: pointer; background: transparent; color: var(--c-primary-ink); font-size: var(--fs-meta); padding: var(--space-4); }
 .card-head { display: flex; flex-direction: column; gap: var(--space-6); }
 .card-title { font-size: var(--fs-title); font-weight: var(--fw-bold); margin: 0; }
 .badge {

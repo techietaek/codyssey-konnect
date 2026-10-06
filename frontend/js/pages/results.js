@@ -2,7 +2,7 @@
 // (Reason 설명은 A5 슬라이스에서 보강.)
 import { renderResultCard } from "../components/result-card.js";
 import { renderMap } from "../map.js";
-import { state } from "../state.js";
+import { loadChoice, saveChoice, state } from "../state.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -107,11 +107,29 @@ export function renderResultsView({ request, env, onEdit }) {
     mapCtrl?.focus(id);
   }
 
+  // Current choice 확정 표시 (DESIGN §3.1 Confirmed). 재스와이프해도 유지.
+  function markConfirmed(id) {
+    for (const card of list.querySelectorAll(".card")) {
+      const isChoice = card.dataset.id === id;
+      card.classList.toggle("is-choice", isChoice);
+      card.querySelector(".current-choice")?.remove();
+      const selectBtn = card.querySelector(".btn-select");
+      if (isChoice) {
+        const head = card.querySelector(".card-head");
+        head.append(el("span", "current-choice", "✓ Current choice"));
+        if (selectBtn) selectBtn.textContent = "Selected";
+      } else if (selectBtn) {
+        selectBtn.textContent = "Select experience";
+      }
+    }
+  }
+
   list.addEventListener("click", (e) => {
-    // Select experience → 현재 선택 확정(선택 ≠ 방문). 자동 이동 없음.
+    // Select experience → 현재 선택 확정(선택 ≠ 방문). 자동 이동 없음, 추가 저장 버튼 없음.
     const btn = e.target.closest(".btn-select");
     if (btn) {
-      state.selectedId = btn.dataset.id;
+      saveChoice(request, env, btn.dataset.id); // 비로그인 영속
+      markConfirmed(btn.dataset.id);
       showToast("Current choice set");
       return;
     }
@@ -120,6 +138,12 @@ export function renderResultsView({ request, env, onEdit }) {
     const card = e.target.closest(".card");
     if (card?.dataset.id) focusCard(card.dataset.id);
   });
+
+  // 재접근 시: 저장된 현재 선택이 이 결과에 있으면 확정 상태로 복원
+  const saved = loadChoice();
+  if (saved && data.candidates.some((c) => c.id === saved.candidateId)) {
+    markConfirmed(saved.candidateId);
+  }
 
   root.append(el("p", "status-line", `trace ${env.trace_id} · ${data.candidates.length} candidate(s)`));
   return root;

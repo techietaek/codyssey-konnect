@@ -10,7 +10,7 @@ function mount(node) {
 }
 
 export function showInput(prefill) {
-  mount(renderInputView({ prefill, onResults: showResults }));
+  mount(renderInputView({ prefill, onResults: showResults, onViewChoice: showResults }));
 }
 
 export function showResults({ request, env }) {
