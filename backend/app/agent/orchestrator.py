@@ -12,6 +12,7 @@ import asyncio
 from app.agent.context import RequestContext
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
+from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import normalize_candidate
 from app.models.recommend import Candidate
@@ -38,16 +39,13 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
     if not ok_lists:
         raise ExternalSourceError("TourAPI unavailable for all cultural types")
 
-    # cat1 "A02"(인문: 문화·예술·역사)만 문화경험으로 간주. 단 EngService2 는
-    # 의료관광(cat3 A020205*)을 같은 타입 코드(76)에 섞어 내려주므로 제외한다(PRD §6.4).
+    # 문화경험이 아닌 카테고리(의료관광·관광거리·안내소·음식거리 등)를 제외한다.
+    # 판단은 domain/curation 으로 분리(PRD §6.4, 테스트 가능).
     merged: dict[str, dict] = {}
     for items in ok_lists:
         for it in items:
             cid = it.get("contentid")
-            cat3 = str(it.get("cat3") or "")
-            if it.get("cat1") != "A02" or cat3.startswith("A020205"):
-                continue
-            if cid and cid not in merged:
+            if cid and cid not in merged and is_cultural_experience(it):
                 merged[cid] = it
 
     def _dist(it: dict) -> float:
