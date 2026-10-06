@@ -17,8 +17,8 @@
 
 ### 현재 상태 (Current Status) — ⚠️ 작업 시작·종료 때 갱신할 것
 - [x] **사전 준비 완료**: 문서(PRD/CLAUDE/DESIGN/tokens.css) · `backend/.venv`(3.12, 의존성 OK) · `.env` 전 키 **라이브 스모크 Green** · Supabase(Google·Anonymous·pgvector) 활성 · Figma MCP 연결 · GitHub repo/Projects.
-- [ ] **Phase 0 — Walking Skeleton** ← **다음 시작 지점**
-- [ ] Phase 1 — A 즉시 추천
+- [x] **Phase 0 — Walking Skeleton** (branch `phase0-walking-skeleton`): 프론트(:5500)→백(:8000)→프론트 관통 로컬 검증 Green. `GET /health`·`POST /api/recommend` 스텁(계약 고정)·CORS·공통 봉투(Envelope)·trace·ruff/black 통과. ⚠️ 조기 배포(Render/Vercel)는 **미완** — Phase 1 중 수행.
+- [ ] **Phase 1 — A 즉시 추천** ← **다음 시작 지점**
 - [ ] Phase 2 — 로그인·개인화
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
@@ -65,22 +65,22 @@
 > 참조: `CLAUDE.md §3`(디렉터리), `§4`(아키텍처), `DESIGN.md §2`(tokens).
 
 **백엔드 스캐폴딩**
-- [ ] `backend/app/main.py` — FastAPI 앱 + `GET /health` 200 응답
-- [ ] `backend/app/config.py` — `pydantic-settings`로 `.env` 로딩(키 존재 검증, 값 미출력)
-- [ ] `backend/app/core/` — 공통 예외·로깅/trace 베이스 (시스템 예외 vs 정상 결과 구분, FR-C7)
-- [ ] `backend/app/models/` — 공통 응답 봉투(Envelope) Pydantic 스키마
-- [ ] `POST /api/recommend` — **하드코딩 후보 1개** 반환(스텁, 계약만 고정)
-- [ ] CORS 설정(`CORS_ALLOW_ORIGINS`), `uvicorn app.main:app --reload`로 부팅 확인
+- [x] `backend/app/main.py` — FastAPI 앱 + `GET /health` 200 응답 (lifespan 키 존재 확인)
+- [x] `backend/app/config.py` — `pydantic-settings`로 리포 루트 `.env` 로딩(키 존재 검증 `missing_keys`, 값 미출력)
+- [x] `backend/app/core/` — `exceptions.py`(KonnectError/SystemError/ValidationFailure, FR-C7)·`trace.py`(trace_id+단계 로깅, NFR-08)
+- [x] `backend/app/models/` — `envelope.py`(Generic Envelope)·`recommend.py`(계약: 3상태·provenance·PriceStatus·max 2 reasons/4 candidates)
+- [x] `POST /api/recommend` — **하드코딩 후보 1개** 반환(불변식 준수: 가격 미확인→`unknown`+flag, free 추정 안 함)
+- [x] CORS 설정(`CORS_ALLOW_ORIGINS`), `uvicorn`로 부팅 확인 (라이브 `/health` 200)
 
 **프론트 스캐폴딩**
-- [ ] `frontend/index.html` — `css/tokens.css` 연결 + 기본 레이아웃(390 기준)
-- [ ] `frontend/js/api.js` — 백엔드 호출 래퍼(`API_BASE_URL`)
-- [ ] `frontend/js/components/` — `result-card.js`(DESIGN §3.1 최소형)로 스텁 응답 1개 렌더
-- [ ] `frontend/js/state.js` — 클라이언트 상태 컨테이너 骨格
-- [ ] `python -m http.server 5500`로 로컬 구동 → 카드 1개 표시 확인
+- [x] `frontend/index.html` — `css/tokens.css`+`app.css` 연결 + 390 레이아웃 + AI 고지 pill
+- [x] `frontend/js/api.js`(+`config.js` `API_BASE`) — 백엔드 호출 래퍼, 봉투 그대로 반환
+- [x] `frontend/js/components/result-card.js` — DESIGN §3.1 최소형(상태배지·Reason·Meta·flag·Select 분리 렌더)
+- [x] `frontend/js/state.js` — 클라이언트 상태 컨테이너(focus≠select) · `js/pages/home.js` 와이어링
+- [x] `python -m http.server 5500` 구동 → 모든 모듈 200, CORS allow-origin 확인
 
 **조기 배포(권장)**
-- [ ] 백엔드 Render / 프론트 Vercel(or Supabase 호스팅)에 스켈레톤 배포 → 외부 URL에서 `/health`·카드 확인
+- [ ] 백엔드 Render / 프론트 Vercel(or Supabase 호스팅)에 스켈레톤 배포 → 외부 URL에서 `/health`·카드 확인 ← **미완(외부 서비스, 사용자 확인 후)**
 - [ ] 배포 Secret(.env 값) 주입 경로 확인(저장소 커밋 아님)
 
 **Done when:** 로컬·배포 양쪽에서 프론트가 백엔드 `/api/recommend` 스텁을 호출해 Result Card 1개를 렌더한다.
