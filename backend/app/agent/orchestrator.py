@@ -15,6 +15,8 @@ from app.core.trace import Trace
 from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import normalize_candidate
+from app.domain.status import resolve_status
+from app.domain.timing import judge_timing
 from app.models.recommend import Candidate
 from app.sources import tourapi
 
@@ -23,6 +25,7 @@ from app.sources import tourapi
 _CULTURAL_TYPES = (76, 78, 85)
 _SEARCH_RADIUS_M = 1500
 _MAX_CANDIDATES = 4
+_ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 위한 보강 범위
 
 
 async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
@@ -59,8 +62,8 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
     return pool
 
 
-async def _enrich(item: dict) -> Candidate | None:
-    """후보 1개 상세 조회(intro·common 병렬) 후 정규화. 상세 실패는 미확인으로 둠."""
+async def _enrich(item: dict, ctx: RequestContext) -> tuple[Candidate | None, str]:
+    """상세 조회→정규화→판정. Hard 충돌(영업외·휴무)은 (None, 사유)로 제외."""
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
     intro, common = await asyncio.gather(
@@ -70,7 +73,19 @@ async def _enrich(item: dict) -> Candidate | None:
     )
     intro = intro if isinstance(intro, dict) else {}
     common = common if isinstance(common, dict) else {}
-    return normalize_candidate(item, intro, common)
+
+    cand = normalize_candidate(item, intro, common)
+    if cand is None:
+        return None, "invalid/out-of-range data"
+
+    # [judge] 운영시간·휴무 → 3상태. Hard 충돌은 제외(정상 추천에서 뺀다).
+    verdict, reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    status, flags = resolve_status(cand, verdict)
+    if status is None:
+        return None, reason  # Hard 제외
+    cand.status = status
+    cand.flags = flags
+    return cand, reason
 
 
 async def recommend_a(ctx: RequestContext, trace: Trace) -> list[Candidate]:
@@ -84,8 +99,24 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> list[Candidate]:
 
     pool = await _fetch_pool(lat, lng, trace)
 
-    # 가까운 순으로 소수만 상세 조회·정규화(강제 채움 금지: 최대 4개)
-    enriched = await asyncio.gather(*(_enrich(it) for it in pool[:_MAX_CANDIDATES]))
-    candidates = [c for c in enriched if c is not None]
+    # 가까운 순 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로 대체.
+    # 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 가까운 순 최대 4개).
+    results = await asyncio.gather(*(_enrich(it, ctx) for it in pool[:_ENRICH_POOL]))
+    candidates: list[Candidate] = []
+    excluded = 0
+    for cand, _reason in results:
+        if cand is None:
+            excluded += 1
+        elif len(candidates) < _MAX_CANDIDATES:
+            candidates.append(cand)
+
+    fits = sum(1 for c in candidates if c.status.value == "fits")
+    trace.step(
+        "judge",
+        considered=len(results),
+        excluded_hard=excluded,
+        fits=fits,
+        check_needed=len(candidates) - fits,
+    )
     trace.step("compose", kept=len(candidates))
     return candidates

@@ -20,8 +20,9 @@
 - [x] **Phase 0 — Walking Skeleton** (branch `phase0-walking-skeleton`): 프론트(:5500)→백(:8000)→프론트 관통 로컬 검증 Green. `GET /health`·`POST /api/recommend` 스텁(계약 고정)·CORS·공통 봉투(Envelope)·trace·ruff/black 통과. ⚠️ 조기 배포(Render/Vercel)는 **미완** — Phase 1 중 수행.
 - [ ] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) ← **진행 중**
   - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시). UI 다듬기(버튼 인터랙션 포함).
-  - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·agent/orchestrator). 실 후보 반환·신뢰 게이트·15 pytest.
-  - [ ] A3 판정+3상태 ← **다음 슬라이스**  · A4 지도/이동 · A5 Reason+LLM · A6 선택상태
+  - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·curation·agent/orchestrator). 실 후보 반환·신뢰 게이트·cat3 큐레이션.
+  - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무 판정으로 fits/check 산정, Hard 충돌 제외+대체. 51 pytest. (날씨 Context는 이후)
+  - [ ] A4 지도/이동(Tmap) ← **다음 슬라이스**  · A5 Reason+LLM · A6 선택상태
 - [ ] Phase 2 — 로그인·개인화
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
@@ -113,13 +114,13 @@
 - [x] 단위 테스트 15개(`test_normalize`: 가격 매핑·제목·좌표·flag). 라이브 end-to-end + 실 UI 렌더 검증(≈0.4s)
 - **Done when:** ✅ 입력 좌표로 실제 문화경험 후보(정규화 상태 포함)가 반환. 빈값→긍정 매핑 없음(게이트 통과, 시각 확인). 다음 **A3 판정**.
 
-### A3 — 판정 + 결과 상태 3종
-- [ ] `domain/constraints·timing·pricing·status.py` — 운영/휴무/입장마감/시간충돌/예산 판정 (PRD §5.3)
-- [ ] 내부 판정 순서 → 사용자-facing 3상태: 조건 충족 / 추가 확인 필요 / 조건 완화 대안 (FR-C3, §5.4)
-- [ ] 미확인 분리: 신뢰성 판단 불가 시 추천/자동 제외, 추정 금지 (PRD §6.2·§5.2)
-- [ ] 기상청·AirKorea Context 반영 + 공식 위험특보 시 Outdoor 정상추천 제외·실내 우선 (PRD §6.6)
-- [ ] `domain/` 단위 테스트(휴무·마감·시간충돌·가격 미확인·예산 경계)
-- **Done when:** 각 후보가 3상태 중 하나 + 미확인 flag로 분류된다. Hard 충돌은 정상 추천에서 빠진다(게이트).
+### A3 — 판정 + 결과 상태 3종 ✅ (일부 이후 보강)
+- [x] `domain/timing.py`(운영시간 범위·last admission·요일 휴무·24h 파싱, 계절/복수/문의는 UNCERTAIN) + `domain/status.py`(3상태 산정) (PRD §5.3)
+- [x] 내부 판정 순서 → 사용자-facing 상태: **조건 충족(fits: 영업확인+가격확인) / 추가 확인 필요(check: 미확인)**. Hard 충돌(영업외·휴무·마감후)은 제외. `조건 완화 대안(alternative)`은 예산/Soft 조건 필요 → A5(note 파싱) 이후
+- [x] 미확인 분리: 영업외·휴무 '확실할 때만' 제외, 애매하면 check(추정 금지). 가격 unknown/partial은 fits 아님 (PRD §6.2·§5.2)
+- [ ] 기상청·AirKorea Context + 공식 위험특보 Outdoor 제외 (PRD §6.6) ← **이후 보강(A3 범위에서 분리)**
+- [x] `domain/` 단위 테스트 19개(timing 14 + status 6: 휴무요일·영업외·last admission·24h·미확인·가격경계). 오케스트레이터: 상위 8개 보강·판정 후 Hard 제외분을 다음 후보로 대체(강제 채움 아님), trace에 fits/check/excluded 기록
+- **Done when:** ✅ 각 후보가 fits/check + 미확인 flag로 분류, Hard 충돌(영업외·휴무)은 정상 추천에서 빠짐(게이트, 라이브 확인: 영업 전 시간대·월요일 휴무 제외+대체). 다음 **A4 지도/이동**.
 
 ### A4 — 후보 구성 + 지도/이동 (LF-03)
 - [ ] 최대 3~4개 소수 후보, 강제 채움 금지, 0건은 명시적 안내(몰래 완화 금지) (FR-A7, §5.5)
