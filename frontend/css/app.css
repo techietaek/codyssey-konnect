@@ -10,24 +10,31 @@ body {
   color: var(--c-text);
   /* 디바이스 프레임 바깥 배경(데스크톱에서만 보임) */
   background: #d9dde0;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── 모바일 디바이스 프레임 ──
-   실제 모바일: 화면 꽉 채움. 데스크톱: 390px 폭 중앙 고정 + 전체 높이. */
+/* ── 디바이스 프레임 ──
+   실제 모바일/에뮬레이션(좁은 뷰포트): max-width 없이 화면을 꽉 채운다. */
 .device-frame {
   width: 100%;
-  max-width: var(--frame-w);           /* 390px */
   min-height: 100dvh;
-  margin: 0 auto;
   background: var(--c-bg);
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;                  /* 프레임 밖 가로 넘침 차단 */
+  overflow-x: hidden;                  /* 가로 넘침 차단 */
 }
-@media (min-width: 420px) {
+
+/* 데스크톱: 폰 비율(390×844) 프레임을 화면 중앙에 세로 정렬(a-bly 느낌). */
+@media (min-width: 600px) {
+  body { display: flex; align-items: center; justify-content: center; padding: var(--space-20); }
   .device-frame {
-    box-shadow: 0 0 0 1px var(--c-border), 0 10px 40px rgba(13, 38, 46, 0.18);
+    width: var(--frame-w);                                   /* 390px */
+    min-height: 0;
+    height: min(844px, calc(100dvh - 2 * var(--space-20)));  /* 폰 높이, 뷰포트에 맞춤 */
+    border-radius: 28px;
+    overflow: hidden;                                        /* 라운드 클립 → 내부 스크롤 */
+    box-shadow: 0 0 0 1px var(--c-border), 0 18px 50px rgba(13, 38, 46, 0.22);
   }
 }
 
@@ -68,7 +75,8 @@ body {
 .field textarea { resize: vertical; min-height: 64px; }
 
 .loc-row { display: flex; gap: var(--space-8); }
-.loc-row input { flex: 1; min-width: 0; }  /* flex 자식 축소 허용(오버플로우 방지) */
+/* width:auto 로 .field input 의 width:100% 를 무효화 → flex 가 폭을 제어(버튼과 공유) */
+.loc-row input { flex: 1 1 0; min-width: 0; width: auto; }
 .btn-geo {
   flex: 0 0 auto; cursor: pointer; white-space: nowrap;
   background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-primary);
@@ -76,8 +84,10 @@ body {
   font-size: var(--fs-badge); font-weight: var(--fw-semibold);
 }
 
-.time-row { display: flex; gap: var(--space-10); }
-.time-row .field { flex: 1; min-width: 0; }  /* datetime 입력 축소 허용 */
+/* datetime-local 은 UA 최소폭이 완고(2열은 ~440px+ 필요) → 세로 스택으로 넘침 원천 차단.
+   모바일/폰목업 모두 Start·Done by 를 세로로 쌓는다(터치 타깃도 더 큼). */
+.time-row { display: flex; flex-direction: column; gap: var(--space-12); }
+.time-row .field { min-width: 0; }
 .time-row input { width: 100%; }
 
 /* 칩(가로 스크롤 — 예시/퀵셀렉트) */
