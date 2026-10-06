@@ -57,7 +57,7 @@
 | **경로(도보) 표시·계산** | **Tmap API** (백엔드 프록시) | 구간별 도보 경로선·거리·시간. |
 | **외부 길찾기 딥링크** | **Google Maps URL** | 외국인 사용자 상세 길찾기 연결. |
 | **외부 데이터** | TourAPI(EngService2) · 서울문화포털 문화행사 API · KOPIS · 기상청 · AirKorea | 추천 시점 **직접 조회(경량)** + 단기 캐시. |
-| **보조 장소정보** | **Google Places API (New)** (보조 한정) | 좌표·주소·링크 보강. 이미지는 공식 소스 우선·Places는 Fallback. `price_level`·평점·리뷰 판정 사용 금지. 개발=데모 키 / 배포=정식 키(무료 티어), **키만 교체·코드 불변**. 상세 PRD §6.7. |
+| **보조 장소정보** | **Google Places API (New)** (보조 한정) | 좌표·주소·링크 보강. 이미지는 공식 소스 우선·Places는 Fallback. `price_level`·평점·리뷰 판정 사용 금지. **예외: `businessStatus`는 폐업 음성 신호로 Hard 제외 판정에 허용**(§6 신뢰 강화). 개발=데모 키 / 배포=정식 키(무료 티어), **키만 교체·코드 불변**. 상세 PRD §6.7. |
 | **배포** | Frontend: Vercel/Supabase 호스팅 · Backend: Render | 외부 접근 URL 필수. |
 
 **API 키:** 모든 외부 API 키는 보유 중이며 실제 개발 단계에서 전달된다. **절대 저장소에 커밋하지 않는다** — `.env`(gitignore) / 배포 Secret으로만 주입.
@@ -128,7 +128,7 @@ code/
 - `sources/`의 각 클라이언트는 **타임아웃·재시도·단기 캐시**를 기본 내장. 한 소스 실패가 전체 추천 실패로 번지지 않게 한다(`TourAPI + 구조화 공식 API`만으로 기본 추천 성립).
 - 응답은 즉시 **데이터 상태로 정규화**(PRD §6.2): 가격 `free/paid/unknown/partial-or-ambiguous`, 예약·참여 확인된 것만, 시간값 `실제/예상/계획/미확인`. 정규화는 `domain/`에서 단일 지점으로.
 - 기상청·AirKorea는 **Context**로만 사용(PRD §6.6). 환경정보만으로 행사 취소·휴관 추정 금지.
-- **공식 API 우선 원칙.** 모든 사실 데이터는 공식 API가 정본이며, **Google Places는 공식 소스로 부족할 때 좌표·주소·링크·이미지 Fallback 보강에만** 쓴다. `price_level`·평점·리뷰는 판정/랭킹에 사용 금지(PRD §6.7).
+- **공식 API 우선 원칙.** 모든 사실 데이터는 공식 API가 정본이며, **Google Places는 공식 소스로 부족할 때 좌표·주소·링크·이미지 Fallback 보강에만** 쓴다. `price_level`·평점·리뷰는 판정/랭킹에 사용 금지(PRD §6.7). **단 Places `businessStatus`는 예외** — TourAPI가 폐업 레코드를 purge하지 않는 한계를 보완해, 폐업·임시휴업 **확인 시에만 Hard 제외**하는 음성 신호로 쓴다(긍정 생성 아님·좌표 근접 교차확인·실패는 graceful). 판정은 `domain/operational.py`.
 
 ### 4.3 지도·이동
 - 프론트: Naver Maps SDK로 렌더. 경로선·거리·시간은 백엔드가 **Tmap 프록시**로 계산해 provenance(신뢰 수준)와 함께 내려준다.

@@ -105,6 +105,7 @@ KONNECT의 UI는 "예쁘게 보여주기"가 아니라 **확인된 사실 / 계�
 **Layout**
 - 기준 프레임: **390 × 844 (모바일)**. 카드 폭 `330`(좌우 여백 포함).
 - 지도 핀(그림자)·바텀시트·바텀바 CTA는 safe-area 고려.
+- **뷰포트 적용(구현):** 모바일/에뮬레이션(≤599px)은 프레임이 **기기 폭을 100% 채운다**(`--frame-w` 상한 없음). 데스크톱(≥600px)은 **390×844 프레임을 화면 중앙에 배치**(Figma 프로토 패리티, 가벼운 테두리+그림자·`radius 20`). 토큰 `--frame-w`=390은 데스크톱 컬럼 폭의 정본. `index.html`에 `meta viewport width=device-width` 필수(없으면 에뮬레이션이 980px로 렌더).
 
 ---
 
@@ -142,6 +143,7 @@ A 결과·B 루트 공통 카드. **24개 상태 조합** = `State(Fits/Check/Al
 - **Field Row** (`218:327`) — 필수 입력 행(Where & when 등).
 - **Conditions chip** (결과 상단) — 흰 pill `Chungmuro · 3:20–6:30 PM` + teal `Edit`. 출발점/시간 재설정 진입.
 - **Section header + tag** — `Where & when (required)` / `Anything else (optional)` 섹션 헤더에 `required`/`optional` 태그.
+- **구현 참고(LF-02 A1):** 시작/종료 시각은 **네이티브 `datetime-local` 피커**로 구현(모바일 네이티브 UX). Figma의 Start/Done by **시트(바텀시트)는 후속 고도화**로 보류. 좁은 폭에서 datetime 2열이 넘쳐 **Start·Done by는 세로 스택**. `Anything else` textarea는 `resize:none`·`min-height 132`(크게). 입력 폼은 필드를 상단에 모으고 CTA를 바닥 고정(`margin-top:auto`).
 
 ### 3.4 지도 컴포넌트
 - **Map Pin** (`218:382`) — 지도는 **Naver Map** 위 오버레이.
@@ -162,6 +164,7 @@ A 결과·B 루트 공통 카드. **24개 상태 조합** = `State(Fits/Check/Al
 | Toast (`current choice set`) | 아이콘 + 텍스트, 선택 확정 완료 피드백(LF-03 내 유지) |
 | Page dots | 캐러셀 인디케이터, 활성 teal |
 | Carousel | 결과 카드 가로 스와이프(포커스 변경) |
+| **인터랙션 상태(구현)** | 모든 버튼·칩에 **hover/press 피드백**: hover=teal 강조(외곽/진한 teal), **press=색 반전**(teal 배경·흰 글자) + `scale(0.96~0.985)` 눌림, `transition ~0.15s`. 키보드 `:focus-visible`=teal outline. `prefers-reduced-motion` 시 전환·눌림 비활성. 예시 칩의 선택(Added)은 `aria-pressed`로 지속 teal. |
 
 ### 3.6 B(문화루트) 전용 컴포넌트
 - **Chat Message** (`218:2513`) — Conversation-first 대화 버블(User ↔ KONNECT).
@@ -213,7 +216,7 @@ A 결과·B 루트 공통 카드. **24개 상태 조합** = `State(Fits/Check/Al
 
 ## 6. 접근성 · 반응형 · i18n
 
-- **반응형:** 390px 기준, 상대 단위·flex/grid. 지도·카드·바텀시트는 뷰포트 하단 safe-area 고려. 가로 스크롤 영역(예시 칩)만 가로 스크롤.
+- **반응형:** 390px 기준, 상대 단위·flex/grid. **모바일=기기 폭 100% 채움, 데스크톱=390×844 중앙 프레임**(상세 §2.3 Layout). 지도·카드·바텀시트는 뷰포트 하단 safe-area 고려. 가로 스크롤 영역(예시 칩)만 가로 스크롤(본문은 가로 스크롤 금지).
 - **대비:** 상태 배지/flag는 bg-text 대비 확보(WCAG AA 지향). teal `#007385` on 흰 OK.
 - **터치 타깃:** 버튼·핀·칩 최소 탭 영역 확보(핀 비선택 30px은 히트영역 확대 권장).
 - **i18n:** 영어 우선. 긴 문구(추천 이유 최장 영문 ~51자) 줄바꿈·카드 높이 변동 대응. 내부 용어 비노출.

@@ -9,9 +9,47 @@ Phase 0 에서는 입력 검증을 느슨히 두고(스텁), A1 슬라이스에�
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class InterestCode(str, Enum):
+    """사용자 관심사 6개 (PRD §6.4, A·B 공통 Soft Preference)."""
+
+    TRADITIONAL = "traditional_culture"
+    PALACES_HISTORIC = "palaces_historic"
+    HANDS_ON = "hands_on"
+    ART_EXHIBITIONS = "art_exhibitions"
+    LIVE_PERFORMANCES = "live_performances"
+    FESTIVALS_EVENTS = "festivals_events"
+
+
+class ParsedConditions(BaseModel):
+    """자연어 note에서 LLM이 구조화한 선택조건. '말한 것만' — 추정 금지(FR-A4)."""
+
+    interests: list[InterestCode] = Field(
+        default_factory=list,
+        description="Cultural interests the user explicitly mentioned. Empty if none stated.",
+    )
+    free_only: bool = Field(
+        default=False,
+        description="True ONLY if the user explicitly asked for free experiences only.",
+    )
+    budget_krw: int | None = Field(
+        default=None,
+        description="Max budget per experience in Korean won, if the user stated an amount. Null otherwise.",
+    )
+    indoor_outdoor: Literal["indoor", "outdoor"] | None = Field(
+        default=None,
+        description="Set only if the user explicitly preferred indoor or outdoor. Null otherwise.",
+    )
+    prefer_shorter_walks: bool = Field(
+        default=False,
+        description="True only if the user said they prefer shorter walks / less walking.",
+    )
 
 
 class ResultStatus(str, Enum):
@@ -75,6 +113,8 @@ class MovementInfo(BaseModel):
     distance_m: int | None = None
     display: str  # 예: "≈12 min walk", "Route unavailable"
     provenance: Provenance
+    # 실제 도보 경로선 [[lat,lng],...]. 없으면 지도는 핀+외부지도로 폴백(임의 직선 금지).
+    path: list[list[float]] | None = None
 
 
 class UnconfirmedFlag(BaseModel):
@@ -100,18 +140,36 @@ class Candidate(BaseModel):
     flags: list[UnconfirmedFlag] = Field(default_factory=list)
     image_url: str | None = None  # 공식 소스만. 없다고 제외하지 않는다.
     official_links: list[OfficialLink] = Field(default_factory=list)
+    lat: float | None = None  # 지도 핀용 좌표
+    lng: float | None = None
+
+
+class StartLocation(BaseModel):
+    """시작 위치 (FR-A1·A5). 좌표는 보유 시에만(없으면 라벨로 처리)."""
+
+    label: str
+    lat: float | None = None
+    lng: float | None = None
 
 
 class RecommendRequest(BaseModel):
-    """FR-A1 필수 입력(+ FR-A4 자연어 선택조건). Phase 0 스텁은 느슨히 받는다."""
+    """FR-A1 필수 입력(+ FR-A4 자연어 선택조건).
 
-    start_location: str
-    start_time: str
-    end_time: str
-    note: str | None = None  # 자연어 선택조건 1영역
+    시작 위치·시작 시각·종료 시각이 필수. 현재 위치·현재 시각은 프론트에서
+    '변경 가능한 기본값'으로 채워 보낸다(FR-A1·A6). 경계 검증은 domain/ 에서.
+    """
+
+    start_location: StartLocation
+    start_at: datetime  # 시작 시각 (날짜 포함)
+    end_at: datetime  # 종료 시각
+    note: str | None = None  # 자연어 선택조건 1영역 (FR-A4). 구조화는 이후 LLM 단계.
 
 
 class RecommendData(BaseModel):
     candidates: list[Candidate] = Field(default_factory=list, max_length=4)
+    # 지도 출발점(해석된 좌표 포함). 지도 Start 핀·경로 기점.
+    origin: StartLocation | None = None
+    # AI가 note에서 이해한 조건(parsed chip 표시용 — '무엇을 이해했는지' 투명 공개).
+    conditions: ParsedConditions | None = None
     # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
     ai_notice: str = "AI-assisted results · unconfirmed details marked"

@@ -1,0 +1,6 @@
+# KONNECT backend — 도구 설정 (ruff/black). 의존성은 requirements.txt 참조.
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트는 naive datetime 을 의도적으로 사용(앱이 받는 datetime-local 과 동일 형태).
+# 타임존 비교 로직 자체는 validate_available_time 의 tz 일관성 검사로 다룬다.
+"tests/**" = ["DTZ"]

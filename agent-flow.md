@@ -18,8 +18,14 @@
 ### 현재 상태 (Current Status) — ⚠️ 작업 시작·종료 때 갱신할 것
 - [x] **사전 준비 완료**: 문서(PRD/CLAUDE/DESIGN/tokens.css) · `backend/.venv`(3.12, 의존성 OK) · `.env` 전 키 **라이브 스모크 Green** · Supabase(Google·Anonymous·pgvector) 활성 · Figma MCP 연결 · GitHub repo/Projects.
 - [x] **Phase 0 — Walking Skeleton** (branch `phase0-walking-skeleton`): 프론트(:5500)→백(:8000)→프론트 관통 로컬 검증 Green. `GET /health`·`POST /api/recommend` 스텁(계약 고정)·CORS·공통 봉투(Envelope)·trace·ruff/black 통과. ⚠️ 조기 배포(Render/Vercel)는 **미완** — Phase 1 중 수행.
-- [ ] **Phase 1 — A 즉시 추천** ← **다음 시작 지점**
-- [ ] Phase 2 — 로그인·개인화
+- [x] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) — A1~A6 완료(입력→조회→정규화→판정→지도/도보→Reason·LLM→선택). 날씨·배포는 보류.
+  - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시). UI 다듬기(버튼 인터랙션 포함).
+  - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·curation·agent/orchestrator). 실 후보 반환·신뢰 게이트·cat3 큐레이션.
+  - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무·행사기간 판정으로 fits/check 산정, Hard 충돌 제외+대체. 54 pytest. (날씨 Context는 이후)
+  - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b) + Google Map 딥링크(대중교통).
+  - [x] A5 Reason+LLM — note LLM 구조화(LangChain) + Reason Copy 선택 + 예산→alternative + parsed chips. 74 pytest.
+  - [x] A6 선택상태 — Select 확정·Current choice 배지·홈 재접근 배너(localStorage). **Phase 1 완료.**
+- [ ] Phase 2 — 로그인·개인화 ← **다음 Phase**
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
 
@@ -92,52 +98,59 @@
 > 참조: `PRD.md §4.2·§5·§6·§7·§10`, `DESIGN.md §3·§4(01 섹션)`, `reason-copy-dictionary`.
 
 ### A1 — 입력 구조화 (LF-02)
-- [ ] 요청 스키마: 시작위치·시작시각·종료시각(필수) + 자연어 선택조건 1영역 (FR-A1, FR-A4)
-- [ ] 가용시간 경계 검증: 최소 30분·시작일 24:00까지, 종료 자동기본값/자동연장 없음, 시작≥종료 재선택 (FR-A2)
-- [ ] 입력 오류 처리: 미입력/역전/30분미만/경계초과 = 추천 전 오류·제한 (FR-A3)
-- [ ] 현재 위치·시각은 변경 가능한 기본값. 위치 권한 거부 시 직접 입력 (FR-A6)
-- [ ] 자연어 선택조건 → 구조화 → 모호 Hard 값만 확인 (말 안 한 조건 추정 금지)
-- [ ] 프론트: LF-02 입력 UI(Field Row/Conditions·Start/Done by 시트/Example·Parsed Chip, DESIGN §3.3)
-- **Done when:** 유효 입력이 Request Context로 구조화되고, 오류/제한이 추천 전에 걸러진다. 신뢰 게이트 통과.
+- [x] 요청 스키마: 시작위치(StartLocation)·시작시각·종료시각(필수) + 자연어 note 1영역 (`models/recommend.py`)
+- [x] 가용시간 경계 검증: 최소 30분·시작일 24:00까지, 시작≥종료 재선택 (`domain/input_validation.py` + 8 pytest). 종료 자동기본값/자동연장 없음(프론트)
+- [x] 입력 오류 처리: 미입력(422)/역전/30분미만/경계초과 = 추천 전 오류·제한, ValidationFailure로 시스템예외·0건과 분리 (FR-A3·C7)
+- [x] 현재 위치·시각은 변경 가능한 기본값. 위치 권한 거부 시 직접 입력(📍 Use current → 거부 시 수동) (FR-A6)
+- [~] 자연어 선택조건 → **구조화는 A5(LLM 투입) 시**. A1은 note 원문 캡처 + example chip까지 (말 안 한 조건 추정 금지 유지)
+- [x] 프론트: LF-02 입력 UI(Section header/tag·Quick Select 5·네이티브 Start/Done by·Example Chip). 커스텀 시트/Parsed Chip은 후속
+- [x] 횡단: 모바일 디바이스 프레임(a-bly, 데스크톱 중앙 390 고정) · 입력↔결과 뷰 라우팅(`app.js`)
+- **Done when:** ✅ 유효 입력이 Request Context로 구조화되고, 오류/제한이 추천 전에 걸러진다. 로컬 라이브+헤드리스 스크린샷 검증 Green.
 
-### A2 — 조회 + 데이터 정규화 (LLM 아직 없음)
-- [ ] `sources/tourapi.py` — 타임아웃·재시도·단기캐시 내장 (TourAPI EngService2)
-- [ ] `domain/` 정규화 단일 지점: 가격 `free/paid/unknown/partial-or-ambiguous`, 예약·참여(확인된 것만), 시간값 `실제/예상/계획/미확인` (PRD §6.2)
-- [ ] 좌표 이상치 range 검증·drop, 공식 URL 보존
-- [ ] `TourAPI + 구조화 공식 API`만으로 후보 생성 성립 (한 소스 실패가 전체 실패로 번지지 않음)
-- **Done when:** 입력 조건으로 후보 리스트(정규화된 상태 포함)가 반환된다. 빈값→긍정 매핑 없음(게이트).
+### A2 — 조회 + 데이터 정규화 (LLM 아직 없음) ✅
+- [x] `sources/tourapi.py` — httpx+tenacity 재시도·타임아웃·단기 TTL 캐시. locationBasedList2·detailIntro2·detailCommon2 (EngService2). 키는 로그 비노출(httpx 로거 WARNING)
+- [x] `domain/normalize.py` 단일 지점: 가격 `free/paid/unknown/partial`(빈값·모호→unknown, free 추정 금지), 운영시간 실제/미확인, 예약은 표기 안 함(‘예약 불필요’ 매핑 금지). 미확인 flag 표기
+- [x] 좌표 한국 range 검증·drop, 공식 homepage URL 보존, firstimage 없으면 null(가짜 이미지 금지)
+- [x] 3개 문화타입(76·78·85) 병렬 조회→병합·거리순, cat1=A02 필터+의료관광(A020205*) 제외, 상세 병렬 보강. 한 소스 실패해도 성립(부분 실패 허용)
+- [x] 좌표 해석 `domain/locations.py`(제공좌표>Quick Select 5>도심 기본값), 파이프라인 `agent/orchestrator.py`, 라우터 스텁 제거
+- [x] 단위 테스트 15개(`test_normalize`: 가격 매핑·제목·좌표·flag). 라이브 end-to-end + 실 UI 렌더 검증(≈0.4s)
+- **Done when:** ✅ 입력 좌표로 실제 문화경험 후보(정규화 상태 포함)가 반환. 빈값→긍정 매핑 없음(게이트 통과, 시각 확인). 다음 **A3 판정**.
 
-### A3 — 판정 + 결과 상태 3종
-- [ ] `domain/constraints·timing·pricing·status.py` — 운영/휴무/입장마감/시간충돌/예산 판정 (PRD §5.3)
-- [ ] 내부 판정 순서 → 사용자-facing 3상태: 조건 충족 / 추가 확인 필요 / 조건 완화 대안 (FR-C3, §5.4)
-- [ ] 미확인 분리: 신뢰성 판단 불가 시 추천/자동 제외, 추정 금지 (PRD §6.2·§5.2)
-- [ ] 기상청·AirKorea Context 반영 + 공식 위험특보 시 Outdoor 정상추천 제외·실내 우선 (PRD §6.6)
-- [ ] `domain/` 단위 테스트(휴무·마감·시간충돌·가격 미확인·예산 경계)
-- **Done when:** 각 후보가 3상태 중 하나 + 미확인 flag로 분류된다. Hard 충돌은 정상 추천에서 빠진다(게이트).
+### A3 — 판정 + 결과 상태 3종 ✅ (일부 이후 보강)
+- [x] `domain/timing.py`(운영시간 범위·last admission·요일 휴무·24h 파싱, 계절/복수/문의는 UNCERTAIN) + `domain/status.py`(3상태 산정) (PRD §5.3)
+- [x] 내부 판정 순서 → 사용자-facing 상태: **조건 충족(fits: 영업확인+가격확인) / 추가 확인 필요(check: 미확인)**. Hard 충돌(영업외·휴무·마감후)은 제외. `조건 완화 대안(alternative)`은 예산/Soft 조건 필요 → A5(note 파싱) 이후
+- [x] 미확인 분리: 영업외·휴무 '확실할 때만' 제외, 애매하면 check(추정 금지). 가격 unknown/partial은 fits 아님 (PRD §6.2·§5.2)
+- [ ] 기상청·AirKorea Context + 공식 위험특보 Outdoor 제외 (PRD §6.6) ← **이후 보강(A3 범위에서 분리)**
+- [x] `domain/` 단위 테스트 19개(timing 14 + status 6: 휴무요일·영업외·last admission·24h·미확인·가격경계). 오케스트레이터: 상위 8개 보강·판정 후 Hard 제외분을 다음 후보로 대체(강제 채움 아님), trace에 fits/check/excluded 기록
+- **Done when:** ✅ 각 후보가 fits/check + 미확인 flag로 분류, Hard 충돌(영업외·휴무)은 정상 추천에서 빠짐(게이트, 라이브 확인: 영업 전 시간대·월요일 휴무 제외+대체). 다음 **A4 지도/이동**.
 
-### A4 — 후보 구성 + 지도/이동 (LF-03)
-- [ ] 최대 3~4개 소수 후보, 강제 채움 금지, 0건은 명시적 안내(몰래 완화 금지) (FR-A7, §5.5)
-- [ ] `sources/tmap.py` — 도보 거리·시간(백엔드 프록시) + provenance
-- [ ] 지도 Fallback 3단계: 경로선+시간/거리 → 핀+시간/거리+외부지도 → 핀+외부지도(Route unavailable) (PRD §7, DESIGN §3.4)
-- [ ] 임의 직선 금지, 경로선·거리·시간 각각 독립 검증
-- [ ] 프론트: Naver Map 렌더 + Map Pin(선택/비선택·유형아이콘·번호) + Result Card(Meta/provenance) (DESIGN §3.1·§3.4)
-- [ ] Google Maps 딥링크(외부 상세 길찾기)
-- **Done when:** 지도 위 핀 + 카드로 소수 후보가 신뢰수준과 함께 보인다. 직선 경로 위조 없음(게이트).
+### A4 — 후보 구성 + 지도/이동 (LF-03) ✅
+- [x] 최대 4개 소수 후보, 강제 채움 금지, 0건 명시 안내 (A2/A3에서 성립)
+- [x] `sources/tmap.py` — 보행자 거리·예상시간·경로선(백엔드 프록시) + provenance(estimate). 타임아웃/재시도/캐시/graceful
+- [x] 지도 Fallback: path 있으면 경로선, 없으면 핀+외부지도, Tmap 실패 시 `Route unavailable`(path/walk 유무로 단계 자동 분기) (PRD §7)
+- [x] 임의 직선 금지(Tmap이 준 실제 path만 그림), 거리·시간·경로 독립
+- [x] 프론트: `js/map.js` Naver Map 렌더 + Start/번호 핀(선택/비선택) + 포커스 경로선. **인증실패(도메인 미등록)·로드실패 시 지도 숨김**(카드 유지). 카드↔핀 포커스(teal 테두리). 유형아이콘은 Figma 에셋 export 후 보강
+- [x] Google Maps 도보 딥링크(Directions external map)
+- [x] `/api/config`로 공개 Naver client id 노출
+- **Done when:** ✅ 카드로 소수 후보가 도보시간·신뢰수준과 함께 보이고 외부지도 연결. 직선 위조 없음(게이트). 지도 핀/경로는 **NCP 콘솔에 도메인(localhost:5500·배포URL) 등록** 후 표시(현재는 graceful 폴백). 다음 **A5 Reason+LLM**.
 
-### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입)
-- [ ] LLM은 **확인된 근거를 읽기 쉽게 설명만** (새 사실·가격·가능성 생성 금지) (PRD §5.2 R-09)
-- [ ] Reason 0~2개(Primary 1 + Secondary 최대 1), Reason Copy Dictionary v1.0 문구만 (FR-C4)
-- [ ] 0개면 이유 영역 생략(중립 안내는 Reason 아님), 내부 Fit명 노출 금지
-- [ ] Fact/Reason/미확인 시각 분리 + `AI-assisted results · unconfirmed details marked` 고지 (DESIGN §5)
-- [ ] trace: 어떤 Context+Evidence+Match Rule로 Reason을 냈는지 기록
-- **Done when:** 각 후보에 근거 있는 Reason 0~2개가 붙고, Fact와 분리 렌더된다. 근거 없는 Fit 없음(게이트).
+### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입) ✅
+- [x] **LLM은 note 자연어 구조화에만**(`agent/note_parser.py`, LangChain `with_structured_output`) — '말한 것만' 추출(추정 금지), 사실(가격·시간) 생성 안 함. 실패 graceful. Reason 텍스트는 LLM이 쓰지 않음
+- [x] Reason 0~2개(Primary+Secondary), Reason Copy Dictionary 문구만 — **확정 근거+조건+매치룰로 코드가 선택**(`domain/reasons.py`). 관심사/예산(충족시)/시간(OPEN)/최근접
+- [x] 0개면 영역 생략(강제 채움 금지), 미확인 근거엔 Fit 금지(가격 미확인→budget reason 없음), 내부 Fit명 비노출(code 내부용)
+- [x] 예산 판정(`domain/budget.py`, 일반가 기준·할인가 제외) → 초과 시 **alternative + 'Above your budget'/'Not a free option'**(충족 reason 금지, §5.7)
+- [x] Fact/Reason/미확인 분리 렌더 + AI 고지 유지 + **parsed chips(AI 이해 조건) 표시**
+- [x] trace: structure(파싱결과)·judge(fits/alt/check)·explain(reason수). 단위 테스트 24개(budget 9·reasons 8·status +7)
+- **Done when:** ✅ 각 후보에 근거 있는 Reason 0~2개, Fact 분리 렌더, 근거 없는 Fit 없음(게이트). 라이브(실 LLM+데이터+지도) 확인: 관심사·예산 reason, 예산초과 alternative, 미확인은 무료/충족 주장 안 함. 다음 **A6 선택 상태**.
 
-### A6 — 선택 상태 (LF-09, 비로그인)
-- [ ] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
-- [ ] LF-03에 남아 완료 피드백(Toast), 자동 이동·추가 저장 버튼 없음
-- [ ] 현재 선택 상태 유지·재접근(LF-09 A variant), 선택≠방문 (FR-C6)
-- [ ] 비로그인 임시 보존(로컬/익명) — Phase 2에서 계정 연결
-- **Done when:** 선택이 확정·유지되고 홈에서 다시 볼 수 있다. GPS 방문판정 없음(게이트).
+### A6 — 선택 상태 (LF-09, 비로그인) ✅
+- [x] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
+- [x] LF-03에 남아 완료 피드백(Toast) + Current choice 배지·Selected 버튼, 자동 이동·추가 저장 버튼 없음
+- [x] 현재 선택 유지·재접근: 홈(입력 뷰) 상단 "Current choice" 배너(View/Clear), 재오픈 시 확정 복원 (LF-09 A variant), 선택≠방문 (FR-C6)
+- [x] 비로그인 localStorage 영속 — Phase 2에서 계정 연결(익명→Google identity linking)
+- **Done when:** ✅ 선택이 확정·유지되고 홈에서 다시 볼 수 있다. GPS 방문판정 없음(게이트). 라이브 확인.
+
+**Phase 1(A 즉시추천) 완료:** A1~A6 전 슬라이스 통과(PRD §10 A 완료기준). 입력→조회→정규화→판정(3상태·Hard제외)→지도/도보→Reason/LLM→선택까지 end-to-end. **보류(의도적):** 날씨·대기질 Context(§6.6), 자유텍스트 정밀 지오코딩, 조기 배포(Render/Vercel — Phase 4).
 
 **Phase 1 완료 기준(PRD §10 A):** Start Anchor·가용시간 반영, Hard 충돌 미표시, 상태·이유·실행조건·미확인 구분, LF-03에서 Select로 확정·완료 피드백.
 

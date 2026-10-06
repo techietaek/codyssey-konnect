@@ -25,6 +25,9 @@ from app.models.envelope import Envelope
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
 )
+# httpx/httpcore INFO 로그는 요청 URL(=serviceKey 포함)을 남긴다 → 시크릿 노출 방지(NFR-04)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("konnect")
 
 
@@ -76,3 +79,13 @@ async def _validation_error_handler(
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/api/config")
+async def public_config() -> dict[str, str]:
+    """프론트가 쓰는 공개 설정만 노출(비밀키 아님).
+
+    Naver Map client id 는 공개 식별자이며 NCP 콘솔의 Web 서비스 URL 등록으로
+    도메인 제한된다(.env 주석 참고). Secret 키는 절대 노출하지 않는다.
+    """
+    return {"naver_map_client_id": settings.naver_map_client_id}
