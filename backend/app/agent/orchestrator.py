@@ -1,8 +1,8 @@
-"""즉시 추천(A) 파이프라인 (A2: 조회→정규화).
+"""즉시 추천(A) 파이프라인.
 
-structure → fetch(공식 API) → compose(정규화·소수 후보). 판정(A3)·Reason(A5)은 이후.
-한 소스 실패가 전체 실패로 번지지 않게 부분 실패를 허용한다(CLAUDE §4.2).
-LLM은 아직 쓰지 않는다 — 조회·정규화는 코드로.
+structure(입력+note LLM 구조화) → fetch(공식 API) → judge(운영/휴무/예산) →
+route(Tmap) → explain(Reason) → compose. 한 소스 실패가 전체 실패로 번지지 않게
+부분 실패를 허용한다(CLAUDE §4.2). 판정·Reason은 코드로, LLM은 note 구조화만.
 """
 
 from __future__ import annotations
@@ -10,16 +10,20 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.note_parser import parse_note
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
+from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import normalize_candidate
+from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
-from app.domain.timing import judge_timing
+from app.domain.timing import TimingVerdict, judge_timing
 from app.models.recommend import (
     Candidate,
     MovementInfo,
+    ParsedConditions,
     Provenance,
     RecommendData,
     StartLocation,
@@ -68,8 +72,10 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
     return pool
 
 
-async def _enrich(item: dict, ctx: RequestContext) -> tuple[Candidate | None, str]:
-    """상세 조회→정규화→판정. Hard 충돌(영업외·휴무)은 (None, 사유)로 제외."""
+async def _enrich(
+    item: dict, ctx: RequestContext, cond: ParsedConditions
+) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict]:
+    """상세 조회→정규화→판정(운영/휴무/예산). Hard 충돌은 (None,...)로 제외."""
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
     intro, common = await asyncio.gather(
@@ -82,16 +88,17 @@ async def _enrich(item: dict, ctx: RequestContext) -> tuple[Candidate | None, st
 
     cand = normalize_candidate(item, intro, common)
     if cand is None:
-        return None, "invalid/out-of-range data"
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
 
-    # [judge] 운영시간·휴무 → 3상태. Hard 충돌은 제외(정상 추천에서 뺀다).
-    verdict, reason = judge_timing(intro, ctx.start_at, ctx.end_at)
-    status, flags = resolve_status(cand, verdict)
+    # [judge] 운영시간·휴무·행사기간 + 예산 → 3상태. Hard 충돌은 제외.
+    timing, _reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    budget = judge_budget(cand, cond)
+    status, flags = resolve_status(cand, timing, budget, cond)
     if status is None:
-        return None, reason  # Hard 제외
+        return None, timing, budget  # Hard 제외
     cand.status = status
     cand.flags = flags
-    return cand, reason
+    return cand, timing, budget
 
 
 async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
@@ -116,33 +123,44 @@ async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
 
 async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
     lat, lng = resolve_start_coords(ctx.start_location)
+
+    # [structure] 좌표 해석 + note 자연어 구조화(LLM)를 조회와 병렬로.
+    cond, pool = await asyncio.gather(
+        parse_note(ctx.note), _fetch_pool(lat, lng, trace)
+    )
     trace.step(
         "structure",
         start=ctx.start_location.label,
         coords=f"{lat:.4f},{lng:.4f}",
         available_minutes=ctx.available_minutes,
+        interests=[i.value for i in cond.interests],
+        free_only=cond.free_only,
+        budget_krw=cond.budget_krw,
     )
-
-    pool = await _fetch_pool(lat, lng, trace)
 
     # 가까운 순 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로 대체.
     # 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 가까운 순 최대 4개).
-    results = await asyncio.gather(*(_enrich(it, ctx) for it in pool[:_ENRICH_POOL]))
-    candidates: list[Candidate] = []
+    results = await asyncio.gather(
+        *(_enrich(it, ctx, cond) for it in pool[:_ENRICH_POOL])
+    )
+    kept: list[tuple[Candidate, TimingVerdict, BudgetVerdict]] = []
     excluded = 0
-    for cand, _reason in results:
+    for cand, timing, budget in results:
         if cand is None:
             excluded += 1
-        elif len(candidates) < _MAX_CANDIDATES:
-            candidates.append(cand)
+        elif len(kept) < _MAX_CANDIDATES:
+            kept.append((cand, timing, budget))
 
+    candidates = [c for c, _, _ in kept]
     fits = sum(1 for c in candidates if c.status.value == "fits")
+    alt = sum(1 for c in candidates if c.status.value == "alternative")
     trace.step(
         "judge",
         considered=len(results),
         excluded_hard=excluded,
         fits=fits,
-        check_needed=len(candidates) - fits,
+        alternative=alt,
+        check_needed=len(candidates) - fits - alt,
     )
 
     # [route] 후보별 도보 이동정보(Tmap) 병렬 부착
@@ -150,6 +168,13 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
     with_path = sum(1 for c in candidates if c.movement and c.movement.path)
     trace.step("route", with_path=with_path, total=len(candidates))
 
+    # [explain] 확정 근거 기반 Reason 선택(0~2개). 최근접 1개만 M03.
+    for i, (cand, timing, budget) in enumerate(kept):
+        cand.reasons = select_reasons(
+            cand, cond, timing, budget, is_nearest=(i == 0 and len(kept) > 1)
+        )
+    trace.step("explain", with_reasons=sum(1 for c in candidates if c.reasons))
+
     trace.step("compose", kept=len(candidates))
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
-    return RecommendData(candidates=candidates, origin=origin)
+    return RecommendData(candidates=candidates, origin=origin, conditions=cond)

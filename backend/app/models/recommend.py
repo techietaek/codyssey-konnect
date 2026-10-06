@@ -11,8 +11,45 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class InterestCode(str, Enum):
+    """사용자 관심사 6개 (PRD §6.4, A·B 공통 Soft Preference)."""
+
+    TRADITIONAL = "traditional_culture"
+    PALACES_HISTORIC = "palaces_historic"
+    HANDS_ON = "hands_on"
+    ART_EXHIBITIONS = "art_exhibitions"
+    LIVE_PERFORMANCES = "live_performances"
+    FESTIVALS_EVENTS = "festivals_events"
+
+
+class ParsedConditions(BaseModel):
+    """자연어 note에서 LLM이 구조화한 선택조건. '말한 것만' — 추정 금지(FR-A4)."""
+
+    interests: list[InterestCode] = Field(
+        default_factory=list,
+        description="Cultural interests the user explicitly mentioned. Empty if none stated.",
+    )
+    free_only: bool = Field(
+        default=False,
+        description="True ONLY if the user explicitly asked for free experiences only.",
+    )
+    budget_krw: int | None = Field(
+        default=None,
+        description="Max budget per experience in Korean won, if the user stated an amount. Null otherwise.",
+    )
+    indoor_outdoor: Literal["indoor", "outdoor"] | None = Field(
+        default=None,
+        description="Set only if the user explicitly preferred indoor or outdoor. Null otherwise.",
+    )
+    prefer_shorter_walks: bool = Field(
+        default=False,
+        description="True only if the user said they prefer shorter walks / less walking.",
+    )
 
 
 class ResultStatus(str, Enum):
@@ -132,5 +169,7 @@ class RecommendData(BaseModel):
     candidates: list[Candidate] = Field(default_factory=list, max_length=4)
     # 지도 출발점(해석된 좌표 포함). 지도 Start 핀·경로 기점.
     origin: StartLocation | None = None
+    # AI가 note에서 이해한 조건(parsed chip 표시용 — '무엇을 이해했는지' 투명 공개).
+    conditions: ParsedConditions | None = None
     # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
     ai_notice: str = "AI-assisted results · unconfirmed details marked"
