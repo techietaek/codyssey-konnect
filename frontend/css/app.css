@@ -59,8 +59,8 @@ body {
 .app-header p { margin: 0; font-size: var(--fs-body); color: var(--c-text-muted); }
 
 /* ── 입력 폼 (LF-02) ── */
-/* space-between 으로 섹션·CTA를 세로로 분배해 빈 공간을 메운다(필드 간격 확보) */
-.form { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-20); margin-top: var(--space-20); }
+/* 필드들은 위로 모으고(섹션 gap), CTA만 바닥에 고정(margin-top:auto) */
+.form { flex: 1; display: flex; flex-direction: column; gap: var(--space-20); margin-top: var(--space-20); }
 .section { display: flex; flex-direction: column; gap: var(--space-14); }
 .section-head { display: flex; align-items: center; gap: var(--space-8); }
 .section-head h2 { font-size: var(--fs-meta); font-weight: var(--fw-bold); margin: 0; }
@@ -118,7 +118,7 @@ body {
 
 /* 하단 CTA */
 .cta {
-  position: sticky; bottom: 0; padding-top: var(--space-12);
+  position: sticky; bottom: 0; margin-top: auto; padding-top: var(--space-12);
   background: linear-gradient(to top, var(--c-bg) 70%, transparent);
 }
 .btn-cta {
@@ -193,4 +193,36 @@ body {
   padding: var(--space-10) var(--space-14); border-radius: var(--r-pill);
   font-size: var(--fs-body); font-weight: var(--fw-semibold); box-shadow: var(--shadow-card-focus);
   z-index: 10;
+}
+
+/* ── 인터랙션 (hover / press 색 반전·전환 피드백) ───────────── */
+.btn-cta, .btn-geo, .btn-select, .chip, .conditions button {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.08s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+/* 키보드 포커스 접근성 */
+.btn-cta:focus-visible, .btn-geo:focus-visible, .btn-select:focus-visible,
+.chip:focus-visible, .conditions button:focus-visible {
+  outline: 2px solid var(--c-primary); outline-offset: 2px;
+}
+/* Primary CTA: hover 진한 teal / press 더 진하게 + 눌림 */
+.btn-cta:hover:not(:disabled) { background: var(--c-primary-ink); }
+.btn-cta:active:not(:disabled) { transform: scale(0.985); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.18); }
+/* 칩(Quick Select·Example): hover teal 외곽 / press 색 반전(teal 배경·흰 글자) */
+.chip:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.chip:active { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); transform: scale(0.96); }
+/* 현재 위치 버튼: hover tint / press 반전 */
+.btn-geo:hover { background: var(--c-primary-tint); border-color: var(--c-primary); }
+.btn-geo:active { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-on-primary); transform: scale(0.97); }
+/* 결과 Select 버튼: hover 살짝 진하게 / press 눌림 */
+.btn-select:hover { filter: brightness(0.96); }
+.btn-select:active { transform: scale(0.97); filter: brightness(0.92); }
+/* Edit(조건) 버튼 */
+.conditions button:hover { color: var(--c-primary-ink); }
+.conditions button:active { transform: scale(0.96); }
+
+/* 모션 최소화 선호 사용자: 전환·눌림 비활성화 */
+@media (prefers-reduced-motion: reduce) {
+  .btn-cta, .btn-geo, .btn-select, .chip, .conditions button { transition: none; }
+  .btn-cta:active, .chip:active, .btn-geo:active, .btn-select:active, .conditions button:active { transform: none; }
 }
