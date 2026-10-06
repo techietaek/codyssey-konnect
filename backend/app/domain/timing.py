@@ -12,7 +12,7 @@ TourAPI 상세(detailIntro2)의 자유기술 운영시간/휴무를 파싱해 �
 from __future__ import annotations
 
 import re
-from datetime import datetime, time
+from datetime import date, datetime, time
 from enum import Enum
 from typing import Any
 
@@ -124,6 +124,32 @@ def _has_caveat(text: str, n_ranges: int) -> bool:
     )
 
 
+def _parse_yyyymmdd(s: str | None) -> date | None:
+    s = (s or "").strip()
+    if len(s) == 8 and s.isdigit():
+        try:
+            return date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+        except ValueError:
+            return None
+    return None
+
+
+def judge_event_dates(
+    intro: dict[str, Any], visit_date: date
+) -> tuple[TimingVerdict, str] | None:
+    """축제·공연(type 85)의 행사 기간 판정. 방문일이 기간 밖이면 CLOSED(Hard).
+
+    기간 정보가 없으면 None(행사 날짜로는 판단 안 함 → 운영시간 판정으로 진행).
+    """
+    start = _parse_yyyymmdd(intro.get("eventstartdate"))
+    end = _parse_yyyymmdd(intro.get("eventenddate"))
+    if end and visit_date > end:
+        return TimingVerdict.CLOSED, "event has ended"
+    if start and visit_date < start:
+        return TimingVerdict.CLOSED, "event has not started yet"
+    return None
+
+
 def _window_end_time(start_dt: datetime, end_dt: datetime) -> time:
     # 종료가 다음날 자정(00:00)이면 '그날 끝(23:59)'으로 본다(FR-A2 경계).
     if end_dt.time() == time(0, 0) and end_dt.date() != start_dt.date():
@@ -134,7 +160,12 @@ def _window_end_time(start_dt: datetime, end_dt: datetime) -> time:
 def judge_timing(
     intro: dict[str, Any], start_dt: datetime, end_dt: datetime
 ) -> tuple[TimingVerdict, str]:
-    """운영시간·휴무 → (판정, 사유). 사유는 trace/설명용."""
+    """행사기간·운영시간·휴무 → (판정, 사유). 사유는 trace/설명용."""
+    # 0) 행사 기간 (축제·공연): 방문일이 기간 밖이면 Hard(종료/미개막)
+    event = judge_event_dates(intro, start_dt.date())
+    if event is not None:
+        return event
+
     # 1) 요일 휴무 (확인되면 Hard)
     closed = parse_closed_weekdays(_first(intro, _REST_KEYS))
     if start_dt.weekday() in closed:

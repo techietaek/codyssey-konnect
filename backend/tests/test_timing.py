@@ -91,6 +91,28 @@ def test_open_24_hours():
     assert J({"usetime": "Open 24 hr"}) is TimingVerdict.OPEN
 
 
+# ── 행사 기간(축제·공연) ──
+def test_ended_event_excluded():
+    # 2025-10-26 종료 공연을 2026-10-06에 방문 → CLOSED(종료)
+    intro = {"eventstartdate": "20251010", "eventenddate": "20251026"}
+    assert J(intro) is TimingVerdict.CLOSED
+
+
+def test_future_event_excluded():
+    intro = {"eventstartdate": "20271010", "eventenddate": "20271026"}
+    assert J(intro) is TimingVerdict.CLOSED
+
+
+def test_running_event_not_closed_by_dates():
+    # 기간 내(2026-10-06 포함) → 날짜로는 CLOSED 아님(운영시간 판정으로)
+    intro = {
+        "eventstartdate": "20261001",
+        "eventenddate": "20261031",
+        "usetimefestival": "10:00-18:00",
+    }
+    assert J(intro) is TimingVerdict.OPEN
+
+
 def test_window_to_midnight_still_open():
     # 종료가 다음날 00:00(시작일 24:00 경계) → 그날 끝으로 처리, 영업시간과 겹침
     end_midnight = datetime(2026, 10, 7, 0, 0)
