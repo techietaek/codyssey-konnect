@@ -22,8 +22,9 @@
   - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시). UI 다듬기(버튼 인터랙션 포함).
   - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·curation·agent/orchestrator). 실 후보 반환·신뢰 게이트·cat3 큐레이션.
   - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무·행사기간 판정으로 fits/check 산정, Hard 충돌 제외+대체. 54 pytest. (날씨 Context는 이후)
-  - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b, 도메인 등록 시) + Google Maps 딥링크.
-  - [ ] A5 Reason+LLM ← **다음 슬라이스**  · A6 선택상태
+  - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b) + Google Map 딥링크(대중교통).
+  - [x] A5 Reason+LLM — note LLM 구조화(LangChain) + Reason Copy 선택 + 예산→alternative + parsed chips. 74 pytest.
+  - [ ] A6 선택상태 ← **다음 슬라이스(Phase 1 마지막)**
 - [ ] Phase 2 — 로그인·개인화
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
@@ -133,13 +134,14 @@
 - [x] `/api/config`로 공개 Naver client id 노출
 - **Done when:** ✅ 카드로 소수 후보가 도보시간·신뢰수준과 함께 보이고 외부지도 연결. 직선 위조 없음(게이트). 지도 핀/경로는 **NCP 콘솔에 도메인(localhost:5500·배포URL) 등록** 후 표시(현재는 graceful 폴백). 다음 **A5 Reason+LLM**.
 
-### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입)
-- [ ] LLM은 **확인된 근거를 읽기 쉽게 설명만** (새 사실·가격·가능성 생성 금지) (PRD §5.2 R-09)
-- [ ] Reason 0~2개(Primary 1 + Secondary 최대 1), Reason Copy Dictionary v1.0 문구만 (FR-C4)
-- [ ] 0개면 이유 영역 생략(중립 안내는 Reason 아님), 내부 Fit명 노출 금지
-- [ ] Fact/Reason/미확인 시각 분리 + `AI-assisted results · unconfirmed details marked` 고지 (DESIGN §5)
-- [ ] trace: 어떤 Context+Evidence+Match Rule로 Reason을 냈는지 기록
-- **Done when:** 각 후보에 근거 있는 Reason 0~2개가 붙고, Fact와 분리 렌더된다. 근거 없는 Fit 없음(게이트).
+### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입) ✅
+- [x] **LLM은 note 자연어 구조화에만**(`agent/note_parser.py`, LangChain `with_structured_output`) — '말한 것만' 추출(추정 금지), 사실(가격·시간) 생성 안 함. 실패 graceful. Reason 텍스트는 LLM이 쓰지 않음
+- [x] Reason 0~2개(Primary+Secondary), Reason Copy Dictionary 문구만 — **확정 근거+조건+매치룰로 코드가 선택**(`domain/reasons.py`). 관심사/예산(충족시)/시간(OPEN)/최근접
+- [x] 0개면 영역 생략(강제 채움 금지), 미확인 근거엔 Fit 금지(가격 미확인→budget reason 없음), 내부 Fit명 비노출(code 내부용)
+- [x] 예산 판정(`domain/budget.py`, 일반가 기준·할인가 제외) → 초과 시 **alternative + 'Above your budget'/'Not a free option'**(충족 reason 금지, §5.7)
+- [x] Fact/Reason/미확인 분리 렌더 + AI 고지 유지 + **parsed chips(AI 이해 조건) 표시**
+- [x] trace: structure(파싱결과)·judge(fits/alt/check)·explain(reason수). 단위 테스트 24개(budget 9·reasons 8·status +7)
+- **Done when:** ✅ 각 후보에 근거 있는 Reason 0~2개, Fact 분리 렌더, 근거 없는 Fit 없음(게이트). 라이브(실 LLM+데이터+지도) 확인: 관심사·예산 reason, 예산초과 alternative, 미확인은 무료/충족 주장 안 함. 다음 **A6 선택 상태**.
 
 ### A6 — 선택 상태 (LF-09, 비로그인)
 - [ ] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
