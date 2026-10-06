@@ -17,6 +17,7 @@ from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import normalize_candidate
+from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
 from app.domain.timing import TimingVerdict, judge_timing
@@ -28,7 +29,7 @@ from app.models.recommend import (
     RecommendData,
     StartLocation,
 )
-from app.sources import tmap, tourapi
+from app.sources import gplaces, tmap, tourapi
 
 # 문화경험 콘텐츠 타입(EngService2): 관광지·문화시설·축제/공연/행사.
 # (식당·쇼핑·숙박 등은 제외 — PRD §6.4)
@@ -73,21 +74,35 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
 
 
 async def _enrich(
-    item: dict, ctx: RequestContext, cond: ParsedConditions
+    item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
 ) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict]:
-    """상세 조회→정규화→판정(운영/휴무/예산). Hard 충돌은 (None,...)로 제외."""
+    """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외."""
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
-    intro, common = await asyncio.gather(
+    # 공식 상세(정본)와 Places businessStatus(폐업 음성 신호)를 병렬 조회.
+    # Places 는 보조·graceful — 실패해도 추천을 막지 않는다(§4.2·§6.7).
+    intro, common, place = await asyncio.gather(
         tourapi.detail_intro(cid, ctype),
         tourapi.detail_common(cid),
+        gplaces.find_place(
+            item.get("title") or "",
+            float(item.get("mapy") or 0) or 0.0,
+            float(item.get("mapx") or 0) or 0.0,
+        ),
         return_exceptions=True,
     )
     intro = intro if isinstance(intro, dict) else {}
     common = common if isinstance(common, dict) else {}
+    place = place if isinstance(place, dict) else None
 
     cand = normalize_candidate(item, intro, common)
     if cand is None:
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
+
+    # [judge-0] 폐업/임시휴업(Places 음성 신호·좌표 교차확인) → Hard 제외.
+    presence = judge_presence(place, cand.lat, cand.lng)
+    if presence is not PresenceVerdict.OPERATIONAL:
+        trace.step("presence_excluded", title=cand.title, status=presence.value)
         return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
 
     # [judge] 운영시간·휴무·행사기간 + 예산 → 3상태. Hard 충돌은 제외.
@@ -141,7 +156,7 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
     # 가까운 순 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로 대체.
     # 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 가까운 순 최대 4개).
     results = await asyncio.gather(
-        *(_enrich(it, ctx, cond) for it in pool[:_ENRICH_POOL])
+        *(_enrich(it, ctx, cond, trace) for it in pool[:_ENRICH_POOL])
     )
     kept: list[tuple[Candidate, TimingVerdict, BudgetVerdict]] = []
     excluded = 0
