@@ -21,8 +21,9 @@
 - [ ] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) ← **진행 중**
   - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시). UI 다듬기(버튼 인터랙션 포함).
   - [x] A2 조회+정규화 — TourAPI EngService2 실연동(sources/tourapi·domain/normalize·curation·agent/orchestrator). 실 후보 반환·신뢰 게이트·cat3 큐레이션.
-  - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무 판정으로 fits/check 산정, Hard 충돌 제외+대체. 51 pytest. (날씨 Context는 이후)
-  - [ ] A4 지도/이동(Tmap) ← **다음 슬라이스**  · A5 Reason+LLM · A6 선택상태
+  - [x] A3 판정+3상태 — domain/timing·status. 영업시간·휴무·행사기간 판정으로 fits/check 산정, Hard 충돌 제외+대체. 54 pytest. (날씨 Context는 이후)
+  - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b, 도메인 등록 시) + Google Maps 딥링크.
+  - [ ] A5 Reason+LLM ← **다음 슬라이스**  · A6 선택상태
 - [ ] Phase 2 — 로그인·개인화
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
@@ -122,14 +123,15 @@
 - [x] `domain/` 단위 테스트 19개(timing 14 + status 6: 휴무요일·영업외·last admission·24h·미확인·가격경계). 오케스트레이터: 상위 8개 보강·판정 후 Hard 제외분을 다음 후보로 대체(강제 채움 아님), trace에 fits/check/excluded 기록
 - **Done when:** ✅ 각 후보가 fits/check + 미확인 flag로 분류, Hard 충돌(영업외·휴무)은 정상 추천에서 빠짐(게이트, 라이브 확인: 영업 전 시간대·월요일 휴무 제외+대체). 다음 **A4 지도/이동**.
 
-### A4 — 후보 구성 + 지도/이동 (LF-03)
-- [ ] 최대 3~4개 소수 후보, 강제 채움 금지, 0건은 명시적 안내(몰래 완화 금지) (FR-A7, §5.5)
-- [ ] `sources/tmap.py` — 도보 거리·시간(백엔드 프록시) + provenance
-- [ ] 지도 Fallback 3단계: 경로선+시간/거리 → 핀+시간/거리+외부지도 → 핀+외부지도(Route unavailable) (PRD §7, DESIGN §3.4)
-- [ ] 임의 직선 금지, 경로선·거리·시간 각각 독립 검증
-- [ ] 프론트: Naver Map 렌더 + Map Pin(선택/비선택·유형아이콘·번호) + Result Card(Meta/provenance) (DESIGN §3.1·§3.4)
-- [ ] Google Maps 딥링크(외부 상세 길찾기)
-- **Done when:** 지도 위 핀 + 카드로 소수 후보가 신뢰수준과 함께 보인다. 직선 경로 위조 없음(게이트).
+### A4 — 후보 구성 + 지도/이동 (LF-03) ✅
+- [x] 최대 4개 소수 후보, 강제 채움 금지, 0건 명시 안내 (A2/A3에서 성립)
+- [x] `sources/tmap.py` — 보행자 거리·예상시간·경로선(백엔드 프록시) + provenance(estimate). 타임아웃/재시도/캐시/graceful
+- [x] 지도 Fallback: path 있으면 경로선, 없으면 핀+외부지도, Tmap 실패 시 `Route unavailable`(path/walk 유무로 단계 자동 분기) (PRD §7)
+- [x] 임의 직선 금지(Tmap이 준 실제 path만 그림), 거리·시간·경로 독립
+- [x] 프론트: `js/map.js` Naver Map 렌더 + Start/번호 핀(선택/비선택) + 포커스 경로선. **인증실패(도메인 미등록)·로드실패 시 지도 숨김**(카드 유지). 카드↔핀 포커스(teal 테두리). 유형아이콘은 Figma 에셋 export 후 보강
+- [x] Google Maps 도보 딥링크(Directions external map)
+- [x] `/api/config`로 공개 Naver client id 노출
+- **Done when:** ✅ 카드로 소수 후보가 도보시간·신뢰수준과 함께 보이고 외부지도 연결. 직선 위조 없음(게이트). 지도 핀/경로는 **NCP 콘솔에 도메인(localhost:5500·배포URL) 등록** 후 표시(현재는 graceful 폴백). 다음 **A5 Reason+LLM**.
 
 ### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입)
 - [ ] LLM은 **확인된 근거를 읽기 쉽게 설명만** (새 사실·가격·가능성 생성 금지) (PRD §5.2 R-09)
