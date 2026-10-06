@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.agent.context import RequestContext
 from app.core.trace import Trace
+from app.domain.input_validation import validate_available_time
 from app.models.envelope import Envelope
 from app.models.recommend import (
     Candidate,
@@ -72,12 +74,27 @@ def _stub_candidate() -> Candidate:
 @router.post("/recommend", response_model=Envelope[RecommendData])
 async def recommend(req: RecommendRequest) -> Envelope[RecommendData]:
     trace = Trace()
+
+    # [validate] 추천 전 입력 경계 검증 (FR-A2·A3). 위반 시 ValidationFailure →
+    # main.py 핸들러가 422 Envelope(ok=False)로 변환. 시스템 예외·0건과 구분.
+    validate_available_time(req.start_at, req.end_at)
+
+    # [structure] 검증 통과 입력을 Request Context로 구조화. note 원문은 보존.
+    ctx = RequestContext(
+        start_location=req.start_location,
+        start_at=req.start_at,
+        end_at=req.end_at,
+        note=req.note,
+    )
     trace.step(
         "structure",
-        start_location=req.start_location,
-        start_time=req.start_time,
-        end_time=req.end_time,
+        start_location=ctx.start_location.label,
+        available_minutes=ctx.available_minutes,
+        has_note=bool(ctx.note),
     )
-    trace.step("compose", note="phase0 stub — single hardcoded candidate")
+
+    # [compose] Phase 1 A1: 조회/판정 전이므로 스텁 후보 유지(계약 고정).
+    # A2~A5에서 이 자리를 실제 조회·판정·설명으로 대체한다.
+    trace.step("compose", note="A1 stub — single hardcoded candidate")
     data = RecommendData(candidates=[_stub_candidate()])
     return Envelope.success(data=data, trace_id=trace.trace_id)

@@ -9,6 +9,7 @@ Phase 0 에서는 입력 검증을 느슨히 두고(스텁), A1 슬라이스에�
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -102,13 +103,25 @@ class Candidate(BaseModel):
     official_links: list[OfficialLink] = Field(default_factory=list)
 
 
-class RecommendRequest(BaseModel):
-    """FR-A1 필수 입력(+ FR-A4 자연어 선택조건). Phase 0 스텁은 느슨히 받는다."""
+class StartLocation(BaseModel):
+    """시작 위치 (FR-A1·A5). 좌표는 보유 시에만(없으면 라벨로 처리)."""
 
-    start_location: str
-    start_time: str
-    end_time: str
-    note: str | None = None  # 자연어 선택조건 1영역
+    label: str
+    lat: float | None = None
+    lng: float | None = None
+
+
+class RecommendRequest(BaseModel):
+    """FR-A1 필수 입력(+ FR-A4 자연어 선택조건).
+
+    시작 위치·시작 시각·종료 시각이 필수. 현재 위치·현재 시각은 프론트에서
+    '변경 가능한 기본값'으로 채워 보낸다(FR-A1·A6). 경계 검증은 domain/ 에서.
+    """
+
+    start_location: StartLocation
+    start_at: datetime  # 시작 시각 (날짜 포함)
+    end_at: datetime  # 종료 시각
+    note: str | None = None  # 자연어 선택조건 1영역 (FR-A4). 구조화는 이후 LLM 단계.
 
 
 class RecommendData(BaseModel):

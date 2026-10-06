@@ -18,7 +18,9 @@
 ### 현재 상태 (Current Status) — ⚠️ 작업 시작·종료 때 갱신할 것
 - [x] **사전 준비 완료**: 문서(PRD/CLAUDE/DESIGN/tokens.css) · `backend/.venv`(3.12, 의존성 OK) · `.env` 전 키 **라이브 스모크 Green** · Supabase(Google·Anonymous·pgvector) 활성 · Figma MCP 연결 · GitHub repo/Projects.
 - [x] **Phase 0 — Walking Skeleton** (branch `phase0-walking-skeleton`): 프론트(:5500)→백(:8000)→프론트 관통 로컬 검증 Green. `GET /health`·`POST /api/recommend` 스텁(계약 고정)·CORS·공통 봉투(Envelope)·trace·ruff/black 통과. ⚠️ 조기 배포(Render/Vercel)는 **미완** — Phase 1 중 수행.
-- [ ] **Phase 1 — A 즉시 추천** ← **다음 시작 지점**
+- [ ] **Phase 1 — A 즉시 추천** (branch `phase1-a-immediate-recommend`) ← **진행 중**
+  - [x] A1 입력 구조화(LF-02) — 필수입력 스키마·가용시간 경계검증(domain+8 pytest)·입력오류 분리(ValidationFailure 422)·LF-02 모바일 입력 UI·결과 뷰 라우팅·모바일 디바이스 프레임(a-bly). 자연어 note는 캡처까지(구조화는 A5 LLM 투입 시).
+  - [ ] A2 조회+정규화 ← **다음 슬라이스**  · A3 판정+3상태 · A4 지도/이동 · A5 Reason+LLM · A6 선택상태
 - [ ] Phase 2 — 로그인·개인화
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
@@ -92,13 +94,14 @@
 > 참조: `PRD.md §4.2·§5·§6·§7·§10`, `DESIGN.md §3·§4(01 섹션)`, `reason-copy-dictionary`.
 
 ### A1 — 입력 구조화 (LF-02)
-- [ ] 요청 스키마: 시작위치·시작시각·종료시각(필수) + 자연어 선택조건 1영역 (FR-A1, FR-A4)
-- [ ] 가용시간 경계 검증: 최소 30분·시작일 24:00까지, 종료 자동기본값/자동연장 없음, 시작≥종료 재선택 (FR-A2)
-- [ ] 입력 오류 처리: 미입력/역전/30분미만/경계초과 = 추천 전 오류·제한 (FR-A3)
-- [ ] 현재 위치·시각은 변경 가능한 기본값. 위치 권한 거부 시 직접 입력 (FR-A6)
-- [ ] 자연어 선택조건 → 구조화 → 모호 Hard 값만 확인 (말 안 한 조건 추정 금지)
-- [ ] 프론트: LF-02 입력 UI(Field Row/Conditions·Start/Done by 시트/Example·Parsed Chip, DESIGN §3.3)
-- **Done when:** 유효 입력이 Request Context로 구조화되고, 오류/제한이 추천 전에 걸러진다. 신뢰 게이트 통과.
+- [x] 요청 스키마: 시작위치(StartLocation)·시작시각·종료시각(필수) + 자연어 note 1영역 (`models/recommend.py`)
+- [x] 가용시간 경계 검증: 최소 30분·시작일 24:00까지, 시작≥종료 재선택 (`domain/input_validation.py` + 8 pytest). 종료 자동기본값/자동연장 없음(프론트)
+- [x] 입력 오류 처리: 미입력(422)/역전/30분미만/경계초과 = 추천 전 오류·제한, ValidationFailure로 시스템예외·0건과 분리 (FR-A3·C7)
+- [x] 현재 위치·시각은 변경 가능한 기본값. 위치 권한 거부 시 직접 입력(📍 Use current → 거부 시 수동) (FR-A6)
+- [~] 자연어 선택조건 → **구조화는 A5(LLM 투입) 시**. A1은 note 원문 캡처 + example chip까지 (말 안 한 조건 추정 금지 유지)
+- [x] 프론트: LF-02 입력 UI(Section header/tag·Quick Select 5·네이티브 Start/Done by·Example Chip). 커스텀 시트/Parsed Chip은 후속
+- [x] 횡단: 모바일 디바이스 프레임(a-bly, 데스크톱 중앙 390 고정) · 입력↔결과 뷰 라우팅(`app.js`)
+- **Done when:** ✅ 유효 입력이 Request Context로 구조화되고, 오류/제한이 추천 전에 걸러진다. 로컬 라이브+헤드리스 스크린샷 검증 Green.
 
 ### A2 — 조회 + 데이터 정규화 (LLM 아직 없음)
 - [ ] `sources/tourapi.py` — 타임아웃·재시도·단기캐시 내장 (TourAPI EngService2)

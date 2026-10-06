@@ -16,7 +16,10 @@ class KonnectError(Exception):
     user_message: str = "Something went wrong. Please try again."
 
     def __init__(self, message: str | None = None):
-        super().__init__(message or self.user_message)
+        # 인스턴스별 메시지를 user_message 로 보존(핸들러가 이 값을 사용).
+        if message:
+            self.user_message = message
+        super().__init__(self.user_message)
 
 
 class SystemError(KonnectError):

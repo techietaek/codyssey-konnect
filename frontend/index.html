@@ -1,16 +1,8 @@
-<div class="app">
-  <header class="app-header">
-    <h1>KONNECT</h1>
-    <p>Culture experiences you can actually do in Seoul right now.</p>
-  </header>
-
-  <!-- AI 관여 고지 (NFR-05 · DESIGN §1) — 제거 금지 -->
-  <div class="ai-notice">AI-assisted results · unconfirmed details marked</div>
-
-  <section id="results" class="results" aria-live="polite"></section>
-  <p id="status-line" class="status-line"></p>
+<!-- 모바일 전용 디스플레이: 데스크톱에서도 중앙 디바이스 프레임으로 고정(a-bly 참고) -->
+<div class="device-frame">
+  <main id="view" class="app" aria-live="polite"><!-- 뷰는 app.js가 주입 --></main>
 </div>
 
-<link rel="stylesheet" href="css/tokens.css" />
-<link rel="stylesheet" href="css/app.css" />
-<script type="module" src="js/pages/home.js"></script>
+<link rel="stylesheet" href="css/tokens.css?v=1" />
+<link rel="stylesheet" href="css/app.css?v=2" />
+<script type="module" src="js/app.js"></script>
