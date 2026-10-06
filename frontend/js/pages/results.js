@@ -44,7 +44,7 @@ export function renderResultsView({ request, env, onEdit }) {
     // 0건은 몰래 완화하지 않고 명시적으로 안내 (FR-A3 · §5.5)
     list.append(el("p", "empty-msg", "No experiences fit these conditions. Try adjusting your time or start point."));
   } else {
-    for (const c of data.candidates) list.append(renderResultCard(c));
+    for (const c of data.candidates) list.append(renderResultCard(c, data.origin));
   }
   root.append(list);
 

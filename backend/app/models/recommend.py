@@ -76,6 +76,8 @@ class MovementInfo(BaseModel):
     distance_m: int | None = None
     display: str  # 예: "≈12 min walk", "Route unavailable"
     provenance: Provenance
+    # 실제 도보 경로선 [[lat,lng],...]. 없으면 지도는 핀+외부지도로 폴백(임의 직선 금지).
+    path: list[list[float]] | None = None
 
 
 class UnconfirmedFlag(BaseModel):
@@ -101,6 +103,8 @@ class Candidate(BaseModel):
     flags: list[UnconfirmedFlag] = Field(default_factory=list)
     image_url: str | None = None  # 공식 소스만. 없다고 제외하지 않는다.
     official_links: list[OfficialLink] = Field(default_factory=list)
+    lat: float | None = None  # 지도 핀용 좌표
+    lng: float | None = None
 
 
 class StartLocation(BaseModel):
@@ -126,5 +130,7 @@ class RecommendRequest(BaseModel):
 
 class RecommendData(BaseModel):
     candidates: list[Candidate] = Field(default_factory=list, max_length=4)
+    # 지도 출발점(해석된 좌표 포함). 지도 Start 핀·경로 기점.
+    origin: StartLocation | None = None
     # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
     ai_notice: str = "AI-assisted results · unconfirmed details marked"

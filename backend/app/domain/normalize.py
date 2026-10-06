@@ -153,8 +153,10 @@ def normalize_candidate(
     item: dict[str, Any], intro: dict[str, Any], common: dict[str, Any]
 ) -> Candidate | None:
     """list item + 상세(intro/common) → Candidate. 이상치는 None(drop)."""
-    if _valid_coords(item) is None:
+    coords = _valid_coords(item)
+    if coords is None:
         return None
+    lat, lng = coords
     title = _clean_title(item.get("title"))
     if not title:
         return None
@@ -188,4 +190,6 @@ def normalize_candidate(
         flags=flags,
         image_url=image,
         official_links=links,
+        lat=lat,
+        lng=lng,
     )

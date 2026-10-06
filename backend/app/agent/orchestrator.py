@@ -17,8 +17,14 @@ from app.domain.locations import resolve_start_coords
 from app.domain.normalize import normalize_candidate
 from app.domain.status import resolve_status
 from app.domain.timing import judge_timing
-from app.models.recommend import Candidate
-from app.sources import tourapi
+from app.models.recommend import (
+    Candidate,
+    MovementInfo,
+    Provenance,
+    RecommendData,
+    StartLocation,
+)
+from app.sources import tmap, tourapi
 
 # 문화경험 콘텐츠 타입(EngService2): 관광지·문화시설·축제/공연/행사.
 # (식당·쇼핑·숙박 등은 제외 — PRD §6.4)
@@ -88,7 +94,27 @@ async def _enrich(item: dict, ctx: RequestContext) -> tuple[Candidate | None, st
     return cand, reason
 
 
-async def recommend_a(ctx: RequestContext, trace: Trace) -> list[Candidate]:
+async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
+    """후보에 도보 이동정보(Tmap) 부착. 실패/좌표없음 → Route unavailable(직선 위조 금지)."""
+    route = None
+    if cand.lat is not None and cand.lng is not None:
+        route = await tmap.pedestrian_route(olat, olng, cand.lat, cand.lng)
+    if route is None:
+        cand.movement = MovementInfo(
+            display="Route unavailable", provenance=Provenance.UNCONFIRMED
+        )
+        return
+    wm = route["walk_minutes"]
+    cand.movement = MovementInfo(
+        walk_minutes=wm,
+        distance_m=route["distance_m"],
+        display=f"≈{wm} min walk",
+        provenance=Provenance.ESTIMATE,  # 예상값 — 실제 ETA 보장 아님
+        path=route["path"] or None,
+    )
+
+
+async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
     lat, lng = resolve_start_coords(ctx.start_location)
     trace.step(
         "structure",
@@ -118,5 +144,12 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> list[Candidate]:
         fits=fits,
         check_needed=len(candidates) - fits,
     )
+
+    # [route] 후보별 도보 이동정보(Tmap) 병렬 부착
+    await asyncio.gather(*(_attach_movement(c, lat, lng) for c in candidates))
+    with_path = sum(1 for c in candidates if c.movement and c.movement.path)
+    trace.step("route", with_path=with_path, total=len(candidates))
+
     trace.step("compose", kept=len(candidates))
-    return candidates
+    origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
+    return RecommendData(candidates=candidates, origin=origin)

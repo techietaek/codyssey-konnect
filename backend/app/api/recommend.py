@@ -35,8 +35,7 @@ async def recommend(req: RecommendRequest) -> Envelope[RecommendData]:
         note=req.note,
     )
 
-    # [fetch → compose] 공식 API 조회·정규화. 시스템 예외(ExternalSourceError)는
-    # main.py 핸들러가 503으로 변환. 0건은 정상 결과(빈 candidates)로 내려보낸다.
-    candidates = await recommend_a(ctx, trace)
-    data = RecommendData(candidates=candidates)
+    # [fetch → judge → route] 조회·정규화·판정·도보 이동. 시스템 예외
+    # (ExternalSourceError)는 main.py 핸들러가 503으로 변환. 0건은 정상(빈 candidates).
+    data = await recommend_a(ctx, trace)
     return Envelope.success(data=data, trace_id=trace.trace_id)
