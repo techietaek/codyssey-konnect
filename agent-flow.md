@@ -1,0 +1,247 @@
+# agent-flow.md — KONNECT 개발 진행 순서 · 체크리스트
+
+> **문서 역할:** AI 에이전트(및 팀)가 KONNECT를 **어떤 순서로, 무엇을 확인하며** 개발하는지 정의하는 **오케스트레이션·체크리스트 문서**. 세션/에이전트가 바뀌어도 이 파일만 보면 "지금 어디까지 됐고, 다음에 뭘, 어떻게 검증하며" 이어갈 수 있다.
+> **사용법:** 작업하며 `- [ ]` → `- [x]`로 **체크박스를 갱신**한다. 각 슬라이스는 "완료 기준(Done when)"을 모두 만족해야 `[x]`.
+> **정본 관계:** 기능 정의는 `PRD.md`(FR-*·§), 디자인은 `DESIGN.md`(LF·컴포넌트), 규칙·신뢰 불변식은 `CLAUDE.md`. 이 문서는 **그 문서들을 섹션 ID로 가리키며 순서·검증만** 관리한다(중복 서술 최소화).
+> **최종 수정:** 2026-10-06 · 담당 Tech(이용택)
+
+---
+
+## 0. 오리엔테이션 (콜드 스타트 에이전트가 먼저 볼 것)
+
+- **제품 한 줄:** 서울 자유여행 외국인 FIT에게 현재 조건(위치·시간·운영조건)에서 **실제 가능한 문화경험**을 좁혀주는 모바일-퍼스트 웹. 핵심은 다단계 AI Agent + RAG + Long-term Memory.
+- **제1 원칙(절대):** **미확인 ≠ 무료 / 예약 불필요 / 이용 가능 보장.** (CLAUDE.md §6 신뢰 불변식 — 모든 슬라이스의 통과 게이트)
+- **읽기 순서(통독 금지, 섹션만):** 이 파일 → 해당 슬라이스가 가리키는 `PRD`/`DESIGN` 섹션만. 문서 라우팅은 `CLAUDE.md §0`.
+- **스택(확정):** Vanilla HTML/CSS/JS · Python 3.12/FastAPI(`backend/.venv`) · OpenAI(`gpt-4o-mini`)+LangChain · Supabase(Auth·Postgres·pgvector) · Naver Map+Tmap+Google Maps 딥링크 · Google Places(보조). 상세 `CLAUDE.md §2`.
+- **역할:** Product=기획, UX/UI=디자인(Figma 정본), **Tech=구현**. 입력/출력·상태·신뢰·MVP 범위·완료기준을 바꿔야 할 때만 Product 재조율(`PRD.md §11`).
+
+### 현재 상태 (Current Status) — ⚠️ 작업 시작·종료 때 갱신할 것
+- [x] **사전 준비 완료**: 문서(PRD/CLAUDE/DESIGN/tokens.css) · `backend/.venv`(3.12, 의존성 OK) · `.env` 전 키 **라이브 스모크 Green** · Supabase(Google·Anonymous·pgvector) 활성 · Figma MCP 연결 · GitHub repo/Projects.
+- [ ] **Phase 0 — Walking Skeleton** ← **다음 시작 지점**
+- [ ] Phase 1 — A 즉시 추천
+- [ ] Phase 2 — 로그인·개인화
+- [ ] Phase 3 — RAG · B 문화루트
+- [ ] Phase 4 — 배포·실사용자 검증·발표
+
+---
+
+## 1. 공통 작업 규칙 (모든 슬라이스에 적용)
+
+### 1.1 전략: 수직 슬라이스(vertical slice)
+레이어별(백 전부→프론트 전부) 금지. **기능 하나를 입력→백엔드→판정→API→프론트 렌더까지 끝까지 관통**하고 다음으로. 이유: AI 에이전트 코딩은 "그럴듯하지만 틀린" 코드 위험 → **매 슬라이스 실제 실행 검증**으로 조기 차단.
+
+### 1.2 슬라이스 미시 루프 (매번 반복)
+```
+① 범위    해당 PRD FR + DESIGN 컴포넌트 "섹션만" 읽기 (CLAUDE §0 라우팅)
+② 계약    API 요청/응답 Pydantic 모델 먼저 확정 (contract-first) → 백·프론트 공유
+③ 계획    비자명하면 plan 공유·합의
+④ 구현    작은 diff 하나. CLAUDE 컨벤션 준수
+⑤ 검증    타입체크로 끝내지 말고 "실제로 돌려" 확인 (/verify, /run). 데이터 경로 스모크
+⑥ 신뢰게이트  CLAUDE §6 체크리스트 통과 확인
+⑦ 커밋    브랜치→의미 단위 커밋(요청 시 PR). Projects 보드·이 파일 체크박스 갱신
+⑧ 다음 슬라이스
+```
+
+### 1.3 모든 슬라이스 공통 신뢰 게이트 (⑥) — CLAUDE §6 요약
+- [ ] 미확인(빈값/모호)을 `free`·`예약 불필요`·`이용 가능`으로 매핑하지 않음
+- [ ] 가격·운영시간·예약·좌표를 **LLM 출력에서 받지 않음**(공식 데이터만)
+- [ ] 체류/이동시간을 근거 없이 임의 숫자(60/90/20분)로 채우지 않음(계획값=근거+상태표기)
+- [ ] Hard 충돌 후보가 정상 추천에 섞이지 않음
+- [ ] 강제 채움 없음(A 최대 3~4 / B 2~3, 3개 강제 금지)
+- [ ] 개인화가 사실/필수 조건을 덮어쓰지 않음(Request > Trip > Preference)
+- [ ] 선택 ≠ 방문(GPS 자동 방문판정·턴바이턴 없음)
+- [ ] AI 관여 고지 · 확인/미확인 구분 UI 유지
+
+### 1.4 횡단 습관 (처음부터)
+- **`domain/` 단위 테스트를 일찍** — 판정 로직은 결정론적 → 에이전트의 객관적 검증 신호 + PoC 증빙(NFR-08).
+- **trace 로깅을 처음부터** — Agent 다단계 동작(조회/판정/분기)을 trace로 남김 → PoC 증빙 자동 축적.
+- **작게·자주 검증** — 큰 diff 한 번에 생성 금지.
+- 사용자-facing 문자열 **영어 우선**, 내부 용어 노출 금지. 색·토큰은 `frontend/css/tokens.css`의 `var(--...)`만.
+
+---
+
+## 2. Phase 0 — Walking Skeleton (뼈대 + 1줄 관통 + 조기 배포)
+> 목적: "빈 폴더 더미"가 아니라 **프론트→백→프론트가 실제로 연결되는 최소 실행본**을 만들고, **배포 배선까지 Day 1에 검증**(과제 필수 배포 리스크 선제거).
+> 참조: `CLAUDE.md §3`(디렉터리), `§4`(아키텍처), `DESIGN.md §2`(tokens).
+
+**백엔드 스캐폴딩**
+- [ ] `backend/app/main.py` — FastAPI 앱 + `GET /health` 200 응답
+- [ ] `backend/app/config.py` — `pydantic-settings`로 `.env` 로딩(키 존재 검증, 값 미출력)
+- [ ] `backend/app/core/` — 공통 예외·로깅/trace 베이스 (시스템 예외 vs 정상 결과 구분, FR-C7)
+- [ ] `backend/app/models/` — 공통 응답 봉투(Envelope) Pydantic 스키마
+- [ ] `POST /api/recommend` — **하드코딩 후보 1개** 반환(스텁, 계약만 고정)
+- [ ] CORS 설정(`CORS_ALLOW_ORIGINS`), `uvicorn app.main:app --reload`로 부팅 확인
+
+**프론트 스캐폴딩**
+- [ ] `frontend/index.html` — `css/tokens.css` 연결 + 기본 레이아웃(390 기준)
+- [ ] `frontend/js/api.js` — 백엔드 호출 래퍼(`API_BASE_URL`)
+- [ ] `frontend/js/components/` — `result-card.js`(DESIGN §3.1 최소형)로 스텁 응답 1개 렌더
+- [ ] `frontend/js/state.js` — 클라이언트 상태 컨테이너 骨格
+- [ ] `python -m http.server 5500`로 로컬 구동 → 카드 1개 표시 확인
+
+**조기 배포(권장)**
+- [ ] 백엔드 Render / 프론트 Vercel(or Supabase 호스팅)에 스켈레톤 배포 → 외부 URL에서 `/health`·카드 확인
+- [ ] 배포 Secret(.env 값) 주입 경로 확인(저장소 커밋 아님)
+
+**Done when:** 로컬·배포 양쪽에서 프론트가 백엔드 `/api/recommend` 스텁을 호출해 Result Card 1개를 렌더한다.
+
+---
+
+## 3. Phase 1 — A 즉시 추천 (LF-02·03) · **비로그인 경로 우선**
+> 우선순위: PRD "A 우선 고도화". 각 슬라이스는 백+프론트 함께. 로그인 없이 첫 추천까지(FR-L1).
+> 참조: `PRD.md §4.2·§5·§6·§7·§10`, `DESIGN.md §3·§4(01 섹션)`, `reason-copy-dictionary`.
+
+### A1 — 입력 구조화 (LF-02)
+- [ ] 요청 스키마: 시작위치·시작시각·종료시각(필수) + 자연어 선택조건 1영역 (FR-A1, FR-A4)
+- [ ] 가용시간 경계 검증: 최소 30분·시작일 24:00까지, 종료 자동기본값/자동연장 없음, 시작≥종료 재선택 (FR-A2)
+- [ ] 입력 오류 처리: 미입력/역전/30분미만/경계초과 = 추천 전 오류·제한 (FR-A3)
+- [ ] 현재 위치·시각은 변경 가능한 기본값. 위치 권한 거부 시 직접 입력 (FR-A6)
+- [ ] 자연어 선택조건 → 구조화 → 모호 Hard 값만 확인 (말 안 한 조건 추정 금지)
+- [ ] 프론트: LF-02 입력 UI(Field Row/Conditions·Start/Done by 시트/Example·Parsed Chip, DESIGN §3.3)
+- **Done when:** 유효 입력이 Request Context로 구조화되고, 오류/제한이 추천 전에 걸러진다. 신뢰 게이트 통과.
+
+### A2 — 조회 + 데이터 정규화 (LLM 아직 없음)
+- [ ] `sources/tourapi.py` — 타임아웃·재시도·단기캐시 내장 (TourAPI EngService2)
+- [ ] `domain/` 정규화 단일 지점: 가격 `free/paid/unknown/partial-or-ambiguous`, 예약·참여(확인된 것만), 시간값 `실제/예상/계획/미확인` (PRD §6.2)
+- [ ] 좌표 이상치 range 검증·drop, 공식 URL 보존
+- [ ] `TourAPI + 구조화 공식 API`만으로 후보 생성 성립 (한 소스 실패가 전체 실패로 번지지 않음)
+- **Done when:** 입력 조건으로 후보 리스트(정규화된 상태 포함)가 반환된다. 빈값→긍정 매핑 없음(게이트).
+
+### A3 — 판정 + 결과 상태 3종
+- [ ] `domain/constraints·timing·pricing·status.py` — 운영/휴무/입장마감/시간충돌/예산 판정 (PRD §5.3)
+- [ ] 내부 판정 순서 → 사용자-facing 3상태: 조건 충족 / 추가 확인 필요 / 조건 완화 대안 (FR-C3, §5.4)
+- [ ] 미확인 분리: 신뢰성 판단 불가 시 추천/자동 제외, 추정 금지 (PRD §6.2·§5.2)
+- [ ] 기상청·AirKorea Context 반영 + 공식 위험특보 시 Outdoor 정상추천 제외·실내 우선 (PRD §6.6)
+- [ ] `domain/` 단위 테스트(휴무·마감·시간충돌·가격 미확인·예산 경계)
+- **Done when:** 각 후보가 3상태 중 하나 + 미확인 flag로 분류된다. Hard 충돌은 정상 추천에서 빠진다(게이트).
+
+### A4 — 후보 구성 + 지도/이동 (LF-03)
+- [ ] 최대 3~4개 소수 후보, 강제 채움 금지, 0건은 명시적 안내(몰래 완화 금지) (FR-A7, §5.5)
+- [ ] `sources/tmap.py` — 도보 거리·시간(백엔드 프록시) + provenance
+- [ ] 지도 Fallback 3단계: 경로선+시간/거리 → 핀+시간/거리+외부지도 → 핀+외부지도(Route unavailable) (PRD §7, DESIGN §3.4)
+- [ ] 임의 직선 금지, 경로선·거리·시간 각각 독립 검증
+- [ ] 프론트: Naver Map 렌더 + Map Pin(선택/비선택·유형아이콘·번호) + Result Card(Meta/provenance) (DESIGN §3.1·§3.4)
+- [ ] Google Maps 딥링크(외부 상세 길찾기)
+- **Done when:** 지도 위 핀 + 카드로 소수 후보가 신뢰수준과 함께 보인다. 직선 경로 위조 없음(게이트).
+
+### A5 — 설명(Reason) + AI 고지 (LLM 첫 투입)
+- [ ] LLM은 **확인된 근거를 읽기 쉽게 설명만** (새 사실·가격·가능성 생성 금지) (PRD §5.2 R-09)
+- [ ] Reason 0~2개(Primary 1 + Secondary 최대 1), Reason Copy Dictionary v1.0 문구만 (FR-C4)
+- [ ] 0개면 이유 영역 생략(중립 안내는 Reason 아님), 내부 Fit명 노출 금지
+- [ ] Fact/Reason/미확인 시각 분리 + `AI-assisted results · unconfirmed details marked` 고지 (DESIGN §5)
+- [ ] trace: 어떤 Context+Evidence+Match Rule로 Reason을 냈는지 기록
+- **Done when:** 각 후보에 근거 있는 Reason 0~2개가 붙고, Fact와 분리 렌더된다. 근거 없는 Fit 없음(게이트).
+
+### A6 — 선택 상태 (LF-09, 비로그인)
+- [ ] `Select experience`만 선택 확정(핀 탭·스와이프는 포커스 변경) (FR-A8)
+- [ ] LF-03에 남아 완료 피드백(Toast), 자동 이동·추가 저장 버튼 없음
+- [ ] 현재 선택 상태 유지·재접근(LF-09 A variant), 선택≠방문 (FR-C6)
+- [ ] 비로그인 임시 보존(로컬/익명) — Phase 2에서 계정 연결
+- **Done when:** 선택이 확정·유지되고 홈에서 다시 볼 수 있다. GPS 방문판정 없음(게이트).
+
+**Phase 1 완료 기준(PRD §10 A):** Start Anchor·가용시간 반영, Hard 충돌 미표시, 상태·이유·실행조건·미확인 구분, LF-03에서 Select로 확정·완료 피드백.
+
+---
+
+## 4. Phase 2 — 로그인 · 개인화
+> 참조: `PRD.md §4.4`, `product/06-ai-tech-boundary.md`(P-01~P-09), Supabase(이미 Google·Anonymous·pgvector ON).
+
+### L1 — 로그인 게이트 + 연속성/마이그레이션
+- [ ] Supabase Anonymous Sign-in으로 익명 user_id 선발급 → 요청조건·선택 저장
+- [ ] 비회원 첫 추천 결과까지 1회 → 두 번째/재추천 시 Google 로그인 유도 (FR-L1)
+- [ ] Google 로그인 시 **identity linking**으로 동일 user_id 승격(데이터 자동 보존) (FR-L2)
+- [ ] `Not now`는 기존 결과·탐색 유지, 로그인 후 현재 조건·결과·선택 연속
+- [ ] 백엔드 JWT 검증 = **JWKS**(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), 공유 secret 미사용
+- [ ] DB RLS: 각 user(익명 포함)는 `auth.uid()` 일치 데이터만 접근
+- [ ] 임시 상태를 Trip·장기 Preference로 **자동 승격 금지** (FR-L5)
+- [ ] 프론트: L-1 로그인 시트(Continue with Google / Not now · Kept context) (DESIGN 01 섹션 L-1~L-3)
+- **Done when:** 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름이 이어지고 데이터가 계정으로 보존된다.
+
+### L2 — P-09 선호 온보딩
+- [ ] Google 최초 가입 1회·1화면: 관심사 6개 복수 + `□ Prefer shorter walks`(단일·미선택 허용), 모두 Skip 가능 (FR-L3)
+- [ ] 걷기 선호 = Soft ranking only, 숫자 상한/분·km 변환 금지, 저장 선호만으로 M01/M02 Reason 금지 (FR-L4)
+- [ ] 기존 회원 반복 노출 금지 (DESIGN P9-1)
+- **Done when:** 신규 가입자만 1회 노출, Skip해도 A/B 제한 없음.
+
+### L3 — My Page
+- [ ] 확인된 선호 확인·수정·초기화(이후 추천부터 적용) / 현재 여행·최근 선택 진입 / 계정 정보 (FR-L6)
+- [ ] 전체 이력·통계·Stamp는 MVP 제외, 추가 입력 Skip 가능
+- [ ] 프론트: MP-1~MP-3 (DESIGN 03 섹션)
+- **Done when:** 저장된 선호를 사용자가 관리할 수 있고 변경이 이후 추천에 반영된다.
+
+---
+
+## 5. Phase 3 — RAG · B 문화루트
+
+### R1 — RAG (FAQ·여행정보·콘텐츠 Q&A)
+> 참조: `PRD.md §6.5·FR-C8`.
+- [ ] 지식 문서 청크 → OpenAI Embeddings → Supabase **pgvector** 저장 (`backend/app/rag/`, `vecs`)
+- [ ] 질의 유사도 검색 → LLM이 **검색 근거 범위 안에서만** 답변
+- [ ] 사실 데이터(가격·운영·예약)는 RAG가 아니라 공식 API 정본 — RAG는 참고지식 한정
+- [ ] 근거 없으면 생성 금지 → `추가 확인 필요`·공식 경로. 범위 밖 질문 안내
+- [ ] 별도 챗봇 화면 분리 금지 — A·B 자연어 대화 흐름에 통합
+- **Done when:** FAQ/콘텐츠 질문에 근거 인용 답변, 근거 없으면 생성 안 함(게이트).
+
+### B1 — B 입력 (LF-04, Conversation-first)
+> 참조: `PRD.md §4.3`, `DESIGN.md 02 섹션`.
+- [ ] 필수 4값(날짜·출발위치·시작시각·종료경계), 자연어 요청 주경로 → 구조화 → 누락·모호 필수값만 질문 (FR-B1)
+- [ ] Guided Chat S1 Start / S2 Clarification / S3 Ready / V1 Direct edit (FR-B2)
+- [ ] 제공값 반복질문 금지, 묶음 질문, 모호·충돌값 추정 금지, 미래날짜 GPS 자동 시작점 금지 (FR-B3)
+- [ ] Starting point Quick Select 5개는 보조(지역모드/2km Hard Filter 아님)
+- [ ] `Show culture route`는 필수 4값 확인 후 활성
+- **Done when:** 대화로 4값이 확정되고 compact editable summary로 수정 가능.
+
+### B2 — 루트 구성 (LF-05)
+- [ ] 하루 1코스 2~3개 루트 1개, 2·3개 동등, 3개 강제 금지 (FR-B4, B-T06)
+- [ ] 실행 가능성·필수조건 먼저 → 관심사·이동 균형 조합
+- [ ] 고정형 실행시간 미확인 시 자동 루트 제외, 자율형 계획 체류시간은 근거 있을 때만(`예정`) (B-T01)
+- [ ] 방문 순서·시간·확인 비용·예약/참여·미확인 구분, 루트 전체 vs 개별 장소 이유 구분 (FR-B5)
+- [ ] 예산: 필수비용 미확인 포함 시 전체 `예산 충족` 금지 → `총비용 추가 확인 필요`
+- **Done when:** 신뢰 가능한 2~3개 루트가 순서·시간·비용·미확인 구분으로 구성. 조합 불가 시 개별/실패 전환.
+
+### B3 — 루트 지도·이동 (LF-08)
+- [ ] 시작점→장소1→장소2[→장소3] 구간별 이동·시간·거리, 지도 번호↔장소명 대응 (FR-B6, B-T02/B-T03)
+- [ ] 루트 전체 이동부담 vs 전체 소요시간 구분, 일부 구간 미확인 명시
+- [ ] 경로 Fallback 3단계 동일 적용, 임의 직선 금지
+- [ ] 프론트: Route Stop·Walk Segment (DESIGN §3.6)
+- **Done when:** 전체 동선이 신뢰수준과 함께 보이고 `Go with this route`로 확정.
+
+### B4 — 수정·재구성·실패 Fallback
+- [ ] 조건 수정/장소 제외 시 유효 입력 유지, 제외 장소 재삽입 금지, 영향 실행가능성 재검증 (FR-B7, B-T05)
+- [ ] 재구성 실패 시 직전 조건/결과 복귀 최소 경로, 이전 루트를 새 조건 정상결과로 표시 금지
+- [ ] 가용시간 부족 원인 구분(`시간 조건 수정`/`가능한 개별 경험 보기`)
+- [ ] 과거 Reason을 새 조건 적합성으로 재사용 금지
+- **Done when:** 수정/제외 후 전체 재판단, 실패 시 안전 복귀. LF-09 기존 선택과 분리.
+
+### B5 — 루트명·계획시간·현재 선택 (LF-09 B)
+- [ ] 확인 지역/주요장소로 짧은 루트명(근거 없는 테마명 금지, 불가 시 `Culture route`) (FR-B8)
+- [ ] 계획 방문시간 `예정` 표기, 공식 고정회차와 구분
+- **Done when:** B 선택이 LF-09에서 식별·재접근 가능.
+
+### (선택) LF-10 — 방문 후 최소 피드백
+- [ ] Product 최종 MVP 포함 결정 시에만. Push/GPS 없음, 재방문 시 가벼운 Trigger. Analytics 분리(선호 자동 승격 금지)
+
+---
+
+## 6. 횡단 관심사 (Phase 전반에서 지속)
+
+- [ ] **테스트:** `domain/` 결정론 로직 단위 테스트 유지(판정·정규화·경계). `pytest` 통과를 커밋 전 확인.
+- [ ] **PoC 증빙(NFR-08):** 다단계 Agent(조회→판정→분기→구성→설명)의 trace를 재현 가능하게 축적.
+- [ ] **배포 지속:** 슬라이스마다 배포 갱신(Render/Vercel), 외부 URL 상시 동작.
+- [ ] **접근성·i18n:** 영어 우선, 긴 Reason 줄바꿈, 터치타깃, 내부용어 비노출 (DESIGN §6).
+- [ ] **Naver Map:** 프론트 지도 착수 시 NCP 콘솔 Web 서비스 URL 등록 + `ncpKeyId` 확인.
+- [ ] **보안:** 시크릿은 `.env`/배포 Secret만, 커밋 금지. Secret 키는 백엔드 전용.
+- [ ] **실사용자 검증(과제 필수):** 발표 전 최소 5명 테스트·피드백 반영 문서화.
+
+---
+
+## 7. 완료 기준 매핑 (PRD §10) — 최종 점검
+- [ ] A 정상/Fallback 완료 기준 충족 (PRD §10 A)
+- [ ] B 정상/Fallback 완료 기준 충족 (PRD §10 B)
+- [ ] 과제 요건: 생성형 AI/Agent 핵심 + 기술요소 3개(Agent·RAG·Memory) + 배포 + 실사용자 5명 + GitHub 기록 + AI 윤리 고지 (PRD §1)
+
+---
+
+## 8. 구현 단계 Tech 후속 (막히면 Product 재조율 전에 여기부터)
+- B-T01 자율형 체류시간 산정 근거 / B-T02 구간 충돌 판정 / B-T03 다구간 도보 / B-T04 대화 조건수정 / B-T05 재구성·복구 / B-T06 조합 검증 (PRD §12, `research/tech-validation/..._1004_01.md`)
+- **Evidence-based Reopen 원칙:** 정상 루트의 실행가능성 판단 자체가 성립 불가한 제약이 실제로 확인될 때만 근거와 함께 Product에 알린다. 화면/기술 세부 차이만으로 Freeze를 다시 열지 않는다.
