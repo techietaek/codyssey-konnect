@@ -15,12 +15,13 @@ function el(tag, className, text) {
   return node;
 }
 
-// Google Maps 도보 길찾기 딥링크 (외부 상세 길찾기, DESIGN §3.4)
+// Google Maps 길찾기 딥링크 (외부 상세 길찾기, DESIGN §3.4).
+// 대중교통 모드 — 구글맵은 한국에서 도보 경로를 제공하지 않는다(도보는 내부 Tmap).
 function directionsUrl(origin, c) {
   if (!origin?.lat || !origin?.lng || c.lat == null || c.lng == null) return null;
   return (
     "https://www.google.com/maps/dir/?api=1" +
-    `&origin=${origin.lat},${origin.lng}&destination=${c.lat},${c.lng}&travelmode=walking`
+    `&origin=${origin.lat},${origin.lng}&destination=${c.lat},${c.lng}&travelmode=transit`
   );
 }
 
@@ -79,7 +80,7 @@ export function renderResultCard(c, origin) {
   // 외부 지도 길찾기 (경로 provenance와 무관하게 항상 제공 — Fallback의 공통 출구)
   const dir = directionsUrl(origin, c);
   if (dir) {
-    const a = el("a", "official-link", "Directions (external map) ↗");
+    const a = el("a", "official-link", "Google Map ↗");
     a.href = dir;
     a.target = "_blank";
     a.rel = "noopener";
