@@ -28,7 +28,7 @@
   - [~] **데이터 검색 품질 개선** (2026-10-07~) — check_needed 과다(실측 73%) 완화. 원인·솔루션·로드맵은 **`docs/data-quality.md`** 에서 관리. 1~3단계 완료(원인 집계 → `detailInfo2` 연동 → LLM 운영시간 추출): **check 73%→42%, fits 20%→51%**(공식 데이터만, 환각 검증 완료). 4단계(KOPIS/서울문화포털) 대기.
   - [x] A7 상태 UX 보강 (branch `phase1-a-loading-states`, 2026-10-07) — 조회 대기 **로딩 화면**(shimmer 스켈레톤 + 회전 단계문구 + 펄스 sparkle, Cancel=요청 AbortController 취소) · 조회 플로우를 `app.js startRecommend`로 중앙화(로딩→결과/취소복귀/오류) · **0건** 지도 축소(NAVER 로고 노출 방지)+경고 아이콘/텍스트 · **전용 오류 화면**(Couldn't load, Try again/Edit conditions, 조건 유지) · 바텀시트 Cancel 버튼 제거 + **grip 스와이프-다운 닫기**(백드롭/Esc 유지). headless 렌더/드래그 검증 Green.
   - [x] A8 Soft 랭킹 A안 (2026-10-07) — 결과 표시 순서 **fits→alternative→check_needed**, 같은 등급 내 **관심사 선호↑/비선호↓**(`avoid_interests` LLM 추출), 그다음 거리순. 제외 아님(Soft only). 정본 `backend/app/domain/ranking.py`. **B안(본격 Soft 스코어링)은 Phase 2/3 — `docs/soft-ranking.md` §3 참조(Product 결정 3건 포함).**
-- [~] Phase 2 — 로그인·개인화 (branch `phase2-login-personalization`) — **L1 로그인·연속성 완료**(L1a~d, 실로그인 검증). ← **다음: L2 선호 온보딩**(P-09, FR-L3/L4) → L3 My Page. ⚑ **Soft 랭킹 B안**(걷기 선호 + 저장 Preference 반영, `docs/soft-ranking.md` §3)은 L2에서 착수 가능.
+- [~] Phase 2 — 로그인·개인화 (branch `phase2-login-personalization`) — **L1 로그인·연속성 완료**(L1a~d, 실로그인 검증) · **L2 선호 온보딩 코드 완료**(P-09, FR-L3/L4 — 저장·적용만, 마이그레이션 적용+실로그인 검증 대기). ← **다음: L3 My Page**(FR-L6). ⚑ **Soft 랭킹 B안**(걷기 선호 + 저장 Preference 선발/순위 본격화, `docs/soft-ranking.md` §3)은 **Phase 3 B 루트**로 이동(L2는 A안 tiebreak만).
 - [ ] Phase 3 — RAG · B 문화루트 · ⚑ **관심사·이동 균형 랭킹**(FR-B4) = Soft 랭킹 B안 구현부 · ⚑ **전면 Agentic 추천(2b)**: LLM 조건해석→멀티소스 조회→후보 재투입→LLM 최종 선별. 목표 아키텍처·신뢰 경계는 **`docs/agent-architecture.md`** (사실은 끝까지 코드 소유). 개방형 선호 배제/기피(옵션 3 슬라이스)는 그 전에 선행 가능.
 - [ ] Phase 4 — 배포·실사용자 검증·발표
 
@@ -177,11 +177,16 @@
   - 로컬 로그인은 **일반 브라우저 탭**에서(임베디드 웹뷰/자동화 브라우저는 Google이 `disallowed_useragent`로 차단).
 - **Done when:** ✅ 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름 연속·데이터 계정 보존.
 
-### L2 — P-09 선호 온보딩
-- [ ] Google 최초 가입 1회·1화면: 관심사 6개 복수 + `□ Prefer shorter walks`(단일·미선택 허용), 모두 Skip 가능 (FR-L3)
-- [ ] 걷기 선호 = Soft ranking only, 숫자 상한/분·km 변환 금지, 저장 선호만으로 M01/M02 Reason 금지 (FR-L4)
-- [ ] 기존 회원 반복 노출 금지 (DESIGN P9-1)
-- **Done when:** 신규 가입자만 1회 노출, Skip해도 A/B 제한 없음.
+### L2 — P-09 선호 온보딩 ✅ 완료(2026-10-07, 실 Google 로그인 end-to-end 검증 Green)
+> **스코프 결정(Product/Tech):** 저장·적용만. 저장 선호는 기존 **A안 tiebreak**(같은 등급 내 관심사↑)에만 반영, 걷기 선호는 저장·trace flag까지(순위 미반영). **Soft 랭킹 B안**(선발/순위 본격화 + 걷기 반영, `docs/soft-ranking.md §3` Product 결정 3건)은 **Phase 3 B 루트와 묶어** 보류.
+> **백엔드:** `db/migrations/0002_user_preferences.sql`(RLS·`onboarded_at` 마커) · `models/preferences.py` · `db/preferences.py` · `api/preferences.py`(`GET`/`PUT`, JWT 필수) · `domain/preferences_merge.py`(Request>Preference 병합, 6 pytest) · orchestrator/recommend 배선(`saved_interests`·`prefer_shorter_walks` 전달, trace). **118 pytest Green, ruff/black 클린.**
+> **프론트:** `pages/onboarding.js`(P9-1 1화면) · `api.js`(get/putPreferences) · `app.js`(정식 로그인 직후 `needs_onboarding` 1회 노출, Save·Skip 둘 다 PUT→재노출 차단). 헤드리스 렌더/상호작용/payload 검증 Green.
+- [x] Google 최초 가입 1회·1화면: 관심사 6개 복수 + `□ Prefer shorter walks`(단일·미선택 허용), 모두 Skip 가능 (FR-L3)
+- [x] 걷기 선호 = Soft ranking only, 숫자 상한/분·km 변환 금지, 저장 선호만으로 M01/M02 Reason 금지 (FR-L4) — 걷기 선호는 flag·trace까지, 순위 미반영(B안 대기)
+- [x] 기존 회원 반복 노출 금지 (DESIGN P9-1) — `onboarded_at` 존재 시 `needs_onboarding=false`
+- **⚠ 운영 노트(cold-start 필독):** `0002_user_preferences.sql` **적용 완료**(2026-10-07). 신규 환경 재배포 시 Supabase SQL 에디터에 재적용(멱등).
+- **Done when:** ✅ 신규 가입자 1회 노출 + Save→DB 기록(특정 uuid) 실로그인 확인. Skip해도 A/B 제한 없음.
+- **남은 확인(선택):** 기존 회원 재로그인 시 미노출(`onboarded_at` 경로) · 저장 관심사가 추천 **표시 순서**(A안 tiebreak)에 반영되는지 라이브 1회.
 
 ### L3 — My Page
 - [ ] 확인된 선호 확인·수정·초기화(이후 추천부터 적용) / 현재 여행·최근 선택 진입 / 계정 정보 (FR-L6)
