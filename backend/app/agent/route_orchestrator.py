@@ -18,7 +18,7 @@ from app.agent.exclude_classifier import classify_excluded
 from app.agent.note_parser import parse_note
 from app.agent.orchestrator import _enrich, _fetch_pool
 from app.core.trace import Trace
-from app.domain.exclusion import select_with_exclusion
+from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.ranking import type_preference_rank
 from app.domain.route import assemble_route, rollup_budget, route_name
@@ -139,6 +139,15 @@ async def recommend_route(
         *(_enrich(it, ctx, cond, trace) for it in pool[:_ROUTE_POOL])
     )
     valid = [(c, txt) for (c, _, _, txt) in results if c is not None]
+
+    # [filter-places] 명시 장소 제외(B4): 사용자가 이름 댄 스톱 제거(재삽입 금지 — 조건이
+    # 히스토리로 캐리포워드되는 한 매 재구성에서 다시 빠진다). 결정론 title 매칭.
+    place_ids = match_excluded_places(
+        [(c.id, c.title) for c, _ in valid], cond.exclude_places
+    )
+    if place_ids:
+        valid = [v for v in valid if v[0].id not in place_ids]
+        trace.step("exclude_places", places=cond.exclude_places, removed=len(place_ids))
 
     # [filter] 개방형 명시 배제: LLM 의미분류로 매칭 후보 제거(사실은 코드, 0건-세이프).
     exclude_ids: set[str] = set()

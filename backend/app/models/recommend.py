@@ -46,6 +46,13 @@ class ParsedConditions(BaseModel):
         "lowercase phrases like 'museums', 'temples'. Use only for a clear exclusion/refusal, "
         "not a mild dislike. Empty if none stated.",
     )
+    exclude_places: list[str] = Field(
+        default_factory=list,
+        description="Specific named places the user asked to remove or skip (e.g. 'remove "
+        "Tapgol Park', 'not the belfry', 'drop Gyeongbokgung'). Use the place's name as "
+        "written. For a specific place only — a general type goes in exclude_concepts. "
+        "Empty if none named.",
+    )
     free_only: bool = Field(
         default=False,
         description="True ONLY if the user explicitly asked for free experiences only.",

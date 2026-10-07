@@ -12,6 +12,24 @@ LLM(agent/exclude_classifier)은 "어떤 후보가 배제 개념에 매칭되나
 from __future__ import annotations
 
 
+def match_excluded_places(items: list[tuple[str, str]], places: list[str]) -> set[str]:
+    """(id, title) 중 사용자가 명시 제외한 '특정 장소명'과 매칭되는 id (결정론 title 매칭).
+
+    개념 배제(LLM 의미분류)와 달리 명시 장소는 이름이 정해져 있어 코드로 정확·저렴하게 매칭한다
+    (B4 장소 제외). 대소문자 무시, 양방향 부분일치(짧은 질의로 긴 제목 매칭 허용),
+    너무 짧은(<3) 질의는 오매칭 방지로 무시.
+    """
+    norm = [p.strip().lower() for p in places if p and len(p.strip()) >= 3]
+    if not norm:
+        return set()
+    out: set[str] = set()
+    for cid, title in items:
+        t = (title or "").lower()
+        if t and any(p in t or t in p for p in norm):
+            out.add(cid)
+    return out
+
+
 def select_with_exclusion(
     ids: list[str],
     exclude_ids: set[str],

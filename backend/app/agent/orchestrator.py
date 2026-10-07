@@ -17,7 +17,7 @@ from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
-from app.domain.exclusion import select_with_exclusion
+from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import (
     _strip_html,
@@ -221,6 +221,14 @@ async def recommend_a(
     )
     excluded_hard = sum(1 for r in results if r[0] is None)
     valid = [(c, t, b, txt) for (c, t, b, txt) in results if c is not None]
+
+    # [filter-places] 명시 장소 제외(B4, 결정론 title 매칭) — 사용자가 이름 댄 장소 hard 제거.
+    place_ids = match_excluded_places(
+        [(c.id, c.title) for (c, _, _, _) in valid], cond.exclude_places
+    )
+    if place_ids:
+        valid = [v for v in valid if v[0].id not in place_ids]
+        trace.step("exclude_places", places=cond.exclude_places, removed=len(place_ids))
 
     # [filter] 개방형 명시 배제(옵션3): LLM은 매칭만 판단, 선별·0건-세이프는 코드(domain).
     #   - 사실 생성 없음(이미 판정된 fact 후보 위에서 '고르기'만). graceful=빈 집합.

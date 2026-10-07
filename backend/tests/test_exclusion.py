@@ -1,6 +1,6 @@
 """개방형 명시 배제 선별·0건-세이프 (domain/exclusion) — 결정론 로직."""
 
-from app.domain.exclusion import select_with_exclusion
+from app.domain.exclusion import match_excluded_places, select_with_exclusion
 
 _IDS = ["a", "b", "c", "d", "e", "f"]
 
@@ -43,3 +43,22 @@ def test_empty_pool_no_notice():
     kept, notices, _applied = select_with_exclusion([], {"x"}, ["museums"], 4)
     assert kept == []
     assert notices == []  # 후보 자체가 없으면 0건-세이프 아님
+
+
+_PLACES = [
+    ("a", "Tapgol Park"),
+    ("b", "Museum Kimchikan"),
+    ("c", "Bosingak Belfry"),
+]
+
+
+def test_match_excluded_places_exact_and_partial():
+    assert match_excluded_places(_PLACES, ["Tapgol Park"]) == {"a"}
+    assert match_excluded_places(_PLACES, ["belfry"]) == {"c"}  # 짧은 질의 부분일치
+    assert match_excluded_places(_PLACES, ["kimchikan"]) == {"b"}  # 대소문자 무시
+
+
+def test_match_excluded_places_guards():
+    assert match_excluded_places(_PLACES, []) == set()
+    assert match_excluded_places(_PLACES, ["xy"]) == set()  # <3 글자 무시(오매칭 방지)
+    assert match_excluded_places(_PLACES, ["Gyeongbokgung"]) == set()  # 없는 장소
