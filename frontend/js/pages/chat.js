@@ -210,13 +210,33 @@ export function renderChatView({ onBack }) {
       `Here ${cands.length > 1 ? "are" : "is"} ${cands.length} you could do near ${data.origin?.label ?? "you"}:`,
     );
     for (const n of data.notices ?? []) bubble("assistant", n);
-    // 지도: 출발점 + 후보 핀(실패/미등록 시 graceful 숨김). 카드보다 먼저.
+    // 지도: 출발점 + 후보 핀. 카드보다 먼저.
     const mapEl = el("div", "chat-map");
     assistantBlock(mapEl);
-    renderMap(mapEl, data.origin, cands).catch(() => mapEl.remove());
     const list = el("div", "chat-cards");
-    cands.forEach((c, i) => list.append(renderResultCard(c, data.origin, i)));
+    const cardById = {};
+    cands.forEach((c, i) => {
+      const card = renderResultCard(c, data.origin, i);
+      card.dataset.id = c.id;
+      cardById[c.id] = card;
+      list.append(card);
+    });
     assistantBlock(list);
+    // 지도-카드 포커스 연결(추천 A처럼): 카드/핀 선택 → 그 후보의 Tmap 경로선 표시·전환.
+    renderMap(mapEl, data.origin, cands)
+      .then((ctrl) => {
+        if (!ctrl) return;
+        const focus = (id) => {
+          for (const [cid, card] of Object.entries(cardById))
+            card.classList.toggle("is-focused", cid === id);
+          ctrl.focus(id); // 해당 후보의 실제 경로선 draw(없으면 핀만)
+        };
+        for (const c of cands)
+          cardById[c.id].addEventListener("click", () => focus(c.id));
+        ctrl.onPinClick(focus);
+        focus(cands[0].id); // 초기: 첫 후보 경로 표시
+      })
+      .catch(() => mapEl.remove());
   }
 
   function renderRoute(data) {

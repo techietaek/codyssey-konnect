@@ -91,6 +91,36 @@ def test_recommend_tool_with_context_runs(monkeypatch):
     assert captured["label"] == "Insadong"  # 위치는 context(사실)에서
 
 
+def test_recommend_without_prefs_asks_first():
+    # 선호 미지정 추천 → 먼저 관심사/선호를 묻는다(바로 추천하지 않음).
+    resp = asyncio.run(
+        dispatch_tool("RecommendExperiences", {"preferences": ""}, _FULL_CTX, Trace())
+    )
+    assert resp.kind is ChatKind.CLARIFY
+    assert "in the mood for" in resp.message
+
+
+def test_recommend_proceeds_if_already_asked(monkeypatch):
+    # 이미 물어봤으면(히스토리에 질문) 선호 비어도 진행 — 'anything' 응답 등.
+    async def fake_recommend(ctx, trace, saved=None, walks=None):
+        from app.models.recommend import RecommendData
+
+        return RecommendData(candidates=[])
+
+    monkeypatch.setattr("app.agent.orchestrator.recommend_a", fake_recommend)
+    hist = [ChatTurn(role="assistant", content="... in the mood for ...")]
+    resp = asyncio.run(
+        dispatch_tool(
+            "RecommendExperiences",
+            {"preferences": ""},
+            _FULL_CTX,
+            Trace(),
+            history=hist,
+        )
+    )
+    assert resp.kind is ChatKind.RECOMMENDATION
+
+
 def test_unknown_tool_clarifies():
     resp = asyncio.run(dispatch_tool("Nonsense", {}, _FULL_CTX, Trace()))
     assert resp.kind is ChatKind.CLARIFY

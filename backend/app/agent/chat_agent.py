@@ -77,6 +77,34 @@ def to_lc_messages(history: list[ChatTurn]) -> list[BaseMessage]:
     return msgs
 
 
+# 선호 미지정 추천 요청 → 먼저 한 번 관심사/선호를 묻는다(사용자 요청 동작).
+_ASK_PREFS = (
+    "Sure — what kind of cultural experiences are you in the mood for? "
+    "(palaces & history, art & exhibitions, hands-on, performances, festivals) "
+    'Any budget, or an indoor/outdoor preference? Or just say "anything" and I\'ll '
+    "go by what's nearby."
+)
+# '이미 선호를 물었는지' 판정 마커 — 내 문구뿐 아니라 LLM 이 제 말로 물은 경우도 포함
+# (어느 쪽이 물었든 다음 턴엔 재질문하지 않고 진행).
+_ASK_MARKS = (
+    "in the mood for",
+    "what kind of",
+    "interested in",
+    "any specific interest",
+    "preference",
+    "what are you interested",
+    "any interests",
+)
+
+
+def _asked_prefs(history: list[ChatTurn] | None) -> bool:
+    """이전 어시스턴트 턴이 선호/관심사를 물었으면 True(재질문 방지)."""
+    return any(
+        t.role == "assistant" and any(m in t.content.lower() for m in _ASK_MARKS)
+        for t in (history or [])
+    )
+
+
 _CLARIFY_DEFAULT = "What would you like to know or do in Seoul? I can answer travel questions or suggest experiences near you."
 _CLARIFY_NEED_TRIP = (
     "Tell me where you're starting from and your available time, and I'll find cultural "
@@ -99,6 +127,7 @@ async def dispatch_tool(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    history: list[ChatTurn] | None = None,
 ) -> ChatResponse:
     """LLM 이 고른 tool 을 코드로 실행 → 통합 응답. (라우팅과 분리되어 단독 테스트 가능)"""
     if name == AnswerTravelQuestion.__name__:
@@ -112,6 +141,15 @@ async def dispatch_tool(
             return ChatResponse(
                 kind=ChatKind.CLARIFY, tool=name, message=_CLARIFY_NEED_TRIP
             )
+        # 선호 미지정 추천은 먼저 관심사/선호를 한 번 묻는다(이미 물었으면 그대로 진행).
+        prefs = (args.get("preferences") or "").strip()
+        if (
+            name == RecommendExperiences.__name__
+            and not prefs
+            and not _asked_prefs(history)
+        ):
+            trace.step("chat_clarify", reason="no_preferences", tool=name)
+            return ChatResponse(kind=ChatKind.CLARIFY, tool=name, message=_ASK_PREFS)
         # 사실(위치·시간)은 context 에서, 선호 표현만 LLM args 에서. 경계 검증은 domain.
         validate_available_time(context.start_at, context.end_at)
         ctx = RequestContext(
@@ -183,4 +221,5 @@ async def run_chat(
         trace,
         saved_interests,
         prefer_shorter_walks,
+        history,
     )
