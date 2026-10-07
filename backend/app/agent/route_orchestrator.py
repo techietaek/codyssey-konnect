@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
 from app.agent.note_parser import parse_note
 from app.agent.orchestrator import _enrich, _fetch_pool
@@ -131,7 +132,9 @@ async def recommend_route(
     lat, lng = resolve_start_coords(ctx.start_location)
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
 
-    pool = await _fetch_pool(lat, lng, trace)
+    pool, env = await asyncio.gather(
+        _fetch_pool(lat, lng, trace), get_environment(lat, lng, trace)
+    )
     # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
     # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
     cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
@@ -180,6 +183,7 @@ async def recommend_route(
             routes=[],
             origin=origin,
             unmet="We couldn't build a reliable 2–3 stop route from what's open now — see individual experiences instead.",
+            environment=env,
         )
 
     route = await _build_route(origin, stops, ctx.available_minutes, trace)
@@ -189,6 +193,7 @@ async def recommend_route(
             routes=[],
             origin=origin,
             unmet="The nearest open experiences don't fit your time window as one walking route — try a longer window or see individual experiences.",
+            environment=env,
         )
     trace.step(
         "route_built",
@@ -196,4 +201,4 @@ async def recommend_route(
         total_walk=route.total_walk_minutes,
         route_name=route.name,
     )
-    return RouteData(routes=[route], origin=origin)
+    return RouteData(routes=[route], origin=origin, environment=env)

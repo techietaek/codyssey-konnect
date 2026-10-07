@@ -156,7 +156,22 @@ export function renderChatView({ onBack }) {
     bubble("assistant", wrap);
   }
 
+  // 환경 주의(PRD §6.6) — 악천후/대기질 나쁨일 때만. Context일 뿐, 운영 사실 아님.
+  function envNotice(env) {
+    if (!env?.adverse || !env.advisory) return;
+    const n = el("div", "chat-weather");
+    const glyph =
+      env.precipitation === "snow"
+        ? "❄️"
+        : env.precipitation === "none"
+          ? "😷"
+          : "🌧";
+    n.append(el("span", "chat-weather-icon", glyph), el("span", null, env.advisory));
+    assistantBlock(n);
+  }
+
   function renderRecommendation(data) {
+    envNotice(data.environment);
     const cands = data.candidates ?? [];
     if (!cands.length) {
       bubble(
@@ -180,6 +195,7 @@ export function renderChatView({ onBack }) {
   }
 
   function renderRoute(data) {
+    envNotice(data.environment);
     const routes = data.routes ?? [];
     if (!routes.length) {
       bubble(

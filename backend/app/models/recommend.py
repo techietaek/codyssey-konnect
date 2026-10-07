@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.models.environment import EnvironmentContext
+
 
 class InterestCode(str, Enum):
     """사용자 관심사 6개 (PRD §6.4, A·B 공통 Soft Preference)."""
@@ -201,5 +203,7 @@ class RecommendData(BaseModel):
     conditions: ParsedConditions | None = None
     # 사용자-facing 안내(예: 0건-세이프 — 배제 조건을 못 지켜 가까운 대체를 보여줄 때).
     notices: list[str] = Field(default_factory=list)
+    # 환경(날씨·대기질) Context — 악조건 시 프론트가 주의 배너 표시(PRD §6.6, Soft).
+    environment: EnvironmentContext | None = None
     # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
     ai_notice: str = "AI-assisted results · unconfirmed details marked"

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.models.environment import EnvironmentContext
 from app.models.recommend import (
     Candidate,
     MovementInfo,
@@ -51,6 +52,8 @@ class RouteData(BaseModel):
     origin: StartLocation | None = None
     # 신뢰 조합 부족/실패 사유(FR-B7) — 2개 미만이면 개별추천 전환 안내.
     unmet: str | None = None
+    # 환경(날씨·대기질) Context — 악조건 시 주의 배너(PRD §6.6, Soft).
+    environment: EnvironmentContext | None = None
     ai_notice: str = (
         "AI-assisted route · facts from official sources, unconfirmed details marked"
     )

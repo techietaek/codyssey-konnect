@@ -125,7 +125,8 @@
 - [x] `domain/timing.py`(운영시간 범위·last admission·요일 휴무·24h 파싱, 계절/복수/문의는 UNCERTAIN) + `domain/status.py`(3상태 산정) (PRD §5.3)
 - [x] 내부 판정 순서 → 사용자-facing 상태: **조건 충족(fits: 영업확인+가격확인) / 추가 확인 필요(check: 미확인)**. Hard 충돌(영업외·휴무·마감후)은 제외. `조건 완화 대안(alternative)`은 예산/Soft 조건 필요 → A5(note 파싱) 이후
 - [x] 미확인 분리: 영업외·휴무 '확실할 때만' 제외, 애매하면 check(추정 금지). 가격 unknown/partial은 fits 아님 (PRD §6.2·§5.2)
-- [ ] 기상청·AirKorea Context + 공식 위험특보 Outdoor 제외 (PRD §6.6) ← **이후 보강(A3 범위에서 분리)**
+- [~] 기상청·AirKorea Context + 공식 위험특보 Outdoor 제외 (PRD §6.6) — **Context·Soft 완료(2026-10-08)**, 특보 Hard 제외는 보류(아래)
+  - **날씨·대기질 (2026-10-08, Product 승인: 배너+Soft강등, 특보Hard 보류):** `sources/kma.py`(초단기실황 PTY·기온, 격자변환) · `sources/airkorea.py`(서울 khaiGrade 대표) · `domain/environment.py`(공식 카테고리만, 임의 임계값 없음) · `agent/environment.py`(병렬·graceful) · `models/environment.py`. 적용: 악천후면 **주의 배너**(챗) + `ranking.weather_rank`로 야외유형 **Soft 강등(관심사 다음 2차, 제외 아님)**. `EnvironmentContext`를 recommend/route 응답에 첨부. `test_environment`+`test_ranking`(+9, 160 pytest). 라이브(실 KMA+AirKorea: 맑음/15.4°C/대기 보통→배너 없음) + 악천후 주입 배너 렌더 Green. **불변식:** 운영사실 추정 금지·미확보=unknown(영향 없음)·임의 임계값 없음·제외 안 함. **보류:** 특보 Hard 제외(Outdoor 태그가 휴리스틱이라 오탈락 risk → PRD "미확인→제외 안 함" 준수).
 - [x] `domain/` 단위 테스트 19개(timing 14 + status 6: 휴무요일·영업외·last admission·24h·미확인·가격경계). 오케스트레이터: 상위 8개 보강·판정 후 Hard 제외분을 다음 후보로 대체(강제 채움 아님), trace에 fits/check/excluded 기록
 - **Done when:** ✅ 각 후보가 fits/check + 미확인 flag로 분류, Hard 충돌(영업외·휴무)은 정상 추천에서 빠짐(게이트, 라이브 확인: 영업 전 시간대·월요일 휴무 제외+대체). 다음 **A4 지도/이동**.
 

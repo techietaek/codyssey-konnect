@@ -723,6 +723,8 @@ body {
 .chat-block { width: 100%; }
 .chat-cards { display: flex; flex-direction: column; gap: var(--space-12); }
 .chat-map { height: 180px; border-radius: var(--r-card); overflow: hidden; background: var(--c-border); margin-bottom: var(--space-8); }
+.chat-weather { display: flex; align-items: flex-start; gap: var(--space-8); background: var(--c-check-bg); color: var(--c-text); border-radius: var(--r-card); padding: var(--space-8) var(--space-12); font-size: var(--fs-body); font-weight: var(--fw-medium); line-height: 1.35; }
+.chat-weather-icon { flex: 0 0 auto; }
 .chat .btn-select { display: none; } /* 선택 확정은 챗봇 범위 밖(이후 AG-3) */
 .chat .card { max-width: 100%; }
 

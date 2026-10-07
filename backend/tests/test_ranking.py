@@ -10,6 +10,7 @@ from app.domain.ranking import (
     display_sort_key,
     preference_rank,
     type_preference_rank,
+    weather_rank,
 )
 from app.models.recommend import (
     Candidate,
@@ -88,6 +89,34 @@ def test_avoided_not_excluded():
     cond = ParsedConditions(avoid_interests=[InterestCode.LIVE_PERFORMANCES])
     only = _cand(ExperienceType.PERFORMANCE)
     assert preference_rank(only, cond) == 2  # 존재하되 뒤로
+
+
+def test_weather_rank_demotes_outdoor_only_when_adverse():
+    outdoor = _cand(ExperienceType.HISTORIC_VISIT)
+    indoor = _cand(ExperienceType.EXHIBITION)
+    assert weather_rank(outdoor, adverse=True) == 1  # 악천후 → 야외 뒤로
+    assert weather_rank(indoor, adverse=True) == 0  # 실내 영향 없음
+    assert weather_rank(outdoor, adverse=False) == 0  # 평상시 영향 없음(불이익 금지)
+
+
+def test_interest_stays_primary_over_weather():
+    # 악천후여도 '원하는 콘텐츠'(관심사)가 먼저 — 날씨는 2차(FR-B4 유지).
+    cond = ParsedConditions(interests=[InterestCode.PALACES_HISTORIC])  # 야외 선호
+    liked_outdoor = _cand(ExperienceType.HISTORIC_VISIT)
+    neutral_indoor = _cand(ExperienceType.EXHIBITION)
+    assert display_sort_key(liked_outdoor, cond, adverse=True) < display_sort_key(
+        neutral_indoor, cond, adverse=True
+    )
+
+
+def test_weather_breaks_tie_within_same_interest():
+    # 관심사 동률(중립)에서 악천후면 실내 소폭 우선.
+    cond = ParsedConditions()
+    outdoor = _cand(ExperienceType.HISTORIC_VISIT)
+    indoor = _cand(ExperienceType.EXHIBITION)
+    assert display_sort_key(indoor, cond, adverse=True) < display_sort_key(
+        outdoor, cond, adverse=True
+    )
 
 
 def test_type_preference_rank_for_selection():

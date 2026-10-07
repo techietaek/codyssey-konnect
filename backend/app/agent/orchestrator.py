@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
 from app.agent.hours_parser import parse_hours
 from app.agent.note_parser import parse_note
@@ -183,10 +184,14 @@ async def recommend_a(
     # 확인 시트에서 교정한 조건이 오면 재파싱하지 않고 그대로 사용(사용자 교정 우선).
     if ctx.conditions is not None:
         cond = ctx.conditions
-        pool = await _fetch_pool(lat, lng, trace)
+        pool, env = await asyncio.gather(
+            _fetch_pool(lat, lng, trace), get_environment(lat, lng, trace)
+        )
     else:
-        cond, pool = await asyncio.gather(
-            parse_note(ctx.note), _fetch_pool(lat, lng, trace)
+        cond, pool, env = await asyncio.gather(
+            parse_note(ctx.note),
+            _fetch_pool(lat, lng, trace),
+            get_environment(lat, lng, trace),
         )
     # 저장 선호를 Request 우선으로 병합(note 침묵 시에만 관심사 Soft 채움, FR-L5).
     # 걷기 선호는 수치 변환 없이 trace 로만 기록(FR-L4, 순위 반영은 Soft 랭킹 B안).
@@ -275,11 +280,15 @@ async def recommend_a(
     # [compose] 표시 순서: 등급(fits→alternative→check_needed) 우선, 같은 등급 안에서
     # 관심사 선호↑·비선호↓(Soft, 제외 아님), 그다음 거리순. candidates 는 이미 거리순 →
     # display_sort_key 로 '안정 정렬'하면 같은 키 안에서 거리순이 유지된다(domain/ranking).
-    candidates.sort(key=lambda c: display_sort_key(c, cond))
+    candidates.sort(key=lambda c: display_sort_key(c, cond, adverse=env.adverse))
     trace.step(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
     return RecommendData(
-        candidates=candidates, origin=origin, conditions=cond, notices=notices
+        candidates=candidates,
+        origin=origin,
+        conditions=cond,
+        notices=notices,
+        environment=env,
     )
