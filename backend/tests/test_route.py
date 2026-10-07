@@ -1,8 +1,11 @@
 """B 문화루트 조립 — 결정론 로직 (domain/route). 좌표/거리/예산/이름/강제채움 금지."""
 
+from datetime import datetime
+
 from app.domain.route import (
     MAX_LEG_M,
     assemble_route,
+    build_schedule,
     haversine_m,
     rollup_budget,
     route_checks,
@@ -10,6 +13,7 @@ from app.domain.route import (
     route_headline,
     route_name,
     route_status,
+    visit_plan,
 )
 from app.models.recommend import (
     Candidate,
@@ -119,6 +123,36 @@ def test_route_status_aggregate():
     check = Candidate(id="c", title="C", status=ResultStatus.CHECK_NEEDED)
     assert route_status([fit, _B]) is ResultStatus.FITS
     assert route_status([fit, check]) is ResultStatus.CHECK_NEEDED  # 하나라도 check
+
+
+def test_visit_plan_official_beats_type_default():
+    official = _c("o", 37.571, type_=ExperienceType.EXHIBITION)
+    official.visit_minutes = 120  # 공식 spendtime
+    assert visit_plan(official) == (120, Provenance.CONFIRMED)
+    typed = _c("t", 37.571, type_=ExperienceType.EXHIBITION)  # 공식값 없음
+    assert visit_plan(typed) == (60, Provenance.PLANNED)  # 유형 기준(전시 60분)
+
+
+def test_build_schedule_chains_arrival_and_finish():
+    start = datetime(2026, 10, 10, 14, 0)
+    s1 = _c("s1", 37.571, type_=ExperienceType.HISTORIC_VISIT)  # 40분 planned
+    s2 = _c("s2", 37.572, type_=ExperienceType.EXHIBITION)  # 60분 planned
+    sched, finish = build_schedule(start, [10, 5], [s1, s2])
+    a1, d1, m1, p1 = sched[0]
+    a2, d2, m2, _p2 = sched[1]
+    assert (a1.hour, a1.minute) == (14, 10) and (d1.hour, d1.minute) == (14, 50)
+    assert m1 == 40 and p1 is Provenance.PLANNED
+    assert m2 == 60
+    assert (a2.hour, a2.minute) == (14, 55) and (d2.hour, d2.minute) == (15, 55)
+    assert (finish.hour, finish.minute) == (15, 55)
+
+
+def test_build_schedule_unknown_walk_drops_absolute_times():
+    start = datetime(2026, 10, 10, 14, 0)
+    sched, finish = build_schedule(start, [10, None], [_A, _B])
+    assert finish is None  # 구간 미확인 → 절대 시각 못 묶음
+    assert all(a is None and d is None for a, d, _, _ in sched)
+    assert all(m > 0 for _, _, m, _ in sched)  # 방문 분·근거는 유지
 
 
 def test_route_checks_aggregates_flags():

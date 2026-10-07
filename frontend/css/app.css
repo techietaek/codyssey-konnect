@@ -781,6 +781,11 @@ body {
 .route-stop-glyph { font-size: 15px; }
 .route-stop-title { font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-text); }
 .route-stop-reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.route-stop-when { display: flex; align-items: center; gap: var(--space-6); }
+.route-stop-time { font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-primary); }
+.route-visit-badge { font-size: 10px; font-weight: var(--fw-bold); border-radius: var(--r-full); padding: 1px var(--space-6); }
+.route-visit-badge[data-prov="confirmed"] { background: var(--c-fits-bg); color: var(--c-fits-text); }
+.route-visit-badge[data-prov="planned"] { background: var(--c-check-bg); color: var(--c-check-text); }
 .route-stop-meta { display: flex; flex-wrap: wrap; gap: var(--space-8); }
 .route-stop-actions { display: flex; align-items: center; gap: var(--space-10); margin-top: var(--space-2); }
 .route-remove { border: 0; background: none; color: var(--c-text-muted); font-size: var(--fs-badge); font-weight: var(--fw-semibold); cursor: pointer; padding: 0; }

@@ -11,6 +11,7 @@ from app.domain.normalize import (
     normalize_candidate,
     normalize_hours,
     normalize_price,
+    parse_duration_min,
 )
 from app.models.recommend import ExperienceType, PriceStatus, Provenance
 
@@ -153,3 +154,12 @@ def test_candidate_free_no_price_flag():
     c = normalize_candidate(_item(), intro={"usefeeculture": "Free"}, common={})
     assert c.price.status is PriceStatus.FREE
     assert "Price needs checking" not in [f.text for f in c.flags]
+
+
+def test_parse_duration_min():
+    assert parse_duration_min("180 minutes") == 180
+    assert parse_duration_min("1시간 30분") == 90
+    assert parse_duration_min("About 2 hours") == 120
+    assert parse_duration_min("60분") == 60
+    assert parse_duration_min("") is None  # 빈값 → 추정 안 함
+    assert parse_duration_min("free") is None  # 숫자 없음 → None

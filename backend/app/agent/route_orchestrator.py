@@ -12,6 +12,7 @@ domain/route 로 하루 1코스(2~3 스톱)를 조립한 뒤 구간별 도보(Tm
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 
 from app.agent.context import RequestContext
 from app.agent.environment import get_environment
@@ -26,6 +27,7 @@ from app.domain.ranking import type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import (
     assemble_route,
+    build_schedule,
     rollup_budget,
     route_checks,
     route_headline,
@@ -86,7 +88,11 @@ async def _segment(
 
 
 async def _build_route(
-    origin: StartLocation, stops: list[Candidate], available_minutes: int, trace: Trace
+    origin: StartLocation,
+    stops: list[Candidate],
+    start_at: datetime,
+    available_minutes: int,
+    trace: Trace,
 ) -> Route | None:
     """스톱 순서에 구간 도보를 붙여 Route 구성. 도보만으로 창 초과면 None(불가)."""
     pts: list[tuple[str, float, float]] = [
@@ -108,13 +114,34 @@ async def _build_route(
         )
     )
     segments = [s for s, _ in segs]
-    known = [wm for _, wm in segs if wm is not None]
+    walk_minutes = [wm for _, wm in segs]
+    known = [wm for wm in walk_minutes if wm is not None]
     any_unknown = len(known) != len(segs)
     total_walk = None if any_unknown else sum(known)
 
     # 도보 이동만으로도 가용시간을 넘으면 걷기 루트로 불가(체류 미포함이라 보수적).
     if total_walk is not None and total_walk > available_minutes:
         return None
+
+    # 계획 방문시간 체인(공식 spendtime=confirmed / 유형 기준=planned) → 스톱별 도착·종료 + 전체 종료.
+    schedule, finish_at = build_schedule(start_at, walk_minutes, stops)
+    route_stops = [
+        RouteStop(
+            order=i + 1,
+            candidate=s,
+            visit_minutes=minutes,
+            visit_provenance=prov,
+            arrival_at=arr,
+            depart_at=dep,
+        )
+        for i, (s, (arr, dep, minutes, prov)) in enumerate(zip(stops, schedule))
+    ]
+    all_official = all(p is Provenance.CONFIRMED for _, _, _, p in schedule)
+    stay_note = (
+        "Visit times are from official guidance."
+        if all_official
+        else "Planned visit times are estimates — adjust to your pace."
+    )
 
     flags: list[UnconfirmedFlag] = []
     if any_unknown:
@@ -126,12 +153,13 @@ async def _build_route(
         headline=route_headline(origin, stops),
         status=route_status(stops),
         checks=route_checks(stops),
-        stops=[RouteStop(order=i + 1, candidate=s) for i, s in enumerate(stops)],
+        stops=route_stops,
         segments=segments,
         total_walk_minutes=total_walk,
         walk_provenance=Provenance.ESTIMATE,
         budget_note=rollup_budget(stops),
-        stay_note="Visit times are yours to plan",
+        stay_note=stay_note,
+        finish_at=finish_at,
         flags=flags,
     )
 
@@ -205,7 +233,9 @@ async def recommend_route(
             environment=env,
         )
 
-    route = await _build_route(origin, stops, ctx.available_minutes, trace)
+    route = await _build_route(
+        origin, stops, ctx.start_at, ctx.available_minutes, trace
+    )
     if route is None:
         trace.step("route_unmet", reason="over_time_budget")
         return RouteData(

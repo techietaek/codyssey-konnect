@@ -13,16 +13,29 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timedelta
 
 from app.models.recommend import (
     Candidate,
     ExperienceType,
     PriceStatus,
+    Provenance,
     ResultStatus,
     StartLocation,
 )
 
 _GENERIC_LABELS = ("current location", "my location", "")
+
+# 유형 기준 표준 방문시간(분) — B-T01 허용 '유형 기준' 근거(임의 per-place 숫자 아님).
+# 공식 spendtime 이 없을 때만 Planned(예상)으로 쓴다. 문서화된 유형 표준이라 근거가 명시된다.
+_TYPE_VISIT_MIN = {
+    ExperienceType.EXHIBITION: 60,  # 박물관·미술관 관람
+    ExperienceType.HISTORIC_VISIT: 40,  # 궁·역사장소·공원 둘러보기
+    ExperienceType.HANDS_ON: 90,  # 체험 참여
+    ExperienceType.FESTIVAL_EVENT: 60,
+    ExperienceType.PERFORMANCE: 90,
+    ExperienceType.DEFAULT: 45,
+}
 
 # 자동 루트에 넣을 수 있는 유형: '자율 방문' 가능한 것. 고정 회차형(공연·축제)은
 # 회차 미확인 시 자동 루트에서 제외(B-T01·FR-B4) — 시간충돌을 신뢰성 있게 판정 불가.
@@ -163,3 +176,34 @@ def route_checks(stops: list[Candidate]) -> list[str]:
         for f in s.flags:
             checks.append(f"{f.text} · {s.title}")
     return checks
+
+
+def visit_plan(cand: Candidate) -> tuple[int, Provenance]:
+    """스톱 방문 소요(분, provenance). 공식 spendtime 있으면 CONFIRMED, 없으면 유형 기준 PLANNED.
+    임의 per-place 숫자가 아니라 '공식값 또는 문서화된 유형 표준'(B-T01)."""
+    if cand.visit_minutes:
+        return cand.visit_minutes, Provenance.CONFIRMED
+    return _TYPE_VISIT_MIN.get(cand.type, _TYPE_VISIT_MIN[ExperienceType.DEFAULT]), (
+        Provenance.PLANNED
+    )
+
+
+def build_schedule(
+    start_at: datetime, walk_minutes: list[int | None], stops: list[Candidate]
+) -> tuple[
+    list[tuple[datetime | None, datetime | None, int, Provenance]], datetime | None
+]:
+    """start_at + 구간 도보분 + 스톱 방문분을 체인 → 스톱별 (arrival, depart, 분, provenance)와
+    전체 종료(finish). 구간 도보가 하나라도 미확인이면 절대 시각은 못 묶으므로 arrival/depart=None
+    (방문 분·근거는 그대로 반환), finish=None. 임의 직선·추정 시각 위조 금지와 같은 선상."""
+    plans = [visit_plan(s) for s in stops]
+    if any(w is None for w in walk_minutes):
+        return [(None, None, m, p) for (m, p) in plans], None
+    clock = start_at
+    out: list[tuple[datetime | None, datetime | None, int, Provenance]] = []
+    for i, (minutes, prov) in enumerate(plans):
+        clock += timedelta(minutes=walk_minutes[i] or 0)
+        arrival = clock
+        clock += timedelta(minutes=minutes)
+        out.append((arrival, clock, minutes, prov))
+    return out, clock

@@ -163,6 +163,9 @@ class Candidate(BaseModel):
     official_links: list[OfficialLink] = Field(default_factory=list)
     lat: float | None = None  # 지도 핀용 좌표
     lng: float | None = None
+    # 공식 권장 방문 소요시간(분) — TourAPI spendtime/spendtimefestival 있을 때만(B-T01).
+    # 없으면 None(루트 계획에서 유형 기준 Planned 로 폴백).
+    visit_minutes: int | None = None
 
 
 class StartLocation(BaseModel):

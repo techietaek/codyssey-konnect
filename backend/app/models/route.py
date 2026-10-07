@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.models.environment import EnvironmentContext
@@ -25,6 +27,12 @@ from app.models.recommend import (
 class RouteStop(BaseModel):
     order: int  # 1-based 방문 순서(시작점은 별도 origin)
     candidate: Candidate  # 장소 사실 전부 재사용(상태·가격·시간·flag·좌표·공식링크)
+    # 계획 방문시간(B-T01): 공식 spendtime=confirmed / 유형 기준=planned. 도보 미확인 등으로
+    # 절대 시각을 못 묶으면 arrival/depart=None(분·provenance 는 유지).
+    visit_minutes: int | None = None
+    visit_provenance: Provenance = Provenance.PLANNED
+    arrival_at: datetime | None = None
+    depart_at: datetime | None = None
 
 
 class RouteSegment(BaseModel):
@@ -49,7 +57,9 @@ class Route(BaseModel):
     total_walk_minutes: int | None = None
     walk_provenance: Provenance = Provenance.ESTIMATE
     budget_note: str  # 예: "Total cost needs checking" / "All stops free"
-    stay_note: str  # 예: "Visit times are yours to plan" (근거 없는 체류분 미주장)
+    stay_note: str  # 계획 방문시간 안내(예상/공식 구분)
+    # 전체 종료 예상 시각(도보+방문 체인). 도보 미확인이면 None.
+    finish_at: datetime | None = None
     flags: list[UnconfirmedFlag] = Field(default_factory=list)  # 루트 레벨 미확인
 
 

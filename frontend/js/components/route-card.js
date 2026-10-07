@@ -43,6 +43,13 @@ function segmentRow(seg) {
   return row;
 }
 
+// 계획 방문시간 배지 — 공식(confirmed)=Official / 유형기준(planned)=Planned.
+function visitBadge(prov) {
+  const b = el("span", "route-visit-badge", prov === "confirmed" ? "Official" : "Planned");
+  b.dataset.prov = prov;
+  return b;
+}
+
 function stopRow(stop, onRemove) {
   const c = stop.candidate;
   const row = el("div", "route-stop");
@@ -72,7 +79,22 @@ function stopRow(stop, onRemove) {
     body.append(rs);
   }
 
-  // Fact: 시간·가격(미확인 가격은 flag로 분리)
+  // 계획 방문시간 — 공식 spendtime=Official / 유형기준=Planned (B-T01). 도보 미확인이면
+  // 절대 window 없이 소요분만. 운영시간(fact)과 별개로 분리 표기.
+  if (stop.visit_minutes) {
+    const when = el("div", "route-stop-when");
+    const label =
+      stop.arrival_at && stop.depart_at
+        ? `${fmtTime(stop.arrival_at)} – ${fmtTime(stop.depart_at)}`
+        : `≈${stop.visit_minutes} min visit`;
+    when.append(
+      el("span", "route-stop-time", label),
+      visitBadge(stop.visit_provenance),
+    );
+    body.append(when);
+  }
+
+  // Fact: 운영시간·가격(미확인 가격은 flag로 분리)
   const meta = el("div", "route-stop-meta");
   if (c.time) meta.append(el("span", "meta-item", c.time.display));
   if (c.price && c.price.status !== "unknown")
@@ -178,14 +200,17 @@ export function renderRouteCard(route, origin, opts = {}) {
     if (route.segments?.[i]) timeline.append(segmentRow(route.segments[i]));
     timeline.append(stopRow(stop, onRemove));
   });
-  // End (사용자 계획)
+  // End — 계획 종료(도보+방문 체인). finish_at 있으면 그 값, 없으면 창 종료.
+  const finish = route.finish_at || trip?.end_at || null;
   const endRow = el("div", "route-end");
   endRow.append(el("span", "route-end-flag", "⚑"));
   endRow.append(
     el(
       "span",
       "route-end-label",
-      trip?.end_at ? `Finish by ${fmtTime(trip.end_at)} · your plan` : "End · your plan",
+      finish
+        ? `${route.finish_at ? "Finish about" : "Finish by"} ${fmtTime(finish)}`
+        : "End · your plan",
     ),
   );
   timeline.append(endRow);
@@ -201,7 +226,8 @@ export function renderRouteCard(route, origin, opts = {}) {
   addTotal("Total cost", route.budget_note || "See each stop");
   if (route.total_walk_minutes != null)
     addTotal("Walking", `≈${route.total_walk_minutes} min in total`);
-  if (trip?.end_at) addTotal("Finish", `by ≈${fmtTime(trip.end_at)}`);
+  if (finish)
+    addTotal("Finish", `${route.finish_at ? "≈" : "by "}${fmtTime(finish)}`);
   card.append(totals);
 
   if (route.flags?.length) {

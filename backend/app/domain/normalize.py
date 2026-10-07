@@ -179,6 +179,31 @@ def normalize_price(raw: str) -> PriceInfo:
     )
 
 
+# 공식 권장 방문시간 필드(문화시설 spendtime·행사 spendtimefestival). 있을 때만 사용.
+_SPEND_KEYS = ["spendtime", "spendtimefestival"]
+
+
+def parse_duration_min(text: str | None) -> int | None:
+    """'180 minutes'·'1시간 30분'·'about 2 hours' → 분. 파싱 불가/빈값은 None(추정 금지)."""
+    t = _strip_html(text).lower()
+    if not t:
+        return None
+    total = 0
+    found = False
+    for h in re.findall(r"(\d+)\s*(?:hours?|hrs?|시간)", t):
+        total += int(h) * 60
+        found = True
+    for m in re.findall(r"(\d+)\s*(?:minutes?|mins?|분)", t):
+        total += int(m)
+        found = True
+    return total if found and total > 0 else None
+
+
+def official_visit_minutes(intro: dict[str, Any]) -> int | None:
+    """공식 권장 방문 소요시간(분). spendtime/spendtimefestival 있을 때만, 없으면 None."""
+    return parse_duration_min(_first(intro, _SPEND_KEYS))
+
+
 def normalize_hours(intro: dict[str, Any]) -> TimeInfo | None:
     """운영시간 → 확인된 표시값. 없으면 None(미확인)."""
     raw = _first(intro, _HOURS_KEYS)
@@ -231,6 +256,7 @@ def normalize_candidate(
         id=f"tour-{item.get('contentid')}",
         title=title,
         type=etype,
+        visit_minutes=official_visit_minutes(intro),  # 공식 권장 방문시간(있을 때만)
         status=ResultStatus.CHECK_NEEDED,  # 판정 전(A3에서 3상태 산정)
         reasons=[],  # Reason은 A5(LLM)
         time=time_info,
