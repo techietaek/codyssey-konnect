@@ -51,8 +51,18 @@ async function init() {
   } = await _client.auth.getSession();
   if (!session && !returning) {
     await _client.auth.signInAnonymously();
+    const { data } = await _client.auth.getSession();
+    _applySession(data.session);
   } else {
-    _applySession(session);
+    // identity linking 직후엔 기존 토큰에 is_anonymous=true 클레임이 남아있다.
+    // 익명 클레임이면 서버에서 토큰을 refresh → 링크됐으면 새 토큰은 is_anonymous=false
+    // (+ Google user_metadata). 진짜 익명이면 그대로 익명.
+    let current = session;
+    if (current?.user?.is_anonymous === true) {
+      const { data } = await _client.auth.refreshSession();
+      if (data?.session) current = data.session;
+    }
+    _applySession(current);
   }
   return _client;
 }
