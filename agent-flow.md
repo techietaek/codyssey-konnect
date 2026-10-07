@@ -3,7 +3,7 @@
 > **문서 역할:** AI 에이전트(및 팀)가 KONNECT를 **어떤 순서로, 무엇을 확인하며** 개발하는지 정의하는 **오케스트레이션·체크리스트 문서**. 세션/에이전트가 바뀌어도 이 파일만 보면 "지금 어디까지 됐고, 다음에 뭘, 어떻게 검증하며" 이어갈 수 있다.
 > **사용법:** 작업하며 `- [ ]` → `- [x]`로 **체크박스를 갱신**한다. 각 슬라이스는 "완료 기준(Done when)"을 모두 만족해야 `[x]`.
 > **정본 관계:** 기능 정의는 `PRD.md`(FR-*·§), 디자인은 `DESIGN.md`(LF·컴포넌트), 규칙·신뢰 불변식은 `CLAUDE.md`. 이 문서는 **그 문서들을 섹션 ID로 가리키며 순서·검증만** 관리한다(중복 서술 최소화).
-> **최종 수정:** 2026-10-06 · 담당 Tech(이용택)
+> **최종 수정:** 2026-10-07 · 담당 Tech(이용택)
 
 ---
 
@@ -25,6 +25,7 @@
   - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b) + Google Map 딥링크(대중교통).
   - [x] A5 Reason+LLM — note LLM 구조화(LangChain) + Reason Copy 선택 + 예산→alternative + parsed chips. 74 pytest.
   - [x] A6 선택상태 — Select 확정·Current choice 배지·홈 재접근 배너(localStorage). **Phase 1 완료.**
+  - [x] A7 상태 UX 보강 (branch `phase1-a-loading-states`, 2026-10-07) — 조회 대기 **로딩 화면**(shimmer 스켈레톤 + 회전 단계문구 + 펄스 sparkle, Cancel=요청 AbortController 취소) · 조회 플로우를 `app.js startRecommend`로 중앙화(로딩→결과/취소복귀/오류) · **0건** 지도 축소(NAVER 로고 노출 방지)+경고 아이콘/텍스트 · **전용 오류 화면**(Couldn't load, Try again/Edit conditions, 조건 유지) · 바텀시트 Cancel 버튼 제거 + **grip 스와이프-다운 닫기**(백드롭/Esc 유지). headless 렌더/드래그 검증 Green.
 - [ ] Phase 2 — 로그인·개인화 ← **다음 Phase**
 - [ ] Phase 3 — RAG · B 문화루트
 - [ ] Phase 4 — 배포·실사용자 검증·발표
