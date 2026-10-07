@@ -86,13 +86,13 @@ HIDE AND SEEK      Facility Utilization Fees: Mon-Fri 21,000won / Sat-Sun 26,000
 ## 4. 실행 로드맵 (데이터로 재검증된 순서)
 
 - [x] **1단계 — 원인 집계** (2026-10-07): check 73%, 가격 미확인이 주범, `detailInfo2` 구제 가능 확인.
-- [ ] **2단계 — `detailInfo2` 연동** ← 진행 중
+- [x] **2단계 — `detailInfo2` 연동** (2026-10-07) ✅
   - `sources/tourapi.py`: `detail_info(cid, ctype)` 추가(캐시·재시도 동일)
-  - `domain/normalize.py`: `usefee`류가 비면 detailInfo2의 요금 행("Admission Fees"/"Utilization Fees")을 fallback 소스로 → `normalize_price` 투입(빈값→unknown 원칙 유지)
-  - `agent/orchestrator.py`: `_enrich`에서 intro/common과 **병렬**로 detail_info 조회
-  - 운영시간 행도 있으면 `judge_timing` 입력에 안전 보강(있을 때만)
-  - `pytest` 추가 + 라이브 재측정으로 check_needed 감소폭 확인
-- [ ] **3단계 — LLM normalize 스텝** (추출 전용): 남은 시간 caveat/파싱실패·모호 요금 정리
+  - `domain/normalize.py`: `enrich_intro()` — `usefee`/`usetime`이 비면 detailInfo2 행("Admission Fees"/"운영시간")에서 보강(빈값→unknown 원칙·기존값 비덮어쓰기 유지)
+  - `agent/orchestrator.py`: `_enrich`에서 intro/common과 **병렬**로 detail_info 조회 후 `enrich_intro` 적용
+  - `pytest` 5개 추가(총 86 통과), ruff/black 통과
+  - **라이브 재측정 (동일 49후보):** price unknown **65%→36%**, free 24%→48%, **fits 20%→30%**, **check_needed 73%→63%**. 공식 데이터만으로 달성(정책 위반 없음).
+- [ ] **3단계 — LLM normalize 스텝** (추출 전용): 남은 시간 caveat/파싱실패·모호 요금 정리. (2단계 후 check의 주원인은 **시간 uncertain**으로 이동 — LLM 파서 타깃)
 - [ ] **4단계 — KOPIS/서울문화포털 신규 연동**: type 85 보강 → 이후 Places 영업시간(Product 플래그)
 
 ---

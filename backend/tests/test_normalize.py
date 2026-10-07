@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from app.domain.normalize import (
     _clean_title,
+    enrich_intro,
     normalize_candidate,
     normalize_hours,
     normalize_price,
@@ -53,6 +54,44 @@ def test_price_paid_without_amount_is_unknown():
 
 def test_price_vague_is_unknown():
     assert normalize_price("Varies by program").status is PriceStatus.UNKNOWN
+
+
+# ── detailInfo2 보강 (enrich_intro) ──
+def test_enrich_fills_empty_fee_from_info():
+    intro = {"usefee": "", "usetime": "09:00-18:00"}
+    info = [
+        {"infoname": "Restrooms", "infotext": "Available"},
+        {
+            "infoname": "Admission Fees",
+            "infotext": "Adults 5,000 won / Children 2,000 won",
+        },
+    ]
+    out = enrich_intro(intro, info)
+    assert normalize_price(out["usefee"]).status is PriceStatus.PAID
+    assert out["usetime"] == "09:00-18:00"  # 이미 있는 값은 덮어쓰지 않음
+
+
+def test_enrich_fills_free_fee_from_info():
+    out = enrich_intro({}, [{"infoname": "Admission Fees", "infotext": "Free"}])
+    assert normalize_price(out["usefee"]).status is PriceStatus.FREE
+
+
+def test_enrich_does_not_overwrite_existing_fee():
+    intro = {"usefee": "Adults 3,000 won"}
+    out = enrich_intro(intro, [{"infoname": "Admission Fees", "infotext": "Free"}])
+    assert out["usefee"] == "Adults 3,000 won"
+
+
+def test_enrich_no_info_is_noop():
+    intro = {"usefee": ""}
+    assert enrich_intro(intro, []) is intro
+    assert enrich_intro(intro, None) is intro
+
+
+def test_enrich_ignores_non_fee_rows():
+    # 요금/시간과 무관한 행만 있으면 보강하지 않음(빈값 유지 → unknown)
+    out = enrich_intro({}, [{"infoname": "Available Facilities", "infotext": "Cafe"}])
+    assert not out.get("usefee")
 
 
 # ── 제목 정리 ──

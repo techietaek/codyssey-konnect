@@ -125,3 +125,14 @@ async def detail_common(content_id: str) -> dict[str, Any]:
     data = await _call("detailCommon2", {"contentId": content_id}, _TTL_DETAIL)
     items = _items(data)
     return items[0] if items else {}
+
+
+async def detail_info(content_id: str, content_type_id: str) -> list[dict[str, Any]]:
+    """반복 구조정보(infoname/infotext 행). detailIntro2 가 놓치는 입장료·운영시간을
+    별도 행으로 담는 경우가 많다(예: infoname='Admission Fees'). 행 목록을 그대로 반환."""
+    data = await _call(
+        "detailInfo2",
+        {"contentId": content_id, "contentTypeId": content_type_id},
+        _TTL_DETAIL,
+    )
+    return _items(data)
