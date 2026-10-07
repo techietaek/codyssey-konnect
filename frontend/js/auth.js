@@ -8,6 +8,7 @@ let _client = null;
 let _ready = null;
 let _signedIn = false; // 비익명(정식 로그인) 여부 — FR-L1 게이팅용 동기 플래그
 let _displayName = null; // 정식 로그인 시 표시 이름(Google) — 동기 캐시
+let _email = null; // 정식 로그인 시 이메일(My Page 계정 표시) — 동기 캐시
 const _listeners = new Set(); // 세션 변경 구독자(화면 갱신용)
 
 // Google 표시이름 추출. 익명→Google **링크** 계정은 이름이 user_metadata 가 아니라
@@ -25,10 +26,23 @@ function _nameFrom(u) {
   return name;
 }
 
+function _emailFrom(u) {
+  const m = u?.user_metadata || {};
+  let email = u?.email || m.email || null;
+  if (!email && Array.isArray(u?.identities)) {
+    for (const idn of u.identities) {
+      email = idn?.identity_data?.email || null;
+      if (email) break;
+    }
+  }
+  return email;
+}
+
 function _applySession(session) {
   const u = session?.user;
   _signedIn = !!u && u.is_anonymous !== true;
   _displayName = _signedIn ? _nameFrom(u) : null;
+  _email = _signedIn ? _emailFrom(u) : null;
 }
 
 // 세션 상태가 바뀌면(로그인/로그아웃/OAuth 복귀) 구독자에게 통지 → 화면 재렌더.
@@ -101,10 +115,12 @@ async function init() {
     // 세션 user 객체가 identities/metadata 를 덜 담고 있으면 이름이 비는 경우가 있다.
     // 로그인 상태인데 이름이 없으면 getUser() 로 완전한 user 를 한 번 더 받아 보강
     // → 잡히면 구독자 통지로 홈/온보딩 greeting 갱신(graceful, 실패 무영향).
-    if (_signedIn && !_displayName) {
+    if (_signedIn && (!_displayName || !_email)) {
       try {
         const { data } = await _client.auth.getUser();
         const name = data?.user ? _nameFrom(data.user) : null;
+        const email = data?.user ? _emailFrom(data.user) : null;
+        if (email) _email = email;
         if (name) {
           _displayName = name;
           _listeners.forEach((l) => {
@@ -150,6 +166,11 @@ export function isSignedIn() {
 // 정식 로그인 시 표시 이름(Google) — 없으면 null. 동기(캐시).
 export function displayName() {
   return _displayName;
+}
+
+// 정식 로그인 시 이메일(My Page) — 없으면 null. 동기(캐시).
+export function userEmail() {
+  return _email;
 }
 
 // 로그아웃 → 깨끗이 재부트(홈=로그인 전 상태, 익명 세션 재발급).

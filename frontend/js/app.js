@@ -10,6 +10,7 @@ import { renderLoadingView } from "./pages/loading.js";
 import { renderErrorView } from "./pages/error.js";
 import { renderResultsView } from "./pages/results.js";
 import { renderOnboardingView } from "./pages/onboarding.js";
+import { renderMyPageView } from "./pages/mypage.js";
 import { setResults } from "./state.js";
 
 const viewEl = document.getElementById("view");
@@ -28,9 +29,18 @@ export function showWelcome() {
 
 export function showHome() {
   mount(
-    renderHomeView({ onStartA: () => showInput(), onViewChoice: showResults }),
+    renderHomeView({
+      onStartA: () => showInput(),
+      onViewChoice: showResults,
+      onOpenMyPage: showMyPage,
+    }),
     { fullBleed: true },
   );
+}
+
+// My Page (L3) — 로그인 사용자만 진입(홈 Account). 뒤로=홈, 선택 보기=결과.
+export function showMyPage() {
+  mount(renderMyPageView({ onBack: showHome, onViewChoice: showResults }));
 }
 
 export function showInput(prefill) {
