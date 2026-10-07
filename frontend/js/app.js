@@ -1,14 +1,15 @@
 // 뷰 컨트롤러: 웰컴(W-0) → 홈(LF-01) → 입력(LF-02) → 결과(LF-03) 전환.
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
-import { postRecommend, putSession } from "./api.js";
-import { ready as authReady, onAuthChange } from "./auth.js";
+import { postRecommend, putSession, getPreferences, putPreferences } from "./api.js";
+import { ready as authReady, onAuthChange, isSignedIn, displayName } from "./auth.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
 import { renderInputView } from "./pages/input.js";
 import { renderLoadingView } from "./pages/loading.js";
 import { renderErrorView } from "./pages/error.js";
 import { renderResultsView } from "./pages/results.js";
+import { renderOnboardingView } from "./pages/onboarding.js";
 import { setResults } from "./state.js";
 
 const viewEl = document.getElementById("view");
@@ -107,6 +108,35 @@ export function showResults({ request, env }) {
   );
 }
 
+// P9-1 선호 온보딩 — 정식 가입 후 '처음 한 번'만. needs_onboarding 은 서버가 판정
+// (onboarded_at 부재). Save·Skip 둘 다 PUT 으로 노출을 종료시켜 재노출을 막는다.
+let onboardingChecked = false; // 로드당 1회만 서버 확인(중복 onAuthChange 방어)
+
+export function showOnboarding() {
+  const finish = (fields) =>
+    putPreferences(fields)
+      .catch(() => {}) // 저장 실패해도 흐름을 막지 않음(graceful)
+      .finally(showHome);
+  mount(
+    renderOnboardingView({
+      name: displayName(),
+      onSubmit: finish,
+      onSkip: () => finish({ interests: [], prefer_shorter_walks: null }),
+    }),
+  );
+}
+
+async function maybeShowOnboarding() {
+  if (onboardingChecked || !isSignedIn()) return;
+  onboardingChecked = true;
+  try {
+    const env = await getPreferences();
+    if (env.ok && env.data?.needs_onboarding) showOnboarding();
+  } catch {
+    /* 확인 실패 시 조용히 건너뜀(온보딩은 1회 Should) */
+  }
+}
+
 function markSeenAndHome() {
   try {
     localStorage.setItem(WELCOME_KEY, "1");
@@ -129,9 +159,18 @@ try {
 authReady().finally(() => {
   if (seen) showHome();
   else showWelcome();
+  // 가입 직후 복귀면(정식 로그인) 1회 온보딩. 홈 위에 덮어씀.
+  maybeShowOnboarding();
 });
 
 // 로그인/로그아웃/OAuth 복귀로 세션이 바뀌면, 홈이 떠 있을 때 재렌더(Hello·Log out 반영).
 onAuthChange(() => {
   if (document.querySelector(".home")) showHome();
+  // 익명→Google 승격 직후 첫 로그인이면 온보딩(1회). 결과/선택 화면 위에는 띄우지 않음.
+  if (document.querySelector(".home") || document.querySelector(".welcome"))
+    maybeShowOnboarding();
+  // 온보딩이 떠 있는데 이름이 뒤늦게(getUser 보강) 잡히면 greeting 갱신(레이스 보정).
+  const title = document.querySelector(".onboarding-title");
+  const name = displayName();
+  if (title && name) title.textContent = `Welcome, ${name.split(" ")[0]}`;
 });

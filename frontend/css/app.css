@@ -646,3 +646,14 @@ body {
 .note-editing .input-head, .note-editing .where-section { display: none; }
 .note-editing .cond-pill--collapse { display: flex; }
 .field-duration { margin: calc(-1 * var(--space-6)) 0 0; font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-primary-ink); }
+
+/* ── P9-1 선호 온보딩 (L2) ── */
+.onboarding { display: flex; flex-direction: column; gap: var(--space-16); padding-top: var(--space-12); }
+.onboarding-head { display: flex; flex-direction: column; gap: var(--space-6); }
+.onboarding-title { margin: 0; font-size: var(--fs-title); font-weight: var(--fw-bold); }
+.onboarding-sub { margin: 0; font-size: var(--fs-meta); color: var(--c-text-muted); line-height: 1.45; }
+.onboarding-label { margin: var(--space-4) 0 0; font-size: var(--fs-body); font-weight: var(--fw-semibold); }
+.onboarding-chips { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+.onboarding-walk { display: flex; align-items: center; gap: var(--space-10); font-size: var(--fs-meta); font-weight: var(--fw-semibold); cursor: pointer; padding: var(--space-4) 0; }
+.onboarding-walk input { width: 20px; height: 20px; accent-color: var(--c-primary); cursor: pointer; }
+.onboarding-actions { display: flex; flex-direction: column; gap: var(--space-6); margin-top: auto; padding-top: var(--space-12); }
