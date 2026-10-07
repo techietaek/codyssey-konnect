@@ -6,11 +6,15 @@ import calendar
 from datetime import datetime
 
 from app.domain.timing import (
+    ExtractedHours,
     TimingVerdict,
+    judge_extracted_hours,
     judge_timing,
+    operating_hours_text,
     parse_closed_weekdays,
     parse_last_admission,
     parse_time_ranges,
+    should_retry_hours_with_llm,
 )
 
 # 2026-10-06 는 화요일. 윈도우 10:00~14:00.
@@ -122,3 +126,55 @@ def test_window_to_midnight_still_open():
         )[0]
         is TimingVerdict.OPEN
     )
+
+
+# ── LLM 추출 hours 재판정 (3단계, 보수적: OPEN 승격만) ──
+def test_retry_gate_only_for_parse_difficulty():
+    # regex가 '텍스트 있음·파싱 애매'로 UNCERTAIN → 재시도 대상
+    assert should_retry_hours_with_llm(
+        TimingVerdict.UNCERTAIN, "operating hours not parseable"
+    )
+    assert should_retry_hours_with_llm(
+        TimingVerdict.UNCERTAIN, "operating hours need checking"
+    )
+    # 빈값/숙박전용/이미 확정은 재시도 안 함
+    assert not should_retry_hours_with_llm(
+        TimingVerdict.UNCERTAIN, "operating hours not provided"
+    )
+    assert not should_retry_hours_with_llm(
+        TimingVerdict.OPEN, "open during your time window"
+    )
+
+
+def test_operating_hours_text_picks_first():
+    assert operating_hours_text({"usetimeculture": "09:00-18:00"}) == "09:00-18:00"
+    assert operating_hours_text({}) == ""
+
+
+def test_extracted_open_promotes():
+    h = ExtractedHours(determinable=True, open_time="09:00", close_time="18:00")
+    assert judge_extracted_hours(h, DAY, DAY_END)[0] is TimingVerdict.OPEN
+
+
+def test_extracted_always_open():
+    h = ExtractedHours(determinable=True, always_open=True)
+    assert judge_extracted_hours(h, DAY, DAY_END)[0] is TimingVerdict.OPEN
+
+
+def test_extracted_not_determinable_stays_uncertain():
+    h = ExtractedHours(determinable=False)
+    assert judge_extracted_hours(h, DAY, DAY_END)[0] is TimingVerdict.UNCERTAIN
+
+
+def test_extracted_non_overlap_not_hard_closed():
+    # 창(10~14)과 안 겹쳐도 LLM 단독 CLOSED 금지 → UNCERTAIN 유지
+    h = ExtractedHours(determinable=True, open_time="18:00", close_time="21:00")
+    assert judge_extracted_hours(h, DAY, DAY_END)[0] is TimingVerdict.UNCERTAIN
+
+
+def test_extracted_after_last_admission_stays_uncertain():
+    h = ExtractedHours(
+        determinable=True, open_time="09:00", close_time="18:00", last_admission="09:30"
+    )
+    late = datetime(2026, 10, 6, 10, 0)
+    assert judge_extracted_hours(h, late, DAY_END)[0] is TimingVerdict.UNCERTAIN

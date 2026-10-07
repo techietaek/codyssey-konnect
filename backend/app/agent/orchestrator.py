@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.hours_parser import parse_hours
 from app.agent.note_parser import parse_note
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
@@ -20,7 +21,13 @@ from app.domain.normalize import enrich_intro, normalize_candidate
 from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
-from app.domain.timing import TimingVerdict, judge_timing
+from app.domain.timing import (
+    TimingVerdict,
+    judge_extracted_hours,
+    judge_timing,
+    operating_hours_text,
+    should_retry_hours_with_llm,
+)
 from app.models.recommend import (
     Candidate,
     MovementInfo,
@@ -112,7 +119,15 @@ async def _enrich(
         return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
 
     # [judge] 운영시간·휴무·행사기간 + 예산 → 3상태. Hard 충돌은 제외.
-    timing, _reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    timing, reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    # regex가 '텍스트는 있으나 파싱 애매'로 UNCERTAIN → LLM 파서로 추출 재시도(OPEN 승격만).
+    if should_retry_hours_with_llm(timing, reason):
+        extracted = await parse_hours(operating_hours_text(intro), ctx.start_at)
+        if extracted is not None:
+            v, _r = judge_extracted_hours(extracted, ctx.start_at, ctx.end_at)
+            if v is TimingVerdict.OPEN:
+                trace.step("hours_llm", title=cand.title, from_=reason, to="open")
+                timing = v
     budget = judge_budget(cand, cond)
     status, flags = resolve_status(cand, timing, budget, cond)
     if status is None:

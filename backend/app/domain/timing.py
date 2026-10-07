@@ -16,11 +16,38 @@ from datetime import date, datetime, time
 from enum import Enum
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 
 class TimingVerdict(str, Enum):
     OPEN = "open"  # 가용시간 안에 확실히 영업
     CLOSED = "closed"  # 휴무/영업시간 외 — Hard 충돌(제외)
     UNCERTAIN = "uncertain"  # 판단 불가 — 추가 확인 필요
+
+
+class ExtractedHours(BaseModel):
+    """LLM이 공식 운영시간 자유텍스트에서 '추출'한 구조값 (생성 아님, A5 3단계).
+
+    LLM은 쓰여있는 것만 추출한다. 확정 불가면 determinable=false → UNCERTAIN 유지.
+    판정은 judge_extracted_hours(코드)가 하며, LLM 단독으로 Hard 제외(CLOSED)는 하지
+    않는다(보수적 — 오추출로 유효 후보를 지우지 않게). UNCERTAIN→OPEN 승격만 허용.
+    """
+
+    determinable: bool = Field(
+        description="True only if operating hours for the visit date are clearly stated in the text."
+    )
+    always_open: bool = Field(default=False, description="Open 24 hours / all day.")
+    open_time: str | None = Field(
+        default=None,
+        description="Opening time 'HH:MM' (24h) for the visit date, else null.",
+    )
+    close_time: str | None = Field(
+        default=None,
+        description="Closing time 'HH:MM' (24h) for the visit date, else null.",
+    )
+    last_admission: str | None = Field(
+        default=None, description="Last admission 'HH:MM' (24h) if stated, else null."
+    )
 
 
 _HOURS_KEYS = [
@@ -199,3 +226,46 @@ def judge_timing(
         return TimingVerdict.OPEN, "open during your time window"
     # 계절·복수시설·문의 등 → 단정하지 않음
     return TimingVerdict.UNCERTAIN, "operating hours need checking"
+
+
+# regex 로 UNCERTAIN(파싱불가/caveat) 이 된 자유텍스트만 LLM 파서로 재시도하기 위한 표식.
+_LLM_RETRY_REASONS = ("operating hours not parseable", "operating hours need checking")
+
+
+def operating_hours_text(intro: dict[str, Any]) -> str:
+    """운영시간 자유텍스트(타입별 필드 중 첫 값). 없으면 ''. (LLM 파서 입력용)"""
+    return _first(intro, _HOURS_KEYS)
+
+
+def should_retry_hours_with_llm(verdict: TimingVerdict, reason: str) -> bool:
+    """regex 가 '텍스트는 있으나 파싱 애매'로 UNCERTAIN 판정한 경우에만 LLM 재시도.
+    빈값('not provided')·숙박전용은 LLM으로도 못 얻으므로 제외."""
+    return verdict is TimingVerdict.UNCERTAIN and reason in _LLM_RETRY_REASONS
+
+
+def _hhmm(s: str | None) -> time | None:
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", s or "")
+    return _to_time(int(m.group(1)), int(m.group(2))) if m else None
+
+
+def judge_extracted_hours(
+    h: ExtractedHours, start_dt: datetime, end_dt: datetime
+) -> tuple[TimingVerdict, str]:
+    """LLM 추출값으로 재판정. **OPEN 승격만** — 확정 못하면 UNCERTAIN(기존 유지).
+    LLM 단독 Hard 제외(CLOSED)는 하지 않는다(보수적, 오추출 방어)."""
+    if not h.determinable:
+        return TimingVerdict.UNCERTAIN, "hours not determinable from text"
+    if h.always_open:
+        return TimingVerdict.OPEN, "open 24 hours (parsed)"
+    s = _hhmm(h.open_time)
+    e = _hhmm(h.close_time)
+    if not (s and e and e > s):
+        return TimingVerdict.UNCERTAIN, "hours not determinable from text"
+    ws = start_dt.time()
+    we = _window_end_time(start_dt, end_dt)
+    if not (s < we and e > ws):  # 안 겹쳐도 LLM 단독 CLOSED 안 함 → UNCERTAIN 유지
+        return TimingVerdict.UNCERTAIN, "parsed hours do not overlap"
+    last = _hhmm(h.last_admission)
+    if last is not None and ws > last:
+        return TimingVerdict.UNCERTAIN, "after last admission (parsed)"
+    return TimingVerdict.OPEN, "open during your time window (parsed)"

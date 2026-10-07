@@ -92,8 +92,22 @@ HIDE AND SEEK      Facility Utilization Fees: Mon-Fri 21,000won / Sat-Sun 26,000
   - `agent/orchestrator.py`: `_enrich`에서 intro/common과 **병렬**로 detail_info 조회 후 `enrich_intro` 적용
   - `pytest` 5개 추가(총 86 통과), ruff/black 통과
   - **라이브 재측정 (동일 49후보):** price unknown **65%→36%**, free 24%→48%, **fits 20%→30%**, **check_needed 73%→63%**. 공식 데이터만으로 달성(정책 위반 없음).
-- [ ] **3단계 — LLM normalize 스텝** (추출 전용): 남은 시간 caveat/파싱실패·모호 요금 정리. (2단계 후 check의 주원인은 **시간 uncertain**으로 이동 — LLM 파서 타깃)
+- [x] **3단계 — LLM normalize 스텝 (운영시간 추출)** (2026-10-07) ✅
+  - `domain/timing.py`: `ExtractedHours`(LLM I/O 스키마) + `judge_extracted_hours()`(코드 판정) + `should_retry_hours_with_llm()` 게이트 + `operating_hours_text()`
+  - `agent/hours_parser.py`: 공식 운영시간 자유텍스트 → 방문일 기준 구조화 **추출**(temp 0·structured output·추정 금지·graceful)
+  - `agent/orchestrator.py`: regex가 "파싱불가/caveat"로 UNCERTAIN일 때만 LLM 재시도. **OPEN 승격만** — LLM 단독 Hard 제외(CLOSED) 없음(보수적, 오추출 방어)
+  - `pytest` 9개 추가(총 93 통과), ruff/black 통과
+  - **라이브 재측정 (동일 49후보):** check_needed **63%→42%**, **fits 30%→51%**. LLM 18건 호출(게이트된 subset) 중 12건 OPEN 승격
+  - **환각 검증:** 승격 사례 전부 공식 텍스트에 근거(계절/요일 구간을 방문일 기준 정확 선택). 예: "March-October 09:00-18:00 / Nov-Feb 09:00-17:00" → 10월 방문 → 09:00-18:00
 - [ ] **4단계 — KOPIS/서울문화포털 신규 연동**: type 85 보강 → 이후 Places 영업시간(Product 플래그)
+
+### 누적 개선 (동일 49후보, 공식 데이터만)
+
+| 단계 | check_needed | fits |
+|---|---|---|
+| baseline (detailIntro2만) | 73% | 20% |
+| +detailInfo2 (2단계) | 63% | 30% |
+| +LLM hours (3단계) | **42%** | **51%** |
 
 ---
 
