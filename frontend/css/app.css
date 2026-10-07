@@ -697,3 +697,61 @@ body {
 .mypage-pref-actions { display: flex; flex-direction: column; gap: var(--space-6); margin-top: var(--space-8); }
 .mypage-pref-note { margin: 0; font-size: var(--fs-badge); color: var(--c-text-muted); }
 .reset-confirm { display: flex; flex-direction: column; gap: var(--space-12); }
+
+/* ───────────────────────── AG-4 · 단일 챗봇 (chat) ───────────────────────── */
+.chat { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--c-bg); }
+.chat-header { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-10); padding: var(--space-12) var(--space-14) var(--space-6); }
+.chat-title { font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-text); }
+.chat-trip { flex: 0 0 auto; display: flex; gap: var(--space-6); padding: 0 var(--space-14) var(--space-6); flex-wrap: wrap; }
+.trip-chip { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-4) var(--space-10); font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text); cursor: pointer; }
+.chat-ai-notice { flex: 0 0 auto; margin: 0; padding: 0 var(--space-14) var(--space-6); font-size: var(--fs-badge); color: var(--c-text-muted); }
+
+.chat-log { flex: 1 1 auto; overflow-y: auto; padding: var(--space-8) var(--space-14) var(--space-12); display: flex; flex-direction: column; gap: var(--space-10); }
+.chat-row { display: flex; }
+.chat-row--user { justify-content: flex-end; }
+.chat-row--assistant { justify-content: flex-start; }
+.chat-bubble { max-width: 80%; padding: var(--space-8) var(--space-12); border-radius: var(--r-card); font-size: var(--fs-body); line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.chat-bubble--user { background: var(--c-primary); color: var(--c-on-primary); border-bottom-right-radius: var(--space-4); }
+.chat-bubble--assistant { background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-text); border-bottom-left-radius: var(--space-4); }
+.chat-answer-text { margin: 0; }
+.chat-cites { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; }
+.chat-cites-label { font-size: var(--fs-badge); color: var(--c-text-muted); }
+.chat-cite { font-size: var(--fs-badge); background: var(--c-check-bg); color: var(--c-check-text); border-radius: var(--r-full); padding: 1px var(--space-8); }
+.chat-typing { letter-spacing: 2px; color: var(--c-text-muted); }
+
+/* 넓은 결과(카드·루트)는 전체폭 블록 */
+.chat-block { width: 100%; }
+.chat-cards { display: flex; flex-direction: column; gap: var(--space-12); }
+.chat .btn-select { display: none; } /* 선택 확정은 챗봇 범위 밖(이후 AG-3) */
+.chat .card { max-width: 100%; }
+
+.chat-suggest { display: flex; flex-direction: column; gap: var(--space-6); align-items: flex-start; margin-top: auto; }
+.chat-suggest-chip { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-6) var(--space-12); font-size: var(--fs-body); color: var(--c-text); cursor: pointer; text-align: left; }
+.chat-suggest-chip:hover { border-color: var(--c-primary); color: var(--c-primary); }
+
+.chat-input-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: var(--space-8); padding: var(--space-8) var(--space-14) calc(var(--space-12) + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--c-border); background: var(--c-bg); }
+.chat-textarea { flex: 1 1 auto; font-family: inherit; font-size: var(--fs-body); color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-8) var(--space-12); resize: none; outline: none; max-height: 120px; }
+.chat-textarea:focus { border-color: var(--c-primary); }
+.chat-send { flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--r-full); border: 0; background: var(--c-primary); color: var(--c-on-primary); font-size: 18px; font-weight: var(--fw-bold); cursor: pointer; }
+.chat-send:hover { opacity: 0.92; }
+
+/* ── Route Card (LF-08) ── */
+.route-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-12); display: flex; flex-direction: column; gap: var(--space-10); }
+.route-card-head { display: flex; flex-direction: column; gap: var(--space-6); }
+.route-card-name { margin: 0; font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-text); }
+.route-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.route-pill { font-size: var(--fs-badge); font-weight: var(--fw-semibold); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: 2px var(--space-8); color: var(--c-text); }
+.route-stay-note { margin: 0; font-size: var(--fs-badge); color: var(--c-text-muted); font-style: italic; }
+.route-timeline { display: flex; flex-direction: column; gap: var(--space-4); }
+.route-start { display: flex; align-items: center; gap: var(--space-8); font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--c-primary); }
+.route-seg { display: flex; align-items: center; gap: var(--space-8); padding-left: 3px; min-height: 22px; }
+.route-seg-rail { width: 2px; align-self: stretch; margin-left: 8px; background: var(--c-border); }
+.route-seg-text { font-size: var(--fs-badge); color: var(--c-text-muted); }
+.route-stop { display: flex; gap: var(--space-10); align-items: flex-start; padding: var(--space-6) 0; }
+.route-stop-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--r-full); background: var(--c-primary); color: var(--c-on-primary); font-size: var(--fs-badge); font-weight: var(--fw-bold); display: flex; align-items: center; justify-content: center; }
+.route-stop-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.route-stop-title-line { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+.route-stop-glyph { font-size: 16px; }
+.route-stop-title { font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-text); }
+.route-stop-meta { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+.badge--sm { font-size: 10px; padding: 1px var(--space-6); }

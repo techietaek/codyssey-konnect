@@ -9,6 +9,7 @@ import { renderInputView } from "./pages/input.js";
 import { renderLoadingView } from "./pages/loading.js";
 import { renderErrorView } from "./pages/error.js";
 import { renderResultsView } from "./pages/results.js";
+import { renderChatView } from "./pages/chat.js";
 import { renderOnboardingView } from "./pages/onboarding.js";
 import { renderMyPageView } from "./pages/mypage.js";
 import { setResults } from "./state.js";
@@ -31,11 +32,17 @@ export function showHome() {
   mount(
     renderHomeView({
       onStartA: () => showInput(),
+      onOpenChat: showChat,
       onViewChoice: showResults,
       onOpenMyPage: showMyPage,
     }),
     { fullBleed: true },
   );
+}
+
+// AG-4 단일 챗봇 — FAQ(RAG)·즉시추천·문화루트를 하나의 대화 흐름으로.
+export function showChat() {
+  mount(renderChatView({ onBack: showHome }), { fullBleed: true });
 }
 
 // My Page (L3) — 로그인 사용자만 진입(홈 Account). 뒤로=홈, 선택 보기=결과.

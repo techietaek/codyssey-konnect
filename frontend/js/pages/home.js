@@ -58,7 +58,12 @@ function coreAction({ kicker, title, sub, cta, disabled, onClick }) {
   return card;
 }
 
-export function renderHomeView({ onStartA, onViewChoice, onOpenMyPage }) {
+export function renderHomeView({
+  onStartA,
+  onOpenChat,
+  onViewChoice,
+  onOpenMyPage,
+}) {
   const root = el("section", "home");
 
   // 소프트 헤더 배경(일러스트 자리) — 토큰 그라디언트.
@@ -164,11 +169,12 @@ export function renderHomeView({ onStartA, onViewChoice, onOpenMyPage }) {
       onClick: onStartA,
     }),
     coreAction({
-      kicker: "CHOOSE A DATE",
-      title: "Create a cultural route",
-      sub: "2–3 experiences for a date you choose.",
-      cta: "Create route",
-      disabled: true,
+      kicker: "ASK OR PLAN",
+      title: "Chat with KONNECT",
+      sub: "Ask travel questions, get ideas, or plan a culture route.",
+      cta: "Open chat",
+      disabled: false,
+      onClick: onOpenChat,
     }),
   );
   content.append(actions);

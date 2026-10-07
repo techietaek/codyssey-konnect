@@ -24,6 +24,16 @@ export function postRecommend(payload, signal) {
   });
 }
 
+// 단일 챗봇 Agent (AG-1/2) — 자연어 메시지를 tool-calling 으로 라우팅.
+// { message, context? } → { kind, tool, message?, answer?, recommendation?, route? }.
+export function postChat(message, context, signal) {
+  return request("/api/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, context: context ?? null }),
+    signal,
+  });
+}
+
 // 확인 시트용 — note 를 '이해한 조건'으로만 구조화(추천 조회 없음).
 export function postParse(note) {
   return request("/api/parse", {
