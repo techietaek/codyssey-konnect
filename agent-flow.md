@@ -202,14 +202,16 @@
 
 ## 5. Phase 3 — RAG · B 문화루트
 
-### R1 — RAG (FAQ·여행정보·콘텐츠 Q&A)
-> 참조: `PRD.md §6.5·FR-C8`.
-- [ ] 지식 문서 청크 → OpenAI Embeddings → Supabase **pgvector** 저장 (`backend/app/rag/`, `vecs`)
-- [ ] 질의 유사도 검색 → LLM이 **검색 근거 범위 안에서만** 답변
-- [ ] 사실 데이터(가격·운영·예약)는 RAG가 아니라 공식 API 정본 — RAG는 참고지식 한정
-- [ ] 근거 없으면 생성 금지 → `추가 확인 필요`·공식 경로. 범위 밖 질문 안내
-- [ ] 별도 챗봇 화면 분리 금지 — A·B 자연어 대화 흐름에 통합
-- **Done when:** FAQ/콘텐츠 질문에 근거 인용 답변, 근거 없으면 생성 안 함(게이트).
+### R1 — RAG (FAQ·여행정보·콘텐츠 Q&A) ✅ 완료(2026-10-07, 라이브 검증 Green)
+> 참조: `PRD.md §6.5·FR-C8`. **단일 챗봇 Agent 비전의 `rag_search` tool 내용물**(AG 단계에서 재사용).
+> **백엔드(2026-10-07):** `rag/knowledge/*.md`(시드 5문서, 사실 아닌 참고지식) · `chunk`(섹션 단위) · `embed`(text-embedding-3-small 1536d) · `store`(vecs pgvector) · `retrieve`(유사도검색+근거판정+근거내 답변/refuse) · `ingest`(적재 스크립트) · `models/rag.py` · `api/ask.py`(POST /api/ask) · `test_rag.py`(+6, 131 pytest Green). ruff/black 클린.
+- [x] 지식 문서 청크 → OpenAI Embeddings → Supabase **pgvector** 저장 (`backend/app/rag/`, `vecs`)
+- [x] 질의 유사도 검색 → LLM이 **검색 근거 범위 안에서만** 답변 (코드 완료)
+- [x] 사실 데이터(가격·운영·예약)는 RAG가 아니라 공식 API 정본 — RAG는 참고지식 한정 (프롬프트+시드가 사실 생성 금지)
+- [x] 근거 없으면 생성 금지 → refuse+공식 경로 (`SIM_THRESHOLD` 미만이면 `grounded=False`)
+- [ ] 별도 챗봇 화면 분리 금지 — A·B 자연어 대화 흐름에 통합 ← **AG-4(챗봇 UI)에서** (지금은 /api/ask 백엔드만)
+- **⚠ 운영 노트(cold-start 필독):** `vecs`는 Postgres 직결 DSN 필요 → `.env`에 **`SUPABASE_DB_URL`**(대시보드 Connect > **Session pooler** URI, 5432). `pgvector` 확장 ON. `vecs`는 `psycopg2-binary`를 쓰는데 SQLAlchemy 2.1+ 가 bare `postgresql://` 를 psycopg(v3)로 해석 → `store.py` 가 `+psycopg2` 로 고정. 미설정 시 `/api/ask`만 503(추천·세션 무영향). 적재: `python -m app.rag.ingest`(27청크/5문서, 멱등).
+- **Done when:** ✅ 적재 후 FAQ 질문에 근거+citation 답변, 가격 등 사실은 거부(공식 경로), 범위 밖은 `grounded=false` refuse — 라이브 3케이스(tip/입장료/범위밖) + trace(`rag_retrieve`/`rag_answer`/`rag_refuse`) Green. UI 통합은 AG-4.
 
 ### B1 — B 입력 (LF-04, Conversation-first)
 > 참조: `PRD.md §4.3`, `DESIGN.md 02 섹션`.

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     supabase_secret_key: str = ""
+    # vecs(pgvector) 직결용 Postgres DSN. REST(supabase-py)로는 벡터 upsert/query 불가 →
+    # RAG 적재·검색에만 사용. 미설정 시 RAG 경로만 503(추천·세션 경로 영향 없음).
+    supabase_db_url: str = ""
 
     # ── Maps / Movement ──
     naver_map_client_id: str = ""
