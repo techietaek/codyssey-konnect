@@ -116,9 +116,6 @@ function markSeenAndHome() {
   showHome();
 }
 
-// 익명 세션을 앱 시작 시 선발급(요청에 JWT 부착·L1c 영속 준비). 실패해도 진행.
-authReady();
-
 // 첫 실행이면 웰컴(W-0), 이후엔 홈(LF-01)으로 진입.
 let seen = false;
 try {
@@ -126,5 +123,10 @@ try {
 } catch {
   /* noop */
 }
-if (seen) showHome();
-else showWelcome();
+
+// 세션(익명/정식) 준비 후 첫 화면을 그린다 → 홈의 로그인 상태(Hello·Log out)가
+// 첫 페인트에 반영된다. auth 실패해도 화면은 그린다(비인증 진행).
+authReady().finally(() => {
+  if (seen) showHome();
+  else showWelcome();
+});

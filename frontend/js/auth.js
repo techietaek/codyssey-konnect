@@ -7,6 +7,14 @@ import { API_BASE } from "./config.js";
 let _client = null;
 let _ready = null;
 let _signedIn = false; // 비익명(정식 로그인) 여부 — FR-L1 게이팅용 동기 플래그
+let _displayName = null; // 정식 로그인 시 표시 이름(Google) — 동기 캐시
+
+function _applySession(session) {
+  const u = session?.user;
+  _signedIn = !!u && u.is_anonymous !== true;
+  const m = u?.user_metadata || {};
+  _displayName = _signedIn ? m.full_name || m.name || m.email || null : null;
+}
 
 async function init() {
   const cfg = await (await fetch(`${API_BASE}/api/config`)).json();
@@ -16,7 +24,7 @@ async function init() {
   });
 
   _client.auth.onAuthStateChange((_event, session) => {
-    _signedIn = !!session?.user && session.user.is_anonymous !== true;
+    _applySession(session);
   });
 
   // 세션이 없으면 익명으로 선발급(요청 조건·선택을 user_id 로 저장하기 위함, L1c)
@@ -26,7 +34,7 @@ async function init() {
   if (!session) {
     await _client.auth.signInAnonymously();
   } else {
-    _signedIn = session.user?.is_anonymous !== true;
+    _applySession(session);
   }
   return _client;
 }
@@ -53,6 +61,18 @@ export async function getToken() {
 // 정식 로그인(비익명) 여부 — 동기(캐시). 익명 세션은 false.
 export function isSignedIn() {
   return _signedIn;
+}
+
+// 정식 로그인 시 표시 이름(Google) — 없으면 null. 동기(캐시).
+export function displayName() {
+  return _displayName;
+}
+
+// 로그아웃 → 깨끗이 재부트(홈=로그인 전 상태, 익명 세션 재발급).
+export async function signOut() {
+  await ready();
+  if (_client) await _client.auth.signOut();
+  window.location.reload();
 }
 
 // Google 로그인 (L1d). 익명 세션이 있으면 **identity linking**으로 동일 user_id 를
