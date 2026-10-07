@@ -22,7 +22,10 @@ _SYSTEM = (
     "You extract ONLY the conditions a traveler explicitly stated in their free-text "
     "note for a Seoul cultural-experience search. Do NOT infer, guess, or add anything "
     "they did not state. If a field is not mentioned, leave it at its default "
-    "(empty list / false / null). Map interests to the fixed enum values. Budget is in "
+    "(empty list / false / null). Map interests to the fixed enum values. "
+    "Put interests the user likes in 'interests'; put interests they explicitly "
+    "dislike or want to avoid (e.g. 'not into performances', 'no festivals') in "
+    "'avoid_interests'. Never place the same interest in both. Budget is in "
     "Korean won (KRW); only fill budget if the user gave a concrete amount. Never invent "
     "prices, times, or availability."
 )

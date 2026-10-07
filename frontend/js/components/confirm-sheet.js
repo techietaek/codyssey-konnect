@@ -22,6 +22,7 @@ function fmtTime(iso) {
 export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
   const edited = JSON.parse(JSON.stringify(conditions || {}));
   edited.interests = edited.interests || [];
+  edited.avoid_interests = edited.avoid_interests || [];
 
   return openSheet((close) => {
     const root = el("div", "confirm-sheet");
@@ -66,6 +67,11 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
     for (const code of edited.interests.slice()) {
       addChip(INTEREST_LABEL[code] || code, () => {
         edited.interests = edited.interests.filter((c) => c !== code);
+      });
+    }
+    for (const code of edited.avoid_interests.slice()) {
+      addChip(`Not: ${INTEREST_LABEL[code] || code}`, () => {
+        edited.avoid_interests = edited.avoid_interests.filter((c) => c !== code);
       });
     }
     if (edited.free_only)

@@ -10,10 +10,10 @@ LLM이 이유를 '생성'하지 않는다 — 확인된 근거(유형·가격·�
 from __future__ import annotations
 
 from app.domain.budget import BudgetVerdict
+from app.domain.ranking import TYPE_INTERESTS
 from app.domain.timing import TimingVerdict
 from app.models.recommend import (
     Candidate,
-    ExperienceType,
     InterestCode,
     ParsedConditions,
     PriceStatus,
@@ -43,18 +43,7 @@ _INTEREST_CODE = {
     InterestCode.FESTIVALS_EVENTS: "I06",
 }
 
-# 후보 유형이 충족하는 관심사(내부 5유형↔6관심사, 1:1 아님)
-_TYPE_INTERESTS = {
-    ExperienceType.HISTORIC_VISIT: {
-        InterestCode.PALACES_HISTORIC,
-        InterestCode.TRADITIONAL,
-    },
-    ExperienceType.EXHIBITION: {InterestCode.ART_EXHIBITIONS},
-    ExperienceType.PERFORMANCE: {InterestCode.LIVE_PERFORMANCES},
-    ExperienceType.FESTIVAL_EVENT: {InterestCode.FESTIVALS_EVENTS},
-    ExperienceType.HANDS_ON: {InterestCode.HANDS_ON, InterestCode.TRADITIONAL},
-    ExperienceType.DEFAULT: set(),
-}
+# 후보 유형↔관심사 매핑은 domain/ranking.TYPE_INTERESTS 를 정본으로 공유한다.
 
 
 def select_reasons(
@@ -68,7 +57,7 @@ def select_reasons(
     picks: list[tuple[int, str]] = []
 
     # 1) 관심사 — 확정 유형이 사용자가 말한 관심사와 매치
-    satisfied = _TYPE_INTERESTS.get(cand.type, set())
+    satisfied = TYPE_INTERESTS.get(cand.type, set())
     for ic in cond.interests:
         if ic in satisfied:
             picks.append((1, _INTEREST_CODE[ic]))
