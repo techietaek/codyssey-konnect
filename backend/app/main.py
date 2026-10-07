@@ -86,6 +86,11 @@ async def public_config() -> dict[str, str]:
     """프론트가 쓰는 공개 설정만 노출(비밀키 아님).
 
     Naver Map client id 는 공개 식별자이며 NCP 콘솔의 Web 서비스 URL 등록으로
-    도메인 제한된다(.env 주석 참고). Secret 키는 절대 노출하지 않는다.
+    도메인 제한된다(.env 주석 참고). Supabase URL·publishable key 도 공개값
+    (RLS·도메인 제한으로 보호). Secret 키는 절대 노출하지 않는다.
     """
-    return {"naver_map_client_id": settings.naver_map_client_id}
+    return {
+        "naver_map_client_id": settings.naver_map_client_id,
+        "supabase_url": settings.supabase_url,
+        "supabase_publishable_key": settings.supabase_publishable_key,
+    }

@@ -2,6 +2,7 @@
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
 import { postRecommend } from "./api.js";
+import { ready as authReady } from "./auth.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
 import { renderInputView } from "./pages/input.js";
@@ -112,6 +113,9 @@ function markSeenAndHome() {
   }
   showHome();
 }
+
+// 익명 세션을 앱 시작 시 선발급(요청에 JWT 부착·L1c 영속 준비). 실패해도 진행.
+authReady();
 
 // 첫 실행이면 웰컴(W-0), 이후엔 홈(LF-01)으로 진입.
 let seen = false;
