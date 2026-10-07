@@ -28,7 +28,7 @@
   - [~] **데이터 검색 품질 개선** (2026-10-07~) — check_needed 과다(실측 73%) 완화. 원인·솔루션·로드맵은 **`docs/data-quality.md`** 에서 관리. 1~3단계 완료(원인 집계 → `detailInfo2` 연동 → LLM 운영시간 추출): **check 73%→42%, fits 20%→51%**(공식 데이터만, 환각 검증 완료). 4단계(KOPIS/서울문화포털) 대기.
   - [x] A7 상태 UX 보강 (branch `phase1-a-loading-states`, 2026-10-07) — 조회 대기 **로딩 화면**(shimmer 스켈레톤 + 회전 단계문구 + 펄스 sparkle, Cancel=요청 AbortController 취소) · 조회 플로우를 `app.js startRecommend`로 중앙화(로딩→결과/취소복귀/오류) · **0건** 지도 축소(NAVER 로고 노출 방지)+경고 아이콘/텍스트 · **전용 오류 화면**(Couldn't load, Try again/Edit conditions, 조건 유지) · 바텀시트 Cancel 버튼 제거 + **grip 스와이프-다운 닫기**(백드롭/Esc 유지). headless 렌더/드래그 검증 Green.
   - [x] A8 Soft 랭킹 A안 (2026-10-07) — 결과 표시 순서 **fits→alternative→check_needed**, 같은 등급 내 **관심사 선호↑/비선호↓**(`avoid_interests` LLM 추출), 그다음 거리순. 제외 아님(Soft only). 정본 `backend/app/domain/ranking.py`. **B안(본격 Soft 스코어링)은 Phase 2/3 — `docs/soft-ranking.md` §3 참조(Product 결정 3건 포함).**
-- [ ] Phase 2 — 로그인·개인화 ← **다음 Phase** · ⚑ **Soft 랭킹 B안 설계·착수**(걷기 선호 FR-L4 + 저장 Preference 반영, `docs/soft-ranking.md` §3)
+- [~] Phase 2 — 로그인·개인화 (branch `phase2-login-personalization`) — **L1 로그인·연속성 완료**(L1a~d, 실로그인 검증). ← **다음: L2 선호 온보딩**(P-09, FR-L3/L4) → L3 My Page. ⚑ **Soft 랭킹 B안**(걷기 선호 + 저장 Preference 반영, `docs/soft-ranking.md` §3)은 L2에서 착수 가능.
 - [ ] Phase 3 — RAG · B 문화루트 · ⚑ **관심사·이동 균형 랭킹**(FR-B4) = Soft 랭킹 B안 구현부 · ⚑ **전면 Agentic 추천(2b)**: LLM 조건해석→멀티소스 조회→후보 재투입→LLM 최종 선별. 목표 아키텍처·신뢰 경계는 **`docs/agent-architecture.md`** (사실은 끝까지 코드 소유). 개방형 선호 배제/기피(옵션 3 슬라이스)는 그 전에 선행 가능.
 - [ ] Phase 4 — 배포·실사용자 검증·발표
 
@@ -162,17 +162,20 @@
 ## 4. Phase 2 — 로그인 · 개인화
 > 참조: `PRD.md §4.4`, `product/06-ai-tech-boundary.md`(P-01~P-09), Supabase(이미 Google·Anonymous·pgvector ON).
 
-### L1 — 로그인 게이트 + 연속성/마이그레이션
-> 진행(2026-10-07): **L1a**(백엔드 JWT/JWKS 검증)·**L1b**(프론트 익명 로그인+토큰 부착)·**L1c**(서버 영속 `user_sessions`+RLS, saveChoice/요청 서버 미러) 완료·라이브 검증. **L1d**(Google 게이팅+identity linking) 남음.
+### L1 — 로그인 게이트 + 연속성/마이그레이션 ✅ 완료(2026-10-07)
+> **L1a** 백엔드 JWT/JWKS 검증(`core/auth.py`) · **L1b** 프론트 익명 로그인+Bearer 부착(`auth.js`, `/api/config`에 supabase url/pub key) · **L1c** 서버 영속 `user_sessions`+RLS(`db/migrations/0001`, `db/sessions.py`, `api/session.py`)·saveChoice/요청 서버 미러 · **L1d** Google 로그인(홈 "Log in" + 로그인 시트) + Hello 인사/Log out. 모두 실브라우저 로그인까지 검증 Green.
 - [x] Supabase Anonymous Sign-in으로 익명 user_id 선발급 → 요청조건·선택 저장 (L1b·L1c)
-- [ ] 비회원 첫 추천 결과까지 1회 → 두 번째/재추천 시 Google 로그인 유도 (FR-L1) ← L1d (현재 isLoggedIn=비익명 반영, 버튼 활성화만 남음)
-- [ ] Google 로그인 시 **identity linking**으로 동일 user_id 승격(데이터 자동 보존) (FR-L2) ← L1d
-- [ ] `Not now`는 기존 결과·탐색 유지, 로그인 후 현재 조건·결과·선택 연속 ← L1d
-- [x] 백엔드 JWT 검증 = **JWKS**(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), 공유 secret 미사용 (L1a, `core/auth.py`)
-- [x] DB RLS: 각 user(익명 포함)는 `auth.uid()` 일치 데이터만 접근 (L1c, `db/migrations/0001`)
-- [x] 임시 상태를 Trip·장기 Preference로 **자동 승격 금지** (FR-L5) — L1c는 세션 연속성만 저장, 선호 학습 없음
-- [~] 프론트: L-1 로그인 시트(Continue with Google / Not now · Kept context) — 디자인 구현됨, Google 버튼 활성화는 L1d
-- **Done when:** 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름이 이어지고 데이터가 계정으로 보존된다. (L1d에서 충족)
+- [x] 비회원 첫 추천 후 재추천 시 로그인 유도 (FR-L1) — `isLoggedIn()`=비익명, "Find new options"→로그인 시트
+- [x] Google 로그인 — 익명이면 `linkIdentity`(user_id 보존, FR-L2), 이미 연결된 계정이면 `signInWithOAuth`로 폴백
+- [x] 백엔드 JWT 검증 = **JWKS**, 공유 secret 미사용 (L1a)
+- [x] DB RLS: 각 user(익명 포함)는 `auth.uid()` 일치 데이터만 (L1c)
+- [x] 임시 상태를 Trip·장기 Preference로 **자동 승격 금지** (FR-L5) — 세션 연속성만 저장, 선호 학습 없음
+- **⚠ 운영 노트(cold-start 필독 — Supabase 대시보드 설정 의존):**
+  - Google·Anonymous provider **ON**, **Manual linking ON**(안 켜면 linkIdentity가 `manual_linking_disabled`). Redirect URLs에 `http://localhost:5500/**`(+배포 URL).
+  - **identity linking 직후 토큰에 `is_anonymous=true`가 남음** → 로드 시 익명 클레임이면 `refreshSession()`으로 클레임 동기화(`auth.js` 구현됨).
+  - 같은 Google 계정 재로그인 시 `identity_already_exists` → `signInWithOAuth` 1회 폴백(`auth.js` 구현됨).
+  - 로컬 로그인은 **일반 브라우저 탭**에서(임베디드 웹뷰/자동화 브라우저는 Google이 `disallowed_useragent`로 차단).
+- **Done when:** ✅ 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름 연속·데이터 계정 보존.
 
 ### L2 — P-09 선호 온보딩
 - [ ] Google 최초 가입 1회·1화면: 관심사 6개 복수 + `□ Prefer shorter walks`(단일·미선택 허용), 모두 Skip 가능 (FR-L3)
