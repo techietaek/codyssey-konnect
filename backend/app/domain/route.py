@@ -47,8 +47,12 @@ ROUTE_ELIGIBLE_TYPES = {
 }
 
 # 한 구간(도보 레그) 상한(직선거리, 거친 게이트). 이보다 멀면 다음 스톱을 붙이지 않는다
-# → 3개 강제 없이 2~3 스톱 자연 결정. A 검색 반경과 동일(1500m, 걷기 현실 범위).
+# (걷기 현실 범위, A 검색 반경과 동일 1500m).
 MAX_LEG_M = 1500.0
+
+# 하루 코스 스톱 수 실용 상한(Product: 개수 제한 없이 '하루 동선' — 실제 제한은 시간창).
+# 이건 고정 목표치가 아니라 Tmap 호출·조립을 bound 하는 안전 상한. 실제 길이는 시간이 결정.
+MAX_DAY_STOPS = 8
 
 
 def haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -108,12 +112,12 @@ def assemble_route(
     candidates: list[Candidate],
     *,
     min_stops: int = 2,
-    max_stops: int = 3,
+    max_stops: int = MAX_DAY_STOPS,
 ) -> list[Candidate]:
-    """feasible 후보(거리순) → 하루 1코스(2~3 스톱, 방문 순서 확정).
+    """feasible 후보(거리순) → 하루 동선(걸을 수 있는 만큼 이어붙인 체인, 방문 순서 확정).
 
-    PRD FR-B4: 루트 1개·2~3 스톱(2·3 동등, 3개 강제 금지). 2개 미만이면 빈 리스트
-    (루트 성립 실패 → 개별추천 전환, FR-B7·B-T06).
+    개수 고정 제한 없음(Product: 하루 동선) — walkable leg 상한으로 자연 종료, 실제 길이는
+    호출부의 시간창 트림(fit_count)이 결정. 2개 미만이면 빈 리스트(성립 실패 → 개별 전환).
     """
     eligible = [c for c in candidates if route_eligible(c)]
     if len(eligible) < min_stops:
@@ -186,6 +190,29 @@ def visit_plan(cand: Candidate) -> tuple[int, Provenance]:
     return _TYPE_VISIT_MIN.get(cand.type, _TYPE_VISIT_MIN[ExperienceType.DEFAULT]), (
         Provenance.PLANNED
     )
+
+
+def fit_count(
+    walk_minutes: list[int | None], stops: list[Candidate], available_minutes: int
+) -> int:
+    """시간창에 맞는 최장 스톱 수 — 도보+방문 누적이 available_minutes 를 넘지 않는 선까지.
+
+    하루 동선을 '시간이 허용하는 만큼' 채운다(개수 제한 대신 시간 제한). 강제 채움 아님 —
+    다음 스톱이 창을 넘으면 멈춘다. 도보 미확인 구간을 만나면 그 이후는 시각을 못 묶어 중단.
+    """
+    elapsed = 0
+    keep = 0
+    for i, s in enumerate(stops):
+        w = walk_minutes[i] if i < len(walk_minutes) else None
+        if w is None:
+            break
+        minutes, _ = visit_plan(s)
+        elapsed += w + minutes
+        if elapsed <= available_minutes:
+            keep = i + 1
+        else:
+            break
+    return keep
 
 
 def build_schedule(

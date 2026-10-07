@@ -51,7 +51,8 @@ class Route(BaseModel):
     status: ResultStatus = ResultStatus.FITS
     # 코스 전체 '가기 전 확인할 것' 집계("{내용} · {장소}").
     checks: list[str] = Field(default_factory=list)
-    stops: list[RouteStop] = Field(min_length=2, max_length=3)
+    # 하루 동선: 개수 고정 제한 없음(Product) — 시간창이 길이를 정한다. max 는 안전 상한.
+    stops: list[RouteStop] = Field(min_length=2, max_length=8)
     segments: list[RouteSegment] = Field(default_factory=list)
     # 루트 전체 도보 이동시간(알려진 구간 합, estimate). 한 구간이라도 미확인이면 None.
     total_walk_minutes: int | None = None

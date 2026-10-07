@@ -73,11 +73,14 @@ export function renderChatView({ onBack }) {
   const tripBar = el("div", "chat-trip");
   const locChip = el("button", "trip-chip");
   locChip.type = "button";
-  const timeChip = el("button", "trip-chip");
-  timeChip.type = "button";
+  const startChip = el("button", "trip-chip");
+  startChip.type = "button";
+  const endChip = el("button", "trip-chip");
+  endChip.type = "button";
   function refreshTrip() {
     locChip.textContent = `📍 ${locationLabel}`;
-    timeChip.textContent = `🕑 ${fmtTime(startValue)}–${fmtTime(endValue)}`;
+    startChip.textContent = `🕑 ${fmtTime(startValue)}`;
+    endChip.textContent = `🏁 by ${fmtTime(endValue)}`;
   }
   locChip.addEventListener("click", () =>
     openLocationSheet({
@@ -89,20 +92,42 @@ export function renderChatView({ onBack }) {
       },
     }),
   );
-  timeChip.addEventListener("click", () =>
+  startChip.addEventListener("click", () =>
     openTimeSheet({
       kind: "start",
       startValue,
       endValue,
       onDone: (v) => {
         startValue = v;
-        endValue = endForStart(v);
+        if (new Date(`${endValue}:00`) <= new Date(`${v}:00`))
+          endValue = endForStart(v); // 종료가 시작 이하가 되면 재설정
         refreshTrip();
       },
     }),
   );
+  endChip.addEventListener("click", () =>
+    openTimeSheet({
+      kind: "end",
+      startValue,
+      endValue,
+      onDone: (v) => {
+        endValue = v;
+        refreshTrip();
+      },
+    }),
+  );
+  // "Plan a day" — 특정 시각까지가 아니라 오늘 전체(시작일 저녁까지)로 루트. 길이는 시간창이 정함.
+  const planDayBtn = el("button", "chat-planday", "Plan a day");
+  planDayBtn.type = "button";
+  planDayBtn.addEventListener("click", () => {
+    const d = new Date(`${startValue}:00`);
+    d.setHours(21, 0, 0, 0); // 문화장소 운영 끝물까지 — 실제 길이는 백엔드 시간창 트림
+    endValue = localValue(d);
+    refreshTrip();
+    send("Plan a culture route for the rest of today");
+  });
   refreshTrip();
-  tripBar.append(locChip, timeChip);
+  tripBar.append(locChip, startChip, endChip, planDayBtn);
   root.append(tripBar);
 
   // AI 관여 고지(1회, NFR-05)

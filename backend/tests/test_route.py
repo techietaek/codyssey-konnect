@@ -6,6 +6,7 @@ from app.domain.route import (
     MAX_LEG_M,
     assemble_route,
     build_schedule,
+    fit_count,
     haversine_m,
     rollup_budget,
     route_checks,
@@ -131,6 +132,23 @@ def test_visit_plan_official_beats_type_default():
     assert visit_plan(official) == (120, Provenance.CONFIRMED)
     typed = _c("t", 37.571, type_=ExperienceType.EXHIBITION)  # 공식값 없음
     assert visit_plan(typed) == (60, Provenance.PLANNED)  # 유형 기준(전시 60분)
+
+
+def test_fit_count_fills_to_time_window_not_count():
+    # 하루 동선 — 개수 제한 대신 시간창. 누적(도보+방문)이 창 넘으면 멈춤.
+    s1 = _c("s1", 37.571, type_=ExperienceType.HISTORIC_VISIT)  # 40분 방문
+    s2 = _c("s2", 37.572, type_=ExperienceType.EXHIBITION)  # 60분 방문
+    s3 = _c("s3", 37.573, type_=ExperienceType.HISTORIC_VISIT)  # 40분 방문
+    # 누적: s1=10+40=50, s2=+5+60=115, s3=+5+40=160
+    assert fit_count([10, 5, 5], [s1, s2, s3], 200) == 3  # 전부 들어감(개수 제한 없음)
+    assert fit_count([10, 5, 5], [s1, s2, s3], 115) == 2  # s3(160)>115 → 2
+    assert fit_count([10, 5, 5], [s1, s2, s3], 40) == 0  # s1(50)>40 → 0(강제 채움 없음)
+
+
+def test_fit_count_stops_at_unknown_walk():
+    s1 = _c("s1", 37.571, type_=ExperienceType.HISTORIC_VISIT)
+    s2 = _c("s2", 37.572, type_=ExperienceType.HISTORIC_VISIT)
+    assert fit_count([10, None], [s1, s2], 10000) == 1  # 2번째 도보 미확인 → 1까지
 
 
 def test_build_schedule_chains_arrival_and_finish():

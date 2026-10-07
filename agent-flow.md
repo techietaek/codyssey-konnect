@@ -239,8 +239,8 @@
 ### B2 — 루트 구성 (LF-05) [~] 코어 완료(2026-10-07, 백엔드·라이브 Green) · ⚑ 균형 랭킹 대기
 > **접근 A(합의):** 실행가능성 우선 코어를 먼저. **관심사·이동 균형 랭킹(FR-B4 = Soft B안)**은 Product 결정 3건(`docs/soft-ranking.md §3`) 확정 후 — 지금은 거리 기반 걷기 동선.
 > **파일:** `domain/route.py`(순수 조립: haversine·route_eligible·assemble_route·rollup_budget·route_name) · `agent/route_orchestrator.py`(A의 `_fetch_pool`/`_enrich` 재사용→feasible→조립→구간 Tmap) · `models/route.py` · `api/route.py`(POST /api/route) · Agent `PlanCultureRoute` tool 연동. `test_route.py`(+9, 145 pytest Green).
-- [x] 하루 1코스 2~3 스톱, 2·3개 동등, **3개 강제 금지**(walkable leg 상한 1500m로 자연 결정) (FR-B4, B-T06)
-- [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ✅ **관심사 우선 선발·순위(FR-B4 Soft B안, 2026-10-07)** — Product 결정(선발까지·관심사 우선) 반영. `docs/soft-ranking.md §3`
+- [x] 하루 1코스 — **개수 고정 제한 없음(Product 변경 2026-10-08: FR-B4 "2~3개" 완화)**. 하루 동선을 **시간창이 허용하는 만큼** 채운다(`fit_count`: 도보+방문 누적 ≤ 가용시간, 강제 채움 없음, walkable leg 상한). 안전 상한 `MAX_DAY_STOPS=8`. "Plan a day" 버튼으로 오늘 전체 루트.
+- [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ✅ **관심사 우선 선발·순위(FR-B4 Soft B안, 2026-10-07)** + ✅ **실내외 선호(2026-10-08)**: `indoor_outdoor`를 유형 휴리스틱으로 Soft 강등(야외↔실내, 선발까지, **제외 아님** — 오탈락 방지). `ranking.io_rank`, A·B 양쪽+trace. `docs/soft-ranking.md §3`
 - [x] 고정형(공연·축제) 자동 루트 제외 · **계획 방문시간(B-T01, Product 승인 하이브리드 2026-10-08):** 공식 `spendtime`/`spendtimefestival` 있으면 **Official**(`normalize.official_visit_minutes`), 없으면 **유형 기준 표준**(`domain/route._TYPE_VISIT_MIN`, 전시60·방문40·체험90·기본45분)을 **Planned**(예상)으로 — 임의 per-place 숫자 아님. `build_schedule`로 start_at+도보+방문 체인→스톱별 arrival/depart·전체 finish(도보 미확인이면 절대시각 생략, 분·근거만). 프론트: 스톱별 window+Official/Planned 배지·Finish·"estimates—adjust to your pace". 라이브(인사동 3스톱 14:01→16:50) Green.
 - [x] 방문 순서·구간시간·확인 비용·미확인 구분 (FR-B5) + **코스 UI(LF-05, 2026-10-08)**: 헤드라인("N stops from X")·날짜/시간·WHY THIS ROUTE·루트 상태 배지·확인필요 집계·범례·총계(비용/도보/종료)·스톱별 이유(`select_reasons` 재사용)·Remove(→B4). `domain/route`(route_headline·route_status·route_checks) + `Route` 모델 확장 + `components/route-card.js` 전면 개편. "A처럼 따로따로"가 아닌 하나의 코스로 렌더(라이브 스크린샷 확인). **체류시간 '예정'은 미표기(B-T01)**
 - [x] 예산: 필수비용 하나라도 미확인이면 `Total cost needs checking`(전체 충족 주장 금지)

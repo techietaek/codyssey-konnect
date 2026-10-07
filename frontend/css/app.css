@@ -704,6 +704,8 @@ body {
 .chat-title { font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-text); }
 .chat-trip { flex: 0 0 auto; display: flex; gap: var(--space-6); padding: 0 var(--space-14) var(--space-6); flex-wrap: wrap; }
 .trip-chip { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-4) var(--space-10); font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text); cursor: pointer; }
+.chat-planday { margin-left: auto; background: var(--c-primary); color: var(--c-on-primary); border: 0; border-radius: var(--r-full); padding: var(--space-4) var(--space-12); font-size: var(--fs-badge); font-weight: var(--fw-bold); cursor: pointer; }
+.chat-planday:hover { opacity: 0.92; }
 .chat-ai-notice { flex: 0 0 auto; margin: 0; padding: 0 var(--space-14) var(--space-6); font-size: var(--fs-badge); color: var(--c-text-muted); }
 
 .chat-log { flex: 1 1 auto; overflow-y: auto; padding: var(--space-8) var(--space-14) var(--space-12); display: flex; flex-direction: column; gap: var(--space-10); }

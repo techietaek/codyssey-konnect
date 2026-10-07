@@ -23,11 +23,12 @@ from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
-from app.domain.ranking import type_preference_rank
+from app.domain.ranking import io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import (
     assemble_route,
     build_schedule,
+    fit_count,
     rollup_budget,
     route_checks,
     route_headline,
@@ -113,15 +114,18 @@ async def _build_route(
             for i in range(len(stops))
         )
     )
-    segments = [s for s, _ in segs]
     walk_minutes = [wm for _, wm in segs]
-    known = [wm for wm in walk_minutes if wm is not None]
-    any_unknown = len(known) != len(segs)
-    total_walk = None if any_unknown else sum(known)
 
-    # 도보 이동만으로도 가용시간을 넘으면 걷기 루트로 불가(체류 미포함이라 보수적).
-    if total_walk is not None and total_walk > available_minutes:
-        return None
+    # 하루 동선: 시간창이 허용하는 만큼만(개수 제한 대신 시간 제한, 강제 채움 없음).
+    keep = fit_count(walk_minutes, stops, available_minutes)
+    if keep < 2:
+        return None  # 창에 2개도 안 들어감 → 루트 불가(개별 전환)
+    stops = stops[:keep]
+    segments = [s for s, _ in segs][:keep]
+    walk_minutes = walk_minutes[:keep]
+    known = [wm for wm in walk_minutes if wm is not None]
+    any_unknown = len(known) != len(walk_minutes)
+    total_walk = None if any_unknown else sum(known)
 
     # 계획 방문시간 체인(공식 spendtime=confirmed / 유형 기준=planned) → 스톱별 도착·종료 + 전체 종료.
     schedule, finish_at = build_schedule(start_at, walk_minutes, stops)
@@ -206,18 +210,24 @@ async def recommend_route(
         [c.id for c, _ in valid], exclude_ids, cond.exclude_concepts, len(valid)
     )
     feasible = [by_id[i] for i in kept_ids]
-    # 관심사 우선 루트(FR-B4): 가능하면 관심사 매칭 스톱으로 코스 구성, 2개 미만이면
-    # 전체 feasible 로 폴백(강제 아님 — 원하는 콘텐츠가 충분할 때만 그걸로 짠다).
-    preferred = [c for c in feasible if type_preference_rank(c.type, cond) == 0]
+    # 실내외 선호(문제1): 불일치 유형 강등 — ≥2 남으면 그걸로, 아니면 전체(0-safe, 제외 아님).
+    io_base = [c for c in feasible if io_rank(c.type, cond) != 2]
+    if len(io_base) < 2:
+        io_base = feasible
+    # 관심사 우선 루트(FR-B4): 가능하면 관심사 매칭 스톱으로, 부족하면 단계적 폴백.
+    preferred = [c for c in io_base if type_preference_rank(c.type, cond) == 0]
     trace.step(
         "route_feasible",
         considered=len(results),
         feasible=len(feasible),
+        io_base=len(io_base),
         preferred=len(preferred),
         excluded_pref=len(applied),
     )
 
     stops = assemble_route(origin, preferred) if len(preferred) >= 2 else []
+    if len(stops) < 2:
+        stops = assemble_route(origin, io_base)
     if len(stops) < 2:
         stops = assemble_route(origin, feasible)
     # 스톱별 Reason(코스 "왜 이 장소" — 관심사/시간/예산 근거). 근거 없으면 0개(강제 금지).

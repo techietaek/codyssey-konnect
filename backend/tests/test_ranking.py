@@ -8,6 +8,7 @@ from __future__ import annotations
 from app.domain.normalize import type_from_contenttype
 from app.domain.ranking import (
     display_sort_key,
+    io_rank,
     preference_rank,
     type_preference_rank,
     weather_rank,
@@ -117,6 +118,28 @@ def test_weather_breaks_tie_within_same_interest():
     assert display_sort_key(indoor, cond, adverse=True) < display_sort_key(
         outdoor, cond, adverse=True
     )
+
+
+def test_io_rank_outdoor_preference():
+    cond = ParsedConditions(indoor_outdoor="outdoor")
+    assert io_rank(ExperienceType.HISTORIC_VISIT, cond) == 0  # 야외 선호
+    assert io_rank(ExperienceType.EXHIBITION, cond) == 2  # 실내 강등
+    assert io_rank(ExperienceType.DEFAULT, cond) == 1  # 중립(불명)
+    assert io_rank(ExperienceType.HISTORIC_VISIT, ParsedConditions()) == 1  # 선호 없음
+
+
+def test_io_rank_indoor_preference():
+    cond = ParsedConditions(indoor_outdoor="indoor")
+    assert io_rank(ExperienceType.EXHIBITION, cond) == 0
+    assert io_rank(ExperienceType.HISTORIC_VISIT, cond) == 2
+
+
+def test_display_sort_demotes_indoor_when_outdoor_preferred():
+    # 문제1: "not indoor" → 같은 fits 라도 야외가 실내보다 먼저(Soft 강등).
+    cond = ParsedConditions(indoor_outdoor="outdoor")
+    outdoor = _cand(ExperienceType.HISTORIC_VISIT, ResultStatus.FITS)
+    indoor = _cand(ExperienceType.EXHIBITION, ResultStatus.FITS)
+    assert display_sort_key(outdoor, cond) < display_sort_key(indoor, cond)
 
 
 def test_type_preference_rank_for_selection():

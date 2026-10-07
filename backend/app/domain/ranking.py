@@ -41,11 +41,15 @@ _STATUS_RANK = {
     ResultStatus.CHECK_NEEDED: 2,
 }
 
-# 야외 노출형(휴리스틱, 사실 아님) — 악천후 시 Soft 강등 대상(PRD §6.6). 전시·체험은
-# 대개 실내라 제외. 공식 Outdoor 태그가 없어 유형으로 근사하며 **제외·사실표기엔 쓰지 않는다**.
+# 야외 노출형(휴리스틱, 사실 아님) — 악천후·실내외 선호 Soft 강등용. 전시·체험은 대개
+# 실내. 공식 Outdoor 태그가 없어 유형으로 근사하며 **제외·사실표기엔 쓰지 않는다**(Soft only).
 OUTDOOR_EXPOSED_TYPES = {
     ExperienceType.HISTORIC_VISIT,
     ExperienceType.FESTIVAL_EVENT,
+}
+INDOOR_TYPES = {
+    ExperienceType.EXHIBITION,
+    ExperienceType.HANDS_ON,
 }
 
 
@@ -65,6 +69,23 @@ def preference_rank(cand: Candidate, cond: ParsedConditions) -> int:
     return type_preference_rank(cand.type, cond)
 
 
+def io_rank(etype: ExperienceType, cond: ParsedConditions) -> int:
+    """실내외 선호 순위 0=일치 / 1=중립(또는 선호 없음) / 2=불일치. Soft(제외 아님).
+    공식 태그가 없어 유형 휴리스틱으로 근사 — 그래서 Hard 제외하지 않고 강등만 한다."""
+    pref = cond.indoor_outdoor
+    if pref == "outdoor":
+        if etype in OUTDOOR_EXPOSED_TYPES:
+            return 0
+        if etype in INDOOR_TYPES:
+            return 2
+    elif pref == "indoor":
+        if etype in INDOOR_TYPES:
+            return 0
+        if etype in OUTDOOR_EXPOSED_TYPES:
+            return 2
+    return 1
+
+
 def weather_rank(cand: Candidate, adverse: bool) -> int:
     """악천후 시 야외 노출형을 1(뒤로), 그 외 0. Soft only — 제외 아님(PRD §6.6).
     관심사 다음 2차 키라 '원하는 콘텐츠'는 계속 앞에 두고 실내를 소폭 우선한다."""
@@ -73,11 +94,12 @@ def weather_rank(cand: Candidate, adverse: bool) -> int:
 
 def display_sort_key(
     cand: Candidate, cond: ParsedConditions, adverse: bool = False
-) -> tuple[int, int, int]:
-    """(관심사순위, 날씨순위, 상태등급). 관심사 우선(B안) → 악천후면 실내 소폭 우선 →
-    상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지."""
+) -> tuple[int, int, int, int]:
+    """(관심사, 실내외 선호, 날씨, 상태등급). 명시 선호(관심사·실내외)가 먼저 →
+    악천후면 실내 소폭 우선 → 상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지."""
     return (
         preference_rank(cand, cond),
+        io_rank(cand.type, cond),
         weather_rank(cand, adverse),
         _STATUS_RANK.get(cand.status, 99),
     )
