@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.ask import router as ask_router
+from app.api.chat import router as chat_router
 from app.api.preferences import router as preferences_router
 from app.api.recommend import router as recommend_router
 from app.api.session import router as session_router
@@ -60,6 +61,7 @@ app.include_router(recommend_router)
 app.include_router(session_router)
 app.include_router(preferences_router)
 app.include_router(ask_router)
+app.include_router(chat_router)
 
 
 @app.exception_handler(KonnectError)

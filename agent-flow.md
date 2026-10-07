@@ -200,7 +200,17 @@
 
 ---
 
-## 5. Phase 3 — RAG · B 문화루트
+## 5. Phase 3 — RAG · B 문화루트 · 단일 챗봇 Agent
+> **비전(Product/Tech 합의):** FAQ RAG + 추천을 **하나의 챗봇**에서 — 자연어→LLM 분석→**tool calling**. 목표 아키텍처·신뢰 경계 `docs/agent-architecture.md`. 순서: R1 → **AG-1/2 Agent 골격** → B2~B5(recommend_route tool) → AG-3/4(대화·UI).
+
+### AG — 단일 챗봇 Agent (tool-calling)
+> 참조: `CLAUDE.md §4.1`(Agent+Tools), `docs/agent-architecture.md §3`(2b 목표·신뢰 경계).
+- [x] **AG-1/2 — Agent 골격** (2026-10-07) — LangChain tool-calling 라우터. 자연어→LLM이 `AnswerTravelQuestion`(→RAG) vs `RecommendExperiences`(→A 추천) 선택→코드 실행→통합 응답(`POST /api/chat`). **신뢰 경계:** LLM은 tool·인자만 결정, 위치·시간은 context(사실)에서·선호만 note로, 가격/시간/가용성은 tool 내부 코드 소유. 필수 사실 없으면 추정 않고 clarify. trace(`chat_route`/`chat_clarify`).
+  - 파일: `agent/chat_agent.py`(run_chat 라우팅 + dispatch_tool 실행·분리) · `agent/tools/schemas.py`(tool 2개) · `models/chat.py` · `api/chat.py`. `test_chat_agent.py`(+5, 136 pytest Green). 라이브 3케이스(FAQ→rag / 추천+context→recs / context 없음→clarify) + trace Green.
+  - **남은 것:** 저장 선호는 추천 tool 경로만 반영(parity). B tool·멀티턴·UI는 아래.
+- [ ] **AG-3 — 멀티턴 대화·세션** (Guided Chat S1~S3, 조건 누적, 제공값 반복질문 금지). B1 대화요건과 통합.
+- [ ] **AG-4 — 챗봇 UI 통합** — A·B·FAQ를 하나의 대화 흐름으로(별도 챗봇 화면 분리 금지, §4.5). R1 UI 통합도 여기서.
+- [ ] **AG-5(2b 심화)** — recommend_route tool 추가 후 LLM 조건해석→멀티소스→후보 재투입→최종 선별(신뢰 경계·trace 유지).
 
 ### R1 — RAG (FAQ·여행정보·콘텐츠 Q&A) ✅ 완료(2026-10-07, 라이브 검증 Green)
 > 참조: `PRD.md §6.5·FR-C8`. **단일 챗봇 Agent 비전의 `rag_search` tool 내용물**(AG 단계에서 재사용).
