@@ -16,7 +16,7 @@ from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
-from app.domain.normalize import normalize_candidate
+from app.domain.normalize import enrich_intro, normalize_candidate
 from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
@@ -79,11 +79,13 @@ async def _enrich(
     """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외."""
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
-    # 공식 상세(정본)와 Places businessStatus(폐업 음성 신호)를 병렬 조회.
+    # 공식 상세(정본)·반복정보(detailInfo2)·Places businessStatus(폐업 음성 신호)를 병렬 조회.
+    # detailInfo2 는 detailIntro2 가 놓치는 입장료·운영시간을 공식 데이터로 보강한다(§6.2 준수).
     # Places 는 보조·graceful — 실패해도 추천을 막지 않는다(§4.2·§6.7).
-    intro, common, place = await asyncio.gather(
+    intro, common, info, place = await asyncio.gather(
         tourapi.detail_intro(cid, ctype),
         tourapi.detail_common(cid),
+        tourapi.detail_info(cid, ctype),
         gplaces.find_place(
             item.get("title") or "",
             float(item.get("mapy") or 0) or 0.0,
@@ -93,7 +95,11 @@ async def _enrich(
     )
     intro = intro if isinstance(intro, dict) else {}
     common = common if isinstance(common, dict) else {}
+    info = info if isinstance(info, list) else []
     place = place if isinstance(place, dict) else None
+
+    # detailInfo2 로 빈 요금·운영시간 보강(공식 데이터만, 있을 때만).
+    intro = enrich_intro(intro, info)
 
     cand = normalize_candidate(item, intro, common)
     if cand is None:

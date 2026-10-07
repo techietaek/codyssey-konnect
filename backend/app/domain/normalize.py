@@ -48,6 +48,49 @@ _HOURS_KEYS = [
 ]
 _FEE_KEYS = ["usefee", "usefeeculture", "usetimefestival2"]
 
+# detailInfo2(반복 행)에서 요금·운영시간을 보강할 때 매칭할 infoname 키워드.
+# detailIntro2 의 usefee/usetime 이 빈 경우에만 fallback 으로 쓴다(공식 데이터).
+_INFO_FEE_NAMES = ("admission", "fee", "요금", "입장")
+_INFO_HOURS_NAMES = (
+    "operating hour",
+    "hours of",
+    "use time",
+    "business hour",
+    "운영시간",
+    "이용시간",
+    "관람시간",
+)
+
+
+def _info_value(info_rows: list[dict[str, Any]], name_keywords: tuple[str, ...]) -> str:
+    """infoname 이 키워드에 매칭되는 첫 행의 infotext(정리본). 없으면 ''."""
+    for row in info_rows:
+        name = str(row.get("infoname") or "").lower()
+        if any(k in name for k in name_keywords):
+            text = _strip_html(row.get("infotext"))
+            if text:
+                return text
+    return ""
+
+
+def enrich_intro(
+    intro: dict[str, Any], info_rows: list[dict[str, Any]] | None
+) -> dict[str, Any]:
+    """detailIntro2 에 요금·운영시간이 비면 detailInfo2 행에서 보강한 intro 사본을 반환.
+    공식 TourAPI 데이터만 사용 — 추정/생성 아님. 값이 이미 있으면 덮어쓰지 않는다."""
+    if not info_rows:
+        return intro
+    out = dict(intro)
+    if not _first(out, _FEE_KEYS):
+        fee = _info_value(info_rows, _INFO_FEE_NAMES)
+        if fee:
+            out["usefee"] = fee
+    if not _first(out, _HOURS_KEYS):
+        hours = _info_value(info_rows, _INFO_HOURS_NAMES)
+        if hours:
+            out["usetime"] = hours
+    return out
+
 
 def _clean_title(title: str | None) -> str:
     """'English (한글…)' 끝의 한글 괄호 설명 제거 → 영문 우선(중첩 괄호 포함)."""
