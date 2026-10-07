@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,9 +33,18 @@ class ChatContext(BaseModel):
     end_at: datetime | None = None
 
 
+class ChatTurn(BaseModel):
+    """대화 히스토리 한 턴(멀티턴 맥락, AG-3). 사실 저장이 아니라 LLM 라우팅 맥락용."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
     context: ChatContext | None = None
+    # 멀티턴 맥락 — 클라이언트가 이전 턴을 함께 보낸다(stateless 백엔드, 비로그인도 동작).
+    history: list[ChatTurn] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

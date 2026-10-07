@@ -43,6 +43,11 @@ async def chat(
             prefer_shorter_walks = pref.get("prefer_shorter_walks")
 
     data = await run_chat(
-        req.message, req.context, trace, saved_interests, prefer_shorter_walks
+        req.message,
+        req.context,
+        trace,
+        saved_interests,
+        prefer_shorter_walks,
+        req.history,
     )
     return Envelope.success(data=data, trace_id=trace.trace_id)

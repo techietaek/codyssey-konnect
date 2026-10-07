@@ -8,9 +8,9 @@ import asyncio
 from datetime import datetime
 
 from app.agent import chat_agent
-from app.agent.chat_agent import dispatch_tool, has_trip_context
+from app.agent.chat_agent import dispatch_tool, has_trip_context, to_lc_messages
 from app.core.trace import Trace
-from app.models.chat import ChatContext, ChatKind
+from app.models.chat import ChatContext, ChatKind, ChatTurn
 from app.models.rag import RagAnswer
 from app.models.recommend import StartLocation
 
@@ -94,3 +94,22 @@ def test_recommend_tool_with_context_runs(monkeypatch):
 def test_unknown_tool_clarifies():
     resp = asyncio.run(dispatch_tool("Nonsense", {}, _FULL_CTX, Trace()))
     assert resp.kind is ChatKind.CLARIFY
+
+
+def test_to_lc_messages_maps_roles_and_caps():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    hist = [
+        ChatTurn(role="user", content="hi"),
+        ChatTurn(role="assistant", content="hello"),
+    ]
+    msgs = to_lc_messages(hist)
+    assert [type(m) for m in msgs] == [HumanMessage, AIMessage]
+    assert [m.content for m in msgs] == ["hi", "hello"]
+    # 최근 _MAX_HISTORY 턴만 유지(토큰 제어).
+    long = [ChatTurn(role="user", content=str(i)) for i in range(30)]
+    assert len(to_lc_messages(long)) == chat_agent._MAX_HISTORY
+
+
+def test_to_lc_messages_empty():
+    assert to_lc_messages([]) == []

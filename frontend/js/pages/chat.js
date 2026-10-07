@@ -188,6 +188,26 @@ export function renderChatView({ onBack }) {
     for (const r of routes) assistantBlock(renderRouteCard(r, data.origin));
   }
 
+  // 어시스턴트 턴을 짧은 텍스트로 요약(멀티턴 맥락 — LLM 이 후속 교정을 이해하도록).
+  function summarize(data) {
+    if (data.kind === "answer" && data.answer) return data.answer.answer;
+    if (data.kind === "recommendation" && data.recommendation) {
+      const t = (data.recommendation.candidates ?? []).map((c) => c.title);
+      return t.length
+        ? `Suggested experiences: ${t.join(", ")}`
+        : "No experiences fit those conditions.";
+    }
+    if (data.kind === "route" && data.route) {
+      const r = (data.route.routes ?? [])[0];
+      if (r)
+        return `Planned a route "${r.name}": ${r.stops
+          .map((s) => s.candidate.title)
+          .join(" → ")}`;
+      return data.route.unmet || "No route available.";
+    }
+    return data.message || "";
+  }
+
   function renderResponse(data) {
     if (data.kind === "answer" && data.answer) return renderAnswer(data.answer);
     if (data.kind === "recommendation" && data.recommendation)
@@ -221,6 +241,7 @@ export function renderChatView({ onBack }) {
   }
   log.append(suggest);
 
+  const history = []; // 멀티턴 맥락(AG-3) — 서버는 stateless, 매 턴 함께 전송
   let busy = false;
   async function send(text) {
     const msg = (text ?? ta.value).trim();
@@ -231,21 +252,27 @@ export function renderChatView({ onBack }) {
     ta.style.height = "auto";
     bubble("user", msg);
 
+    const prior = history.slice(); // 이번 사용자 메시지 '이전'까지의 맥락
+    history.push({ role: "user", content: msg });
+
     const typing = bubble("assistant", el("span", "chat-typing", "···"));
     try {
-      const env = await postChat(msg, tripContext());
+      const env = await postChat(msg, tripContext(), prior);
       typing.remove();
       if (!env.ok) {
-        bubble(
-          "assistant",
-          env.error?.message || "Sorry, something went wrong. Please try again.",
-        );
+        const m =
+          env.error?.message || "Sorry, something went wrong. Please try again.";
+        bubble("assistant", m);
+        history.push({ role: "assistant", content: m });
       } else {
         renderResponse(env.data);
+        history.push({ role: "assistant", content: summarize(env.data) });
       }
     } catch {
+      const m = "I couldn't reach the service. Please try again.";
       typing.remove();
-      bubble("assistant", "I couldn't reach the service. Please try again.");
+      bubble("assistant", m);
+      history.push({ role: "assistant", content: m });
     } finally {
       busy = false;
     }

@@ -208,7 +208,9 @@
 - [x] **AG-1/2 — Agent 골격** (2026-10-07) — LangChain tool-calling 라우터. 자연어→LLM이 `AnswerTravelQuestion`(→RAG) vs `RecommendExperiences`(→A 추천) 선택→코드 실행→통합 응답(`POST /api/chat`). **신뢰 경계:** LLM은 tool·인자만 결정, 위치·시간은 context(사실)에서·선호만 note로, 가격/시간/가용성은 tool 내부 코드 소유. 필수 사실 없으면 추정 않고 clarify. trace(`chat_route`/`chat_clarify`).
   - 파일: `agent/chat_agent.py`(run_chat 라우팅 + dispatch_tool 실행·분리) · `agent/tools/schemas.py`(tool 2개) · `models/chat.py` · `api/chat.py`. `test_chat_agent.py`(+5, 136 pytest Green). 라이브 3케이스(FAQ→rag / 추천+context→recs / context 없음→clarify) + trace Green.
   - **남은 것:** 저장 선호는 추천 tool 경로만 반영(parity). B tool·멀티턴·UI는 아래.
-- [ ] **AG-3 — 멀티턴 대화·세션** (Guided Chat S1~S3, 조건 누적, 제공값 반복질문 금지, 후속 교정 "exclude museums"/"make it shorter"). 현재 /api/chat 은 단건(무상태) → 서버 세션/히스토리 필요. B1 대화요건과 통합.
+- [x] **AG-3 — 멀티턴 대화** (2026-10-07) — 클라이언트가 대화 히스토리를 매 턴 전송(stateless 백엔드, 비로그인도 동작). `ChatRequest.history` + `to_lc_messages`(MessagesPlaceholder) → LLM이 맥락 보고 후속 교정을 이전 요청 위에 얹음. 시스템 프롬프트 "refine 시 같은 tool 재호출 + 이전 조건 누적". **route도 note 파싱+명시 배제(옵션3 재사용) 적용** → 루트 후속 교정 동작. 프론트: 히스토리 유지·어시스턴트 턴 요약 전송. `test_chat_agent`(+2, 147 pytest). 라이브(실 백엔드·브라우저) Green: "추천"→"No museums, only free" 후속 교정이 museum 제거(trace `exclude_filter` excluded 2), pageerror 0.
+  - **라우팅 주의(gpt-4o-mini):** 3-way tool 라우팅에 phrasing 변동 있음 — 대부분 자연어는 라우팅되나 가끔 clarify로 안전 폴백(사실 날조 아님). 프롬프트 결정 절차로 완화. 더 강인함 필요 시 라우팅만 상위 모델 고려(Product/비용 결정).
+  - **남은 것:** 서버 세션 영속(새로고침 지속), 시간·위치 변경을 대화로(현재 Trip 칩), B4 대화형 수정·재구성.
 - [x] **AG-4 — 챗봇 UI 통합** (2026-10-07) — `pages/chat.js` 단일 대화 화면에서 FAQ(RAG)·즉시추천·문화루트를 한 흐름으로. 홈 "Chat with KONNECT" 진입. `/api/chat` kind별 렌더(answer+citations / recommendation=result-card 재사용 / route=`components/route-card.js` 신규 / clarify). 편집 가능한 Trip 칩(위치·시간, location/time 시트 재사용, end는 당일 23:59 clamp) · 제안칩 · AI 고지 · 타이핑 인디케이터. 헤드리스(실 백엔드) 드라이브 Green: FAQ 근거답변+citation, 루트 3스톱 카드("Visit times are yours to plan"), 추천 4카드, pageerror 0. 스크린샷 확인.
   - **남은 것(AG-3/후속):** 서버 세션 멀티턴(후속 교정), 루트/추천 인라인 지도(B3 지도부), 챗 내 Select 확정, A 폼 플로우와의 최종 통합(현재 공존).
 - [ ] **AG-5(2b 심화)** — recommend_route tool 추가 후 LLM 조건해석→멀티소스→후보 재투입→최종 선별(신뢰 경계·trace 유지).

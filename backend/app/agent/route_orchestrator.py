@@ -14,15 +14,17 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.exclude_classifier import classify_excluded
+from app.agent.note_parser import parse_note
 from app.agent.orchestrator import _enrich, _fetch_pool
 from app.core.trace import Trace
+from app.domain.exclusion import select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.route import assemble_route, rollup_budget, route_name
 from app.models.recommend import (
     Candidate,
     InterestCode,
     MovementInfo,
-    ParsedConditions,
     Provenance,
     StartLocation,
     UnconfirmedFlag,
@@ -129,13 +131,31 @@ async def recommend_route(
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
 
     pool = await _fetch_pool(lat, lng, trace)
-    # 균형 랭킹/배제는 B2 코어 범위 밖 → 빈 조건으로 feasibility 만(거리 기반 동선).
-    cond = ctx.conditions or ParsedConditions()
+    # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
+    # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
+    cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
     results = await asyncio.gather(
         *(_enrich(it, ctx, cond, trace) for it in pool[:_ROUTE_POOL])
     )
-    feasible = [c for (c, _, _, _) in results if c is not None]
-    trace.step("route_feasible", considered=len(results), feasible=len(feasible))
+    valid = [(c, txt) for (c, _, _, txt) in results if c is not None]
+
+    # [filter] 개방형 명시 배제: LLM 의미분류로 매칭 후보 제거(사실은 코드, 0건-세이프).
+    exclude_ids: set[str] = set()
+    if cond.exclude_concepts and valid:
+        exclude_ids = await classify_excluded(
+            [(c.id, txt) for c, txt in valid], cond.exclude_concepts, trace
+        )
+    by_id = {c.id: c for c, _ in valid}
+    kept_ids, _notices, applied = select_with_exclusion(
+        [c.id for c, _ in valid], exclude_ids, cond.exclude_concepts, len(valid)
+    )
+    feasible = [by_id[i] for i in kept_ids]
+    trace.step(
+        "route_feasible",
+        considered=len(results),
+        feasible=len(feasible),
+        excluded_pref=len(applied),
+    )
 
     stops = assemble_route(origin, feasible)
     if len(stops) < 2:

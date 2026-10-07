@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
 from app.agent.context import RequestContext
@@ -28,31 +29,53 @@ from app.agent.tools.schemas import (
 from app.config import settings
 from app.core.trace import Trace
 from app.domain.input_validation import validate_available_time
-from app.models.chat import ChatContext, ChatKind, ChatResponse
+from app.models.chat import ChatContext, ChatKind, ChatResponse, ChatTurn
 from app.models.recommend import InterestCode
 from app.rag.retrieve import answer_question
 
 logger = logging.getLogger("konnect.agent")
 
 _SYSTEM = (
-    "You are KONNECT's assistant for foreign travelers in Seoul. Almost every message is "
-    "either a travel question or a request to do something — choose the single best tool and "
-    "call it. Do not answer from your own knowledge.\n"
-    "- answer_travel_question: informational / FAQ questions (transport, money, etiquette, "
+    "You are KONNECT's assistant for foreign travelers in Seoul. For any travel intent you "
+    "MUST call exactly one tool — never answer facts from your own knowledge.\n"
+    "Pick the tool this way:\n"
+    "1. plan_culture_route — the user wants a multi-stop plan, route, itinerary, or course, "
+    "or asks what to do across a block of time (e.g. 'plan my afternoon', 'make me a route', "
+    "'an itinerary', 'take me around', 'a culture walk').\n"
+    "2. recommend_experiences — the user wants individual ideas for things to see or do now "
+    "(e.g. 'what can I do', \"what's around\", 'suggest something', 'things to do near me', "
+    "'any ideas', 'where should I go').\n"
+    "3. answer_travel_question — a factual or FAQ question (transport, money, etiquette, "
     "connectivity, or what a cultural thing is).\n"
-    "- recommend_experiences: the user wants a few individual suggestions for things to see "
-    "or do.\n"
-    "- plan_culture_route: the user wants a connected walking route / itinerary / plan / "
-    "course of several places (words like route, itinerary, plan, course, 'take me around', "
-    "'what should I do this afternoon').\n"
-    "You only route and extract the user's own wording. You NEVER state facts like prices, "
-    "opening hours, or availability yourself — the tools provide verified data. Only skip "
-    "calling a tool for a pure greeting or chit-chat with no travel intent; then reply "
-    "briefly and ask what they'd like to know or do."
+    "Always call a tool for any travel intent. Only reply WITHOUT a tool for a pure greeting "
+    "or when there is genuinely no travel intent; then ask briefly what they'd like.\n"
+    "You only route and extract the user's own wording; the tools own all facts (prices, "
+    "hours, availability). This is a continuing conversation: when the user refines an earlier "
+    "request ('exclude museums', 'make it shorter', 'only free ones', 'more traditional'), "
+    "call the SAME tool again and carry ALL still-relevant earlier conditions into the "
+    "preferences plus the new one. Location and time come from the app context."
 )
 _PROMPT = ChatPromptTemplate.from_messages(
-    [("system", _SYSTEM), ("human", "{message}")]
+    [
+        ("system", _SYSTEM),
+        MessagesPlaceholder("history"),
+        ("human", "{message}"),
+    ]
 )
+
+_MAX_HISTORY = 10  # 최근 N 턴만 맥락으로(토큰 제어)
+
+
+def to_lc_messages(history: list[ChatTurn]) -> list[BaseMessage]:
+    """대화 히스토리 → LangChain 메시지(최근 _MAX_HISTORY 턴). 라우팅 맥락용."""
+    msgs: list[BaseMessage] = []
+    for turn in history[-_MAX_HISTORY:]:
+        if turn.role == "user":
+            msgs.append(HumanMessage(turn.content))
+        else:
+            msgs.append(AIMessage(turn.content))
+    return msgs
+
 
 _CLARIFY_DEFAULT = "What would you like to know or do in Seoul? I can answer travel questions or suggest experiences near you."
 _CLARIFY_NEED_TRIP = (
@@ -124,6 +147,7 @@ async def run_chat(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    history: list[ChatTurn] | None = None,
 ) -> ChatResponse:
     if not message or not message.strip():
         return ChatResponse(kind=ChatKind.CLARIFY, message=_CLARIFY_DEFAULT)
@@ -135,7 +159,9 @@ async def run_chat(
         timeout=20,
     ).bind_tools(TOOL_SCHEMAS)
     try:
-        ai = await (_PROMPT | llm).ainvoke({"message": message.strip()})
+        ai = await (_PROMPT | llm).ainvoke(
+            {"message": message.strip(), "history": to_lc_messages(history or [])}
+        )
     except Exception as e:  # noqa: BLE001 — LLM/네트워크 실패는 되묻기로 graceful
         logger.warning("chat route failed: %s", type(e).__name__)
         trace.step("chat_route", error=type(e).__name__)

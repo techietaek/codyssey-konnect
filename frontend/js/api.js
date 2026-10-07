@@ -24,12 +24,16 @@ export function postRecommend(payload, signal) {
   });
 }
 
-// 단일 챗봇 Agent (AG-1/2) — 자연어 메시지를 tool-calling 으로 라우팅.
-// { message, context? } → { kind, tool, message?, answer?, recommendation?, route? }.
-export function postChat(message, context, signal) {
+// 단일 챗봇 Agent (AG-1/2·AG-3) — 자연어 + 대화 히스토리를 tool-calling 으로 라우팅.
+// history = 이전 턴들(멀티턴 맥락, 후속 교정용). 서버는 stateless.
+export function postChat(message, context, history, signal) {
   return request("/api/chat", {
     method: "POST",
-    body: JSON.stringify({ message, context: context ?? null }),
+    body: JSON.stringify({
+      message,
+      context: context ?? null,
+      history: history ?? [],
+    }),
     signal,
   });
 }
