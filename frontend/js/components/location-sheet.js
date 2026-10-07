@@ -17,13 +17,9 @@ export function openLocationSheet({ currentLabel, onPick }) {
   return openSheet((close) => {
     const root = el("div", "loc-sheet");
 
-    // head: 타이틀 + Cancel
+    // head: 타이틀 (닫기는 grip 아래로 스와이프/백드롭/Esc — Cancel 버튼 없음)
     const head = el("div", "sheet-head");
     head.append(el("h2", "sheet-title", "Start from"));
-    const cancel = el("button", "sheet-cancel", "Cancel");
-    cancel.type = "button";
-    cancel.addEventListener("click", close);
-    head.append(cancel);
     root.append(head);
 
     // 검색

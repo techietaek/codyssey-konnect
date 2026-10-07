@@ -76,12 +76,9 @@ export function openTimeSheet({ kind, startValue, endValue, onDone }) {
   return openSheet((close) => {
     const root = el("div", "time-sheet");
 
+    // 닫기는 grip 아래로 스와이프(또는 백드롭/Esc) — 별도 Cancel 버튼 없음.
     const head = el("div", "sheet-head");
     head.append(el("h2", "sheet-title", isStart ? "Start" : "Done by"));
-    const cancel = el("button", "sheet-cancel", "Cancel");
-    cancel.type = "button";
-    cancel.addEventListener("click", close);
-    head.append(cancel);
     root.append(head);
 
     // 빠른 칩
