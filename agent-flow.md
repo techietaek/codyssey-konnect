@@ -242,7 +242,7 @@
 - [x] 하루 1코스 2~3 스톱, 2·3개 동등, **3개 강제 금지**(walkable leg 상한 1500m로 자연 결정) (FR-B4, B-T06)
 - [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ✅ **관심사 우선 선발·순위(FR-B4 Soft B안, 2026-10-07)** — Product 결정(선발까지·관심사 우선) 반영. `docs/soft-ranking.md §3`
 - [x] 고정형(공연·축제) 자동 루트 제외, **자율형 체류시간 미주장**(B-T01, 근거 없어 "Visit times are yours to plan")
-- [x] 방문 순서·구간시간·확인 비용·미확인 구분 (FR-B5 장소별 fact 재사용) — 루트 vs 개별 이유 구분은 reasons 보강 시
+- [x] 방문 순서·구간시간·확인 비용·미확인 구분 (FR-B5) + **코스 UI(LF-05, 2026-10-08)**: 헤드라인("N stops from X")·날짜/시간·WHY THIS ROUTE·루트 상태 배지·확인필요 집계·범례·총계(비용/도보/종료)·스톱별 이유(`select_reasons` 재사용)·Remove(→B4). `domain/route`(route_headline·route_status·route_checks) + `Route` 모델 확장 + `components/route-card.js` 전면 개편. "A처럼 따로따로"가 아닌 하나의 코스로 렌더(라이브 스크린샷 확인). **체류시간 '예정'은 미표기(B-T01)**
 - [x] 예산: 필수비용 하나라도 미확인이면 `Total cost needs checking`(전체 충족 주장 금지)
 - **Done when:** ✅ 신뢰 2~3 스톱 1코스가 순서·구간 도보시간·예산롤업·미확인 구분으로 구성, 2개 미만/시간초과면 `unmet`(개별 전환 안내). 라이브(Insadong 3스톱 14분·`/api/route`+`/api/chat` PlanCultureRoute 라우팅) + trace(`route_feasible`/`route_built`/`route_unmet`) Green. 균형 랭킹·루트별 reason·지도 UI(B3)·수정(B4)은 후속.
 

@@ -210,7 +210,12 @@ export function renderChatView({ onBack }) {
       const mapEl = el("div", "chat-map");
       assistantBlock(mapEl);
       renderRouteMap(mapEl, data.origin, r).catch(() => mapEl.remove());
-      assistantBlock(renderRouteCard(r, data.origin));
+      assistantBlock(
+        renderRouteCard(r, data.origin, {
+          trip: { start_at: `${startValue}:00`, end_at: `${endValue}:00` },
+          onRemove: (title) => send(`Remove ${title} from the route`),
+        }),
+      );
     }
   }
 

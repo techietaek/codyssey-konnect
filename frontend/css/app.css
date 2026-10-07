@@ -738,15 +738,39 @@ body {
 .chat-send { flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--r-full); border: 0; background: var(--c-primary); color: var(--c-on-primary); font-size: 18px; font-weight: var(--fw-bold); cursor: pointer; }
 .chat-send:hover { opacity: 0.92; }
 
-/* ── Route Card (LF-08) ── */
-.route-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-12); display: flex; flex-direction: column; gap: var(--space-10); }
-.route-card-head { display: flex; flex-direction: column; gap: var(--space-6); }
-.route-card-name { margin: 0; font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-text); }
-.route-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-6); }
-.route-pill { font-size: var(--fs-badge); font-weight: var(--fw-semibold); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: 2px var(--space-8); color: var(--c-text); }
-.route-stay-note { margin: 0; font-size: var(--fs-badge); color: var(--c-text-muted); font-style: italic; }
-.route-timeline { display: flex; flex-direction: column; gap: var(--space-4); }
-.route-start { display: flex; align-items: center; gap: var(--space-8); font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--c-primary); }
+/* ── Route Card (LF-05/08) — 하나의 코스로 ── */
+.route-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-14); display: flex; flex-direction: column; gap: var(--space-12); }
+.route-card-head { display: flex; flex-direction: column; gap: var(--space-2); }
+.route-when { margin: 0; font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text-muted); }
+.route-card-name { margin: 0; font-size: 20px; line-height: 1.2; font-weight: var(--fw-bold); color: var(--c-text); }
+.route-stop-summary { margin: var(--space-2) 0 0; font-size: var(--fs-meta); color: var(--c-text-muted); }
+
+/* WHY THIS ROUTE + 루트 상태 */
+.route-why { display: flex; flex-direction: column; gap: var(--space-6); background: var(--c-bg); border-radius: var(--r-md); padding: var(--space-10) var(--space-12); }
+.route-why-label { margin: 0; font-size: 10px; letter-spacing: 0.06em; font-weight: var(--fw-bold); color: var(--c-text-muted); }
+.route-why-reason { margin: 0; display: flex; align-items: flex-start; gap: var(--space-6); font-size: var(--fs-body); color: var(--c-text); }
+.route-status { align-self: flex-start; font-size: var(--fs-body); font-weight: var(--fw-bold); border-radius: var(--r-full); padding: var(--space-4) var(--space-10); }
+.route-status[data-status="fits"] { background: var(--c-fits-bg); color: var(--c-fits-text); }
+.route-status[data-status="check_needed"] { background: var(--c-check-bg); color: var(--c-check-text); }
+.route-status[data-status="alternative"] { background: var(--c-alt-bg, var(--c-check-bg)); color: var(--c-alt-text, var(--c-check-text)); }
+
+/* 가기 전 확인할 것(집계) */
+.route-check { border: 1px solid var(--c-check-text); background: var(--c-check-bg); border-radius: var(--r-md); padding: var(--space-8) var(--space-12); }
+.route-check-title { margin: 0 0 var(--space-4); font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-check-text); }
+.route-check-list { margin: 0; padding-left: var(--space-14); font-size: var(--fs-badge); color: var(--c-text); }
+
+/* 범례 */
+.route-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.route-legend-item { font-size: 10px; font-weight: var(--fw-semibold); border-radius: var(--r-full); padding: 1px var(--space-8); border: 1px solid var(--c-border); color: var(--c-text-muted); }
+.route-legend-item.lg-official { color: var(--c-fits-text); border-color: var(--c-fits-text); }
+.route-legend-item.lg-check { color: var(--c-check-text); border-color: var(--c-check-text); }
+
+/* 타임라인 */
+.route-timeline { display: flex; flex-direction: column; gap: var(--space-2); }
+.route-start, .route-end { display: flex; align-items: center; gap: var(--space-8); font-size: var(--fs-body); font-weight: var(--fw-semibold); }
+.route-start { color: var(--c-primary); }
+.route-end { color: var(--c-text-muted); }
+.route-start-time { margin-left: auto; font-size: var(--fs-badge); color: var(--c-text-muted); }
 .route-seg { display: flex; align-items: center; gap: var(--space-8); padding-left: 3px; min-height: 22px; }
 .route-seg-rail { width: 2px; align-self: stretch; margin-left: 8px; background: var(--c-border); }
 .route-seg-text { font-size: var(--fs-badge); color: var(--c-text-muted); }
@@ -754,7 +778,18 @@ body {
 .route-stop-num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--r-full); background: var(--c-primary); color: var(--c-on-primary); font-size: var(--fs-badge); font-weight: var(--fw-bold); display: flex; align-items: center; justify-content: center; }
 .route-stop-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .route-stop-title-line { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
-.route-stop-glyph { font-size: 16px; }
+.route-stop-glyph { font-size: 15px; }
 .route-stop-title { font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-text); }
+.route-stop-reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .route-stop-meta { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+.route-stop-actions { display: flex; align-items: center; gap: var(--space-10); margin-top: var(--space-2); }
+.route-remove { border: 0; background: none; color: var(--c-text-muted); font-size: var(--fs-badge); font-weight: var(--fw-semibold); cursor: pointer; padding: 0; }
+.route-remove:hover { color: var(--c-error, #b00); }
 .badge--sm { font-size: 10px; padding: 1px var(--space-6); }
+
+/* 총계 */
+.route-totals { display: flex; flex-direction: column; gap: var(--space-4); background: var(--c-bg); border-radius: var(--r-md); padding: var(--space-10) var(--space-12); }
+.route-total-row { display: flex; justify-content: space-between; font-size: var(--fs-body); }
+.route-total-k { color: var(--c-text-muted); }
+.route-total-v { font-weight: var(--fw-bold); color: var(--c-text); }
+.route-stay-note { margin: 0; font-size: var(--fs-badge); color: var(--c-text-muted); font-style: italic; }

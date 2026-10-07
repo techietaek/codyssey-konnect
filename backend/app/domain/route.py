@@ -18,8 +18,11 @@ from app.models.recommend import (
     Candidate,
     ExperienceType,
     PriceStatus,
+    ResultStatus,
     StartLocation,
 )
+
+_GENERIC_LABELS = ("current location", "my location", "")
 
 # 자동 루트에 넣을 수 있는 유형: '자율 방문' 가능한 것. 고정 회차형(공연·축제)은
 # 회차 미확인 시 자동 루트에서 제외(B-T01·FR-B4) — 시간충돌을 신뢰성 있게 판정 불가.
@@ -134,3 +137,29 @@ def route_name(origin: StartLocation, stops: list[Candidate]) -> str:
     if label and label.lower() not in ("current location", "my location"):
         return f"{label} culture walk"
     return "Culture route"
+
+
+def route_headline(origin: StartLocation, stops: list[Candidate]) -> str:
+    """코스 헤드라인 — "N stops from {지역}". 지역 근거 없으면 "N-stop culture route"."""
+    label = (origin.label or "").strip()
+    n = len(stops)
+    if label.lower() not in _GENERIC_LABELS:
+        return f"{n} stops from {label}"
+    return f"{n}-stop culture route"
+
+
+def route_status(stops: list[Candidate]) -> ResultStatus:
+    """루트 전체 상태 — 모든 스톱이 fits면 FITS, 하나라도 확인필요면 CHECK_NEEDED.
+    개별 사실을 덮지 않는다(각 스톱 배지는 그대로) — 코스 레벨 요약일 뿐."""
+    if any(s.status is not ResultStatus.FITS for s in stops):
+        return ResultStatus.CHECK_NEEDED
+    return ResultStatus.FITS
+
+
+def route_checks(stops: list[Candidate]) -> list[str]:
+    """코스 전체에서 '가기 전 확인할 것' 집계 — 각 스톱의 미확인 flag를 '{내용} · {장소}'로."""
+    checks: list[str] = []
+    for s in stops:
+        for f in s.flags:
+            checks.append(f"{f.text} · {s.title}")
+    return checks

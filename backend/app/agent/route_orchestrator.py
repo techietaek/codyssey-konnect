@@ -19,10 +19,20 @@ from app.agent.exclude_classifier import classify_excluded
 from app.agent.note_parser import parse_note
 from app.agent.orchestrator import _enrich, _fetch_pool
 from app.core.trace import Trace
+from app.domain.budget import BudgetVerdict
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.ranking import type_preference_rank
-from app.domain.route import assemble_route, rollup_budget, route_name
+from app.domain.reasons import select_reasons
+from app.domain.route import (
+    assemble_route,
+    rollup_budget,
+    route_checks,
+    route_headline,
+    route_name,
+    route_status,
+)
+from app.domain.timing import TimingVerdict
 from app.models.recommend import (
     Candidate,
     InterestCode,
@@ -113,6 +123,9 @@ async def _build_route(
     return Route(
         id="route-" + "-".join(s.id for s in stops),
         name=route_name(origin, stops),
+        headline=route_headline(origin, stops),
+        status=route_status(stops),
+        checks=route_checks(stops),
         stops=[RouteStop(order=i + 1, candidate=s) for i, s in enumerate(stops)],
         segments=segments,
         total_walk_minutes=total_walk,
@@ -142,6 +155,8 @@ async def recommend_route(
         *(_enrich(it, ctx, cond, trace) for it in pool[:_ROUTE_POOL])
     )
     valid = [(c, txt) for (c, _, _, txt) in results if c is not None]
+    # 스톱별 Reason(코스 "왜 이 장소")용 판정 보관 — 관심사·시간·예산 근거 재사용(A와 동일).
+    verdicts = {c.id: (t, b) for (c, t, b, _) in results if c is not None}
 
     # [filter-places] 명시 장소 제외(B4): 사용자가 이름 댄 스톱 제거(재삽입 금지 — 조건이
     # 히스토리로 캐리포워드되는 한 매 재구성에서 다시 빠진다). 결정론 title 매칭.
@@ -177,6 +192,10 @@ async def recommend_route(
     stops = assemble_route(origin, preferred) if len(preferred) >= 2 else []
     if len(stops) < 2:
         stops = assemble_route(origin, feasible)
+    # 스톱별 Reason(코스 "왜 이 장소" — 관심사/시간/예산 근거). 근거 없으면 0개(강제 금지).
+    for s in stops:
+        t, b = verdicts.get(s.id, (TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN))
+        s.reasons = select_reasons(s, cond, t, b, is_nearest=False)
     if len(stops) < 2:
         trace.step("route_unmet", reason="under_2_stops", feasible=len(feasible))
         return RouteData(

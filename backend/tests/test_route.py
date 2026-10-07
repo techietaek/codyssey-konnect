@@ -5,8 +5,11 @@ from app.domain.route import (
     assemble_route,
     haversine_m,
     rollup_budget,
+    route_checks,
     route_eligible,
+    route_headline,
     route_name,
+    route_status,
 )
 from app.models.recommend import (
     Candidate,
@@ -16,6 +19,7 @@ from app.models.recommend import (
     Provenance,
     ResultStatus,
     StartLocation,
+    UnconfirmedFlag,
 )
 
 _ORIGIN = StartLocation(label="Insadong", lat=37.570, lng=126.985)
@@ -100,3 +104,30 @@ def test_rollup_budget():
 def test_route_name():
     assert route_name(_ORIGIN, [_A, _B]) == "Insadong culture walk"
     assert route_name(StartLocation(label="Current location"), [_A]) == "Culture route"
+
+
+def test_route_headline():
+    assert route_headline(_ORIGIN, [_A, _B, _C]) == "3 stops from Insadong"
+    assert (
+        route_headline(StartLocation(label="Current location"), [_A, _B])
+        == "2-stop culture route"
+    )
+
+
+def test_route_status_aggregate():
+    fit = _c("f", 37.571)  # FITS
+    check = Candidate(id="c", title="C", status=ResultStatus.CHECK_NEEDED)
+    assert route_status([fit, _B]) is ResultStatus.FITS
+    assert route_status([fit, check]) is ResultStatus.CHECK_NEEDED  # 하나라도 check
+
+
+def test_route_checks_aggregates_flags():
+    s1 = Candidate(
+        id="s1",
+        title="Belfry",
+        status=ResultStatus.CHECK_NEEDED,
+        flags=[UnconfirmedFlag(text="Price needs checking")],
+    )
+    s2 = Candidate(id="s2", title="Park", status=ResultStatus.FITS)  # flag 없음
+    checks = route_checks([s1, s2])
+    assert checks == ["Price needs checking · Belfry"]

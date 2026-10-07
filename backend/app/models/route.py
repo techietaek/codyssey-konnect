@@ -16,6 +16,7 @@ from app.models.recommend import (
     Candidate,
     MovementInfo,
     Provenance,
+    ResultStatus,
     StartLocation,
     UnconfirmedFlag,
 )
@@ -37,6 +38,11 @@ class RouteSegment(BaseModel):
 class Route(BaseModel):
     id: str
     name: str  # FR-B8: 지역/주요장소 근거, 불가 시 "Culture route"
+    headline: str = ""  # 코스 헤드라인 "N stops from {지역}"
+    # 코스 전체 상태(요약) — 개별 스톱 배지를 덮지 않는다. fits=Ready / check=Still to check.
+    status: ResultStatus = ResultStatus.FITS
+    # 코스 전체 '가기 전 확인할 것' 집계("{내용} · {장소}").
+    checks: list[str] = Field(default_factory=list)
     stops: list[RouteStop] = Field(min_length=2, max_length=3)
     segments: list[RouteSegment] = Field(default_factory=list)
     # 루트 전체 도보 이동시간(알려진 구간 합, estimate). 한 구간이라도 미확인이면 None.
