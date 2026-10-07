@@ -43,3 +43,16 @@ export function putSession(fields) {
     body: JSON.stringify(fields),
   });
 }
+
+// ── 장기 선호 (L2 · P-09) — 정식 로그인 사용자의 관심사·걷기 선호 ──
+// GET 은 needs_onboarding(미온보딩 여부) 포함. PUT 은 Save·Skip·초기화 공용.
+export function getPreferences() {
+  return request("/api/preferences");
+}
+
+export function putPreferences(fields) {
+  return request("/api/preferences", {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
+}

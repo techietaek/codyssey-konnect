@@ -58,7 +58,7 @@ function coreAction({ kicker, title, sub, cta, disabled, onClick }) {
   return card;
 }
 
-export function renderHomeView({ onStartA, onViewChoice }) {
+export function renderHomeView({ onStartA, onViewChoice, onOpenMyPage }) {
   const root = el("section", "home");
 
   // 소프트 헤더 배경(일러스트 자리) — 토큰 그라디언트.
@@ -66,11 +66,23 @@ export function renderHomeView({ onStartA, onViewChoice }) {
 
   const content = el("div", "home-content");
 
-  // 브랜드 행 (KONNECT · EN) — Account 는 로그인 Phase 2라 생략.
+  // 브랜드 행 (KONNECT · EN · [Account]) — Account 는 로그인(비익명) 시에만(L3 진입점).
   const brand = el("div", "home-brand");
   brand.append(el("span", "home-logo", "KONNECT"));
-  const lang = el("span", "home-lang", "EN");
-  brand.append(lang);
+  const brandRight = el("div", "home-brand-right");
+  brandRight.append(el("span", "home-lang", "EN"));
+  if (isLoggedIn()) {
+    const name = displayName();
+    const account = el("button", "home-account");
+    account.type = "button";
+    account.title = "My Page";
+    account.setAttribute("aria-label", "My Page");
+    // 아바타 — 이름 첫 글자(없으면 사람 글리프).
+    account.textContent = name ? name.trim()[0].toUpperCase() : "👤";
+    account.addEventListener("click", () => onOpenMyPage?.());
+    brandRight.append(account);
+  }
+  brand.append(brandRight);
   content.append(brand);
 
   // 인사
