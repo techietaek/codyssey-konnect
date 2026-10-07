@@ -5,7 +5,12 @@
 
 from __future__ import annotations
 
-from app.domain.ranking import display_sort_key, preference_rank
+from app.domain.normalize import type_from_contenttype
+from app.domain.ranking import (
+    display_sort_key,
+    preference_rank,
+    type_preference_rank,
+)
 from app.models.recommend import (
     Candidate,
     ExperienceType,
@@ -50,12 +55,21 @@ def test_liked_beats_avoided_when_both_match():
     assert preference_rank(c, cond) == 0
 
 
-def test_status_outranks_preference():
-    # 등급이 1차 키 — 선호해도 check_needed 가 fits 앞에 오지 않는다
+def test_preference_outranks_status_b_plan():
+    # B안(관심사 우선): 원하는 유형이면 check_needed 라도 중립 fits 보다 먼저.
+    # (사실은 안 바뀜 — 각 카드의 상태 배지는 그대로 fits/check 로 표기)
     cond = ParsedConditions(interests=[InterestCode.LIVE_PERFORMANCES])
     liked_check = _cand(ExperienceType.PERFORMANCE, ResultStatus.CHECK_NEEDED)
     neutral_fit = _cand(ExperienceType.HISTORIC_VISIT, ResultStatus.FITS)
-    assert display_sort_key(neutral_fit, cond) < display_sort_key(liked_check, cond)
+    assert display_sort_key(liked_check, cond) < display_sort_key(neutral_fit, cond)
+
+
+def test_status_breaks_tie_within_same_interest():
+    # 같은 관심사 안에서는 상태가 2차 키 — fits 가 check 앞.
+    cond = ParsedConditions(interests=[InterestCode.ART_EXHIBITIONS])
+    liked_fit = _cand(ExperienceType.EXHIBITION, ResultStatus.FITS)
+    liked_check = _cand(ExperienceType.EXHIBITION, ResultStatus.CHECK_NEEDED)
+    assert display_sort_key(liked_fit, cond) < display_sort_key(liked_check, cond)
 
 
 def test_sort_stable_keeps_distance_within_grade():
@@ -74,3 +88,11 @@ def test_avoided_not_excluded():
     cond = ParsedConditions(avoid_interests=[InterestCode.LIVE_PERFORMANCES])
     only = _cand(ExperienceType.PERFORMANCE)
     assert preference_rank(only, cond) == 2  # 존재하되 뒤로
+
+
+def test_type_preference_rank_for_selection():
+    # 선발(조회 풀 재정렬)용 — 유형만으로 0/1/2. contenttypeid → 유형 매핑과 결합.
+    cond = ParsedConditions(interests=[InterestCode.ART_EXHIBITIONS])
+    assert type_preference_rank(type_from_contenttype("78"), cond) == 0  # 미술관=선호
+    assert type_preference_rank(type_from_contenttype("76"), cond) == 1  # 역사=중립
+    assert type_preference_rank(type_from_contenttype(None), cond) == 1  # 미상=중립

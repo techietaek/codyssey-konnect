@@ -20,6 +20,7 @@ from app.agent.orchestrator import _enrich, _fetch_pool
 from app.core.trace import Trace
 from app.domain.exclusion import select_with_exclusion
 from app.domain.locations import resolve_start_coords
+from app.domain.ranking import type_preference_rank
 from app.domain.route import assemble_route, rollup_budget, route_name
 from app.models.recommend import (
     Candidate,
@@ -150,14 +151,20 @@ async def recommend_route(
         [c.id for c, _ in valid], exclude_ids, cond.exclude_concepts, len(valid)
     )
     feasible = [by_id[i] for i in kept_ids]
+    # 관심사 우선 루트(FR-B4): 가능하면 관심사 매칭 스톱으로 코스 구성, 2개 미만이면
+    # 전체 feasible 로 폴백(강제 아님 — 원하는 콘텐츠가 충분할 때만 그걸로 짠다).
+    preferred = [c for c in feasible if type_preference_rank(c.type, cond) == 0]
     trace.step(
         "route_feasible",
         considered=len(results),
         feasible=len(feasible),
+        preferred=len(preferred),
         excluded_pref=len(applied),
     )
 
-    stops = assemble_route(origin, feasible)
+    stops = assemble_route(origin, preferred) if len(preferred) >= 2 else []
+    if len(stops) < 2:
+        stops = assemble_route(origin, feasible)
     if len(stops) < 2:
         trace.step("route_unmet", reason="under_2_stops", feasible=len(feasible))
         return RouteData(

@@ -34,6 +34,12 @@ _TYPE_MAP = {
     "85": ExperienceType.FESTIVAL_EVENT,  # Festivals/Performances/Events
 }
 
+
+def type_from_contenttype(contenttypeid: str | None) -> ExperienceType:
+    """contenttypeid → 유형(상세조회 전 선발용). 미상은 default."""
+    return _TYPE_MAP.get(str(contenttypeid), ExperienceType.DEFAULT)
+
+
 # 좌표 한국 범위 (이상치 drop)
 _LAT_RANGE = (33.0, 39.0)
 _LNG_RANGE = (124.0, 132.0)

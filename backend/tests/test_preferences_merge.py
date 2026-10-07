@@ -86,10 +86,11 @@ def test_saved_interest_bumps_order_when_note_silent():
     assert [c.title for c in ordered] == ["art", "hist"]
 
 
-def test_saved_interest_does_not_override_status_tier():
-    """저장 관심사는 등급을 넘지 못한다 — check_needed(비선호 아님)가 fits 앞으로 오지 않음."""
+def test_saved_interest_is_primary_b_plan():
+    """B안(관심사 우선, Product 2026-10-07): 저장 관심사면 check_needed 라도 중립 fits
+    앞으로. 사실은 안 바뀐다 — 각 카드 상태 배지는 그대로(fits/check). 제외도 아님."""
     cond = merge_saved_interests(ParsedConditions(), [ART])
     art_check = _cand(ExperienceType.EXHIBITION, ResultStatus.CHECK_NEEDED, "art_chk")
     hist_fit = _cand(ExperienceType.HISTORIC_VISIT, ResultStatus.FITS, "hist_fit")
     ordered = sorted([art_check, hist_fit], key=lambda c: display_sort_key(c, cond))
-    assert [c.title for c in ordered] == ["hist_fit", "art_chk"]
+    assert [c.title for c in ordered] == ["art_chk", "hist_fit"]

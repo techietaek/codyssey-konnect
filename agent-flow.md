@@ -239,7 +239,7 @@
 > **접근 A(합의):** 실행가능성 우선 코어를 먼저. **관심사·이동 균형 랭킹(FR-B4 = Soft B안)**은 Product 결정 3건(`docs/soft-ranking.md §3`) 확정 후 — 지금은 거리 기반 걷기 동선.
 > **파일:** `domain/route.py`(순수 조립: haversine·route_eligible·assemble_route·rollup_budget·route_name) · `agent/route_orchestrator.py`(A의 `_fetch_pool`/`_enrich` 재사용→feasible→조립→구간 Tmap) · `models/route.py` · `api/route.py`(POST /api/route) · Agent `PlanCultureRoute` tool 연동. `test_route.py`(+9, 145 pytest Green).
 - [x] 하루 1코스 2~3 스톱, 2·3개 동등, **3개 강제 금지**(walkable leg 상한 1500m로 자연 결정) (FR-B4, B-T06)
-- [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ⚑ 관심사·이동 **균형 조합은 B안 대기**(현재 거리순)
+- [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ✅ **관심사 우선 선발·순위(FR-B4 Soft B안, 2026-10-07)** — Product 결정(선발까지·관심사 우선) 반영. `docs/soft-ranking.md §3`
 - [x] 고정형(공연·축제) 자동 루트 제외, **자율형 체류시간 미주장**(B-T01, 근거 없어 "Visit times are yours to plan")
 - [x] 방문 순서·구간시간·확인 비용·미확인 구분 (FR-B5 장소별 fact 재사용) — 루트 vs 개별 이유 구분은 reasons 보강 시
 - [x] 예산: 필수비용 하나라도 미확인이면 `Total cost needs checking`(전체 충족 주장 금지)

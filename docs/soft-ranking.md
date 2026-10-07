@@ -50,7 +50,12 @@ A안을 **본격 Soft 스코어링**으로 승격. 저장된 Preference(FR-L3/L4
 2. **가중치** — 관심사 vs 거리의 상대 강도(과개인화 방지).
 3. **불변식(동의해도 유지)** — 비선호 Hard 제외 금지(§6.6), 사실/가용성 보존(FR-L5), 강제 채움 금지(§6.5), Context 우선순위 Request>Trip>Preference.
 
+### Product 결정 (2026-10-07, 확정)
+1. **선발 vs 순서** → **선발까지 영향**. 2. **가중치** → **관심사 우선**(거리는 2차).
+3. **불변식** → 유지. 방향: "무작정 가까운 것"이 아니라 **"원하는 콘텐츠 중 가까운 것을 자연스럽게"**.
+
 ### 체크리스트
 - [x] A안 — 같은 등급 내 선호/비선호 tiebreak (2026-10-07)
-- [ ] B안-설계 — 스코어링 모델 + 위 3개 결정 Product 합의 (Phase 2 착수 시)
-- [ ] B안-구현 — 저장 Preference·Trip 반영, 선발/순위 (Phase 2/3)
+- [x] B안-설계 — 결정 3건 확정(위) (2026-10-07)
+- [x] **B안-구현 (2026-10-07)** — 표시 키 **(관심사순위 → 상태등급 → 거리)**, 관심사 우선. **선발 반영**: orchestrator 가 조회 풀(반경 1500m 내)을 관심사 우선 안정정렬 후 판정·선발 → 관심사 맞는 후보가 조금 멀어도 들어옴(과개인화는 반경으로 제한). 루트: 가능하면 관심사 매칭 스톱으로 구성, 2개 미만이면 전체 폴백. `domain/ranking`(type_preference_rank·display_sort_key) · `normalize.type_from_contenttype` · `orchestrator`·`route_orchestrator`. 149 pytest. 라이브: "I love art exhibitions" → top-4 전부 exhibition(선발 반영), 비선호·비관심사는 제외 아님(강등). **불변식 유지**: 상태·가격·시간 사실 불변, 비선호 Hard 제외 없음, 강제채움 없음.
+- **경계(남음):** 유형 매핑이 조회단계 3유형(76/78/85)이라 hands_on/performance 세분 선발은 제한(상세단계 유형은 반영). 저장 Preference 는 merge 로 반영(Request>Trip>Preference 유지).

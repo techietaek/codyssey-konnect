@@ -19,10 +19,15 @@ from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
 from app.domain.exclusion import select_with_exclusion
 from app.domain.locations import resolve_start_coords
-from app.domain.normalize import _strip_html, enrich_intro, normalize_candidate
+from app.domain.normalize import (
+    _strip_html,
+    enrich_intro,
+    normalize_candidate,
+    type_from_contenttype,
+)
 from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.preferences_merge import merge_saved_interests
-from app.domain.ranking import display_sort_key
+from app.domain.ranking import display_sort_key, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
 from app.domain.timing import (
@@ -199,8 +204,18 @@ async def recommend_a(
         budget_krw=cond.budget_krw,
     )
 
-    # 가까운 순 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로 대체.
-    # 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 가까운 순 최대 4개).
+    # [select] 관심사 우선 선발(FR-B4 Soft B안): 조회 풀(반경 1500m 내, 거리순)을 관심사
+    # 우선으로 '안정 정렬' → 관심사 맞는 후보가 조금 멀어도 판정·선발에 들어온다(거리는
+    # 같은 관심사 안에서 보존). 관심사 미언급이면 모두 중립이라 거리순 그대로.
+    if cond.interests or cond.avoid_interests:
+        pool.sort(
+            key=lambda it: type_preference_rank(
+                type_from_contenttype(it.get("contenttypeid")), cond
+            )
+        )
+
+    # 관심사 우선 순으로 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로
+    # 대체. 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 최대 4개).
     results = await asyncio.gather(
         *(_enrich(it, ctx, cond, trace) for it in pool[:_ENRICH_POOL])
     )
