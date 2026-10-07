@@ -55,6 +55,23 @@ export function isSignedIn() {
   return _signedIn;
 }
 
+// Google 로그인 (L1d). 익명 세션이 있으면 **identity linking**으로 동일 user_id 를
+// 영구 계정으로 승격(데이터 자동 보존, FR-L2). 아니면 일반 OAuth. 둘 다 Google 로
+// 리다이렉트되고, 돌아오면 supabase-js 가 세션을 복원한다(detectSessionInUrl).
+export async function signInWithGoogle() {
+  await ready();
+  if (!_client) throw new Error("Auth is not ready.");
+  const redirectTo = window.location.href;
+  const {
+    data: { session },
+  } = await _client.auth.getSession();
+  const opts = { provider: "google", options: { redirectTo } };
+  const { error } = session?.user?.is_anonymous
+    ? await _client.auth.linkIdentity(opts)
+    : await _client.auth.signInWithOAuth(opts);
+  if (error) throw error;
+}
+
 export function supabase() {
   return _client;
 }
