@@ -1,6 +1,8 @@
 // LF-06 · 로그인 유도 바텀시트 (FR-L1). 비회원이 'Find new options'을 누를 때.
-// 디자인은 구현하되 'Continue with Google'은 비활성 — 실제 Supabase Auth(OAuth)는
-// Phase 2. 현재 결과/선택은 그대로 유지된다는 점을 문구로 안내.
+// 'Continue with Google' → Supabase OAuth(익명→identity linking, L1d). 현재 결과/
+// 선택은 그대로 유지되고, 리다이렉트 후 돌아오면 동일 user_id 로 데이터 보존된다.
+import { signInWithGoogle } from "../auth.js";
+
 function el(tag, className, text) {
   const n = document.createElement(tag);
   if (className) n.className = className;
@@ -28,11 +30,23 @@ export function showLoginSheet({ onEditInstead } = {}) {
 
   const google = el("button", "btn-google", "Continue with Google");
   google.type = "button";
-  google.disabled = true;
-  google.setAttribute("aria-disabled", "true");
-  google.title = "Coming in a later phase";
-  const soon = el("span", "sheet-soon", "Available in a later phase");
-  sheet.append(google, soon);
+  const hint = el("span", "sheet-soon", "");
+  hint.hidden = true;
+  google.addEventListener("click", async () => {
+    google.disabled = true;
+    google.textContent = "Redirecting…";
+    try {
+      await signInWithGoogle(); // 성공 시 Google 로 리다이렉트(이 페이지를 떠남)
+    } catch (e) {
+      // 설정 누락(redirect 미허용·manual linking 비활성 등) → 여기서 드러난다.
+      google.disabled = false;
+      google.textContent = "Continue with Google";
+      hint.hidden = false;
+      hint.textContent = "Sign-in is unavailable right now. Please try again.";
+      console.warn("google sign-in failed:", e?.message || e);
+    }
+  });
+  sheet.append(google, hint);
 
   const not = el("button", "sheet-dismiss", "Not now");
   not.type = "button";

@@ -1,7 +1,8 @@
 // 뷰 컨트롤러: 웰컴(W-0) → 홈(LF-01) → 입력(LF-02) → 결과(LF-03) 전환.
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
-import { postRecommend } from "./api.js";
+import { postRecommend, putSession } from "./api.js";
+import { ready as authReady, onAuthChange } from "./auth.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
 import { renderInputView } from "./pages/input.js";
@@ -69,6 +70,8 @@ export function startRecommend(payload) {
         return;
       }
       setResults(payload, env.data.candidates);
+      // 현재 요청조건을 서버에 영속(선택 전에도 연속성 — L1c/FR-L2). 실패 무영향.
+      putSession({ last_request: payload }).catch(() => {});
       showResults({ request: payload, env });
     })
     .catch(() => {
@@ -120,5 +123,15 @@ try {
 } catch {
   /* noop */
 }
-if (seen) showHome();
-else showWelcome();
+
+// 세션(익명/정식) 준비 후 첫 화면을 그린다 → 홈의 로그인 상태(Hello·Log out)가
+// 첫 페인트에 반영된다. auth 실패해도 화면은 그린다(비인증 진행).
+authReady().finally(() => {
+  if (seen) showHome();
+  else showWelcome();
+});
+
+// 로그인/로그아웃/OAuth 복귀로 세션이 바뀌면, 홈이 떠 있을 때 재렌더(Hello·Log out 반영).
+onAuthChange(() => {
+  if (document.querySelector(".home")) showHome();
+});

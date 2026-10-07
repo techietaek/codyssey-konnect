@@ -1,8 +1,9 @@
 // LF-01 · 메인 홈 (M-1 첫 방문 / M-2 현재 선택 있음).
 // A 즉시추천 = 활성, B 문화루트·Log in = 디자인 구현하되 비활성(Phase 2).
 // 현재 선택이 있으면(A6 localStorage) 재접근 카드 + 미니맵을 상단에 노출.
+import { displayName, signInWithGoogle, signOut } from "../auth.js";
 import { renderMiniMap } from "../map.js";
-import { clearChoice, loadChoice } from "../state.js";
+import { clearChoice, isLoggedIn, loadChoice } from "../state.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -74,6 +75,11 @@ export function renderHomeView({ onStartA, onViewChoice }) {
 
   // 인사
   const greeting = el("div", "home-greeting");
+  // 로그인(비익명) 사용자에겐 Google 이름으로 Hello 인사.
+  const name = isLoggedIn() ? displayName() : null;
+  if (name) {
+    greeting.append(el("p", "home-hello", `Hello, ${name.split(" ")[0]} 👋`));
+  }
   greeting.append(
     el("p", "home-stamp", nowStamp()),
     el("h1", "home-head", "Find a cultural experience that fits your day."),
@@ -170,14 +176,40 @@ export function renderHomeView({ onStartA, onViewChoice }) {
   info.append(infoText);
   content.append(info);
 
-  // Log in (저우선·비활성 — Phase 2). 화면 최하단(Figma).
+  // Log in / Log out (화면 최하단, Figma). 로그인(비익명) 상태에 따라 분기. L1d.
   const login = el("div", "home-login");
-  const loginBtn = el("button", "home-login-btn", "Log in");
-  loginBtn.type = "button";
-  loginBtn.disabled = true;
-  loginBtn.setAttribute("aria-disabled", "true");
-  loginBtn.title = "Coming in a later phase";
-  login.append(loginBtn);
+  if (isLoggedIn()) {
+    const logoutBtn = el("button", "home-login-btn", "Log out");
+    logoutBtn.type = "button";
+    logoutBtn.addEventListener("click", async () => {
+      logoutBtn.disabled = true;
+      logoutBtn.textContent = "Logging out…";
+      try {
+        await signOut(); // 성공 시 리로드(로그인 전 상태로)
+      } catch (e) {
+        logoutBtn.disabled = false;
+        logoutBtn.textContent = "Log out";
+        console.warn("sign-out failed:", e?.message || e);
+      }
+    });
+    login.append(logoutBtn);
+  } else {
+    const loginBtn = el("button", "home-login-btn", "Log in");
+    loginBtn.type = "button";
+    loginBtn.addEventListener("click", async () => {
+      loginBtn.disabled = true;
+      loginBtn.textContent = "Redirecting…";
+      try {
+        await signInWithGoogle(); // 성공 시 Google 로 리다이렉트
+      } catch (e) {
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Log in";
+        loginBtn.title = "Sign-in is unavailable right now.";
+        console.warn("google sign-in failed:", e?.message || e);
+      }
+    });
+    login.append(loginBtn);
+  }
   content.append(login);
 
   root.append(content);

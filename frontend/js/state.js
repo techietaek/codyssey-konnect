@@ -1,4 +1,7 @@
 // 클라이언트 상태 컨테이너. 화면 로직(pages/)과 분리.
+import { putSession } from "./api.js";
+import { isSignedIn } from "./auth.js";
+
 export const state = {
   request: null, // 마지막 추천 요청 조건(payload)
   candidates: [], // 현재 후보 목록
@@ -6,11 +9,10 @@ export const state = {
   selectedId: null, // Select experience 로 확정한 현재 선택 (선택 ≠ 방문)
 };
 
-// 로그인 상태 스텁 — Phase 2에서 Supabase Auth(Google OAuth)로 교체.
-// 지금은 비회원 전용 흐름이라 항상 false. 이 값으로 B·Login·Find new options
-// 의 '비활성/로그인 유도'를 분기한다(디자인은 구현, 기능만 보류).
+// 정식 로그인(비익명) 여부. 익명 세션은 false → FR-L1(재추천 시 로그인 유도) 유지.
+// Google 로그인/연결은 L1d에서 활성화되면 이 값이 true 가 된다.
 export function isLoggedIn() {
-  return false;
+  return isSignedIn();
 }
 
 export function setResults(request, candidates) {
@@ -33,6 +35,12 @@ export function saveChoice(request, env, candidateId) {
   } catch {
     /* 저장 불가(시크릿 모드 등)여도 현 세션 선택은 유지 */
   }
+  // 서버(계정·익명)에도 미러 — 연속성·마이그레이션(L1d) 대비. 실패해도 UI 무영향.
+  // env(후보 전체)는 저장하지 않는다 — 요청·선택 id만(복원 시 재조회가 정본).
+  putSession({
+    last_request: request,
+    current_choice: { candidateId, at: Date.now() },
+  }).catch(() => {});
 }
 
 export function loadChoice() {
@@ -50,4 +58,5 @@ export function clearChoice() {
   } catch {
     /* noop */
   }
+  putSession({ current_choice: null }).catch(() => {}); // 서버 미러도 비움
 }

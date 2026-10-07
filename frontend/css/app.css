@@ -294,6 +294,7 @@ body {
   font-weight: var(--fw-semibold); color: var(--c-text);
 }
 .home-greeting { margin-top: var(--space-20); }
+.home-hello { margin: 0 0 var(--space-6); font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-primary-ink); }
 .home-stamp { margin: 0 0 var(--space-6); font-size: var(--fs-badge); font-weight: var(--fw-semibold); letter-spacing: 0.06em; color: var(--c-primary-ink); }
 .home-head { margin: 0; font-size: 22px; line-height: var(--lh-tight); font-weight: var(--fw-bold); max-width: 320px; }
 
@@ -343,7 +344,8 @@ body {
 
 /* Log in (비활성·저우선) — 화면 최하단(Figma), 밑줄 없음 */
 .home-login { display: flex; align-items: center; justify-content: center; margin-top: auto; padding-top: var(--space-20); }
-.home-login-btn { background: none; border: 0; color: var(--c-text-muted); font-size: var(--fs-meta); font-weight: var(--fw-bold); text-decoration: none; cursor: not-allowed; }
+.home-login-btn { background: none; border: 0; color: var(--c-text-muted); font-size: var(--fs-meta); font-weight: var(--fw-bold); text-decoration: underline; cursor: pointer; }
+.home-login-btn:disabled { cursor: default; text-decoration: none; opacity: 0.6; }
 .sheet-soon { color: var(--c-text-muted); }
 
 /* ── LF-02 · 입력 (Figma 274:2272 정본) ──────────────────── */

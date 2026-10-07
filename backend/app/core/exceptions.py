@@ -43,3 +43,11 @@ class ValidationFailure(KonnectError):
     code = "validation_error"
     http_status = 422
     user_message = "Please check your input and try again."
+
+
+class AuthError(KonnectError):
+    """인증 실패 — JWT 누락·만료·검증 실패(Phase 2 L1). 시스템 예외 아님."""
+
+    code = "auth_error"
+    http_status = 401
+    user_message = "Please sign in and try again."

@@ -7,11 +7,14 @@ A2: 입력 검증 → 구조화 → 공식 API(TourAPI) 조회 → 정규화 후
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
 
 from app.agent.context import RequestContext
 from app.agent.note_parser import parse_note
 from app.agent.orchestrator import recommend_a
+from app.core.auth import AuthUser, get_optional_user
 from app.core.trace import Trace
 from app.domain.input_validation import validate_available_time
 from app.models.envelope import Envelope
@@ -37,8 +40,17 @@ async def parse(req: ParseRequest) -> Envelope[ParsedConditions]:
 
 
 @router.post("/recommend", response_model=Envelope[RecommendData])
-async def recommend(req: RecommendRequest) -> Envelope[RecommendData]:
+async def recommend(
+    req: RecommendRequest,
+    user: Annotated[AuthUser | None, Depends(get_optional_user)] = None,
+) -> Envelope[RecommendData]:
     trace = Trace()
+    # [auth] 선택적 신원(익명/정식). 비로그인도 허용(FR-L1 첫 추천). 영속은 L1c.
+    trace.step(
+        "auth",
+        user=user.id if user else None,
+        anonymous=bool(user and user.is_anonymous),
+    )
 
     # [validate] 추천 전 입력 경계 검증 (FR-A2·A3). 위반 시 ValidationFailure →
     # main.py 핸들러가 422 Envelope(ok=False)로 변환. 시스템 예외·0건과 구분.
