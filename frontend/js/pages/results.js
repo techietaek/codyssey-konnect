@@ -34,6 +34,8 @@ const INTEREST_LABEL = {
 function conditionChips(cond) {
   if (!cond) return [];
   const labels = (cond.interests ?? []).map((i) => INTEREST_LABEL[i] ?? i);
+  for (const i of cond.avoid_interests ?? [])
+    labels.push(`Not: ${INTEREST_LABEL[i] ?? i}`);
   if (cond.free_only) labels.push("Free only");
   if (cond.budget_krw) labels.push(`≤ ₩${cond.budget_krw.toLocaleString()}`);
   if (cond.indoor_outdoor)

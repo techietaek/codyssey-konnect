@@ -34,6 +34,10 @@ class ParsedConditions(BaseModel):
         default_factory=list,
         description="Cultural interests the user explicitly mentioned. Empty if none stated.",
     )
+    avoid_interests: list[InterestCode] = Field(
+        default_factory=list,
+        description="Interests the user explicitly said they dislike / want to avoid. Empty if none stated.",
+    )
     free_only: bool = Field(
         default=False,
         description="True ONLY if the user explicitly asked for free experiences only.",

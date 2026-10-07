@@ -19,6 +19,7 @@ from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import enrich_intro, normalize_candidate
 from app.domain.operational import PresenceVerdict, judge_presence
+from app.domain.ranking import display_sort_key
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
 from app.domain.timing import (
@@ -44,8 +45,6 @@ _CULTURAL_TYPES = (76, 78, 85)
 _SEARCH_RADIUS_M = 1500
 _MAX_CANDIDATES = 4
 _ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 위한 보강 범위
-# 표시 순서 우선도: 조건 충족 > 완화 대안 > 추가 확인 필요 (같은 등급은 거리순 유지)
-_STATUS_RANK = {"fits": 0, "alternative": 1, "check_needed": 2}
 
 
 async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
@@ -218,9 +217,10 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
         )
     trace.step("explain", with_reasons=sum(1 for c in candidates if c.reasons))
 
-    # [compose] 표시 순서: 등급(fits→alternative→check_needed) 우선, 같은 등급은 거리순.
-    # candidates 는 이미 거리순 → status 로만 '안정 정렬'하면 등급 내 거리순이 유지된다.
-    candidates.sort(key=lambda c: _STATUS_RANK.get(c.status.value, 99))
+    # [compose] 표시 순서: 등급(fits→alternative→check_needed) 우선, 같은 등급 안에서
+    # 관심사 선호↑·비선호↓(Soft, 제외 아님), 그다음 거리순. candidates 는 이미 거리순 →
+    # display_sort_key 로 '안정 정렬'하면 같은 키 안에서 거리순이 유지된다(domain/ranking).
+    candidates.sort(key=lambda c: display_sort_key(c, cond))
     trace.step(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
