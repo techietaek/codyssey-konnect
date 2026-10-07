@@ -232,13 +232,15 @@
 - [ ] `Show culture route`는 필수 4값 확인 후 활성
 - **Done when:** 대화로 4값이 확정되고 compact editable summary로 수정 가능.
 
-### B2 — 루트 구성 (LF-05)
-- [ ] 하루 1코스 2~3개 루트 1개, 2·3개 동등, 3개 강제 금지 (FR-B4, B-T06)
-- [ ] 실행 가능성·필수조건 먼저 → 관심사·이동 균형 조합
-- [ ] 고정형 실행시간 미확인 시 자동 루트 제외, 자율형 계획 체류시간은 근거 있을 때만(`예정`) (B-T01)
-- [ ] 방문 순서·시간·확인 비용·예약/참여·미확인 구분, 루트 전체 vs 개별 장소 이유 구분 (FR-B5)
-- [ ] 예산: 필수비용 미확인 포함 시 전체 `예산 충족` 금지 → `총비용 추가 확인 필요`
-- **Done when:** 신뢰 가능한 2~3개 루트가 순서·시간·비용·미확인 구분으로 구성. 조합 불가 시 개별/실패 전환.
+### B2 — 루트 구성 (LF-05) [~] 코어 완료(2026-10-07, 백엔드·라이브 Green) · ⚑ 균형 랭킹 대기
+> **접근 A(합의):** 실행가능성 우선 코어를 먼저. **관심사·이동 균형 랭킹(FR-B4 = Soft B안)**은 Product 결정 3건(`docs/soft-ranking.md §3`) 확정 후 — 지금은 거리 기반 걷기 동선.
+> **파일:** `domain/route.py`(순수 조립: haversine·route_eligible·assemble_route·rollup_budget·route_name) · `agent/route_orchestrator.py`(A의 `_fetch_pool`/`_enrich` 재사용→feasible→조립→구간 Tmap) · `models/route.py` · `api/route.py`(POST /api/route) · Agent `PlanCultureRoute` tool 연동. `test_route.py`(+9, 145 pytest Green).
+- [x] 하루 1코스 2~3 스톱, 2·3개 동등, **3개 강제 금지**(walkable leg 상한 1500m로 자연 결정) (FR-B4, B-T06)
+- [x] 실행 가능성·필수조건 먼저(A와 동일 판정 재사용) → ⚑ 관심사·이동 **균형 조합은 B안 대기**(현재 거리순)
+- [x] 고정형(공연·축제) 자동 루트 제외, **자율형 체류시간 미주장**(B-T01, 근거 없어 "Visit times are yours to plan")
+- [x] 방문 순서·구간시간·확인 비용·미확인 구분 (FR-B5 장소별 fact 재사용) — 루트 vs 개별 이유 구분은 reasons 보강 시
+- [x] 예산: 필수비용 하나라도 미확인이면 `Total cost needs checking`(전체 충족 주장 금지)
+- **Done when:** ✅ 신뢰 2~3 스톱 1코스가 순서·구간 도보시간·예산롤업·미확인 구분으로 구성, 2개 미만/시간초과면 `unmet`(개별 전환 안내). 라이브(Insadong 3스톱 14분·`/api/route`+`/api/chat` PlanCultureRoute 라우팅) + trace(`route_feasible`/`route_built`/`route_unmet`) Green. 균형 랭킹·루트별 reason·지도 UI(B3)·수정(B4)은 후속.
 
 ### B3 — 루트 지도·이동 (LF-08)
 - [ ] 시작점→장소1→장소2[→장소3] 구간별 이동·시간·거리, 지도 번호↔장소명 대응 (FR-B6, B-T02/B-T03)

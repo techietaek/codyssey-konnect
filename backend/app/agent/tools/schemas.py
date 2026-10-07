@@ -33,5 +33,19 @@ class RecommendExperiences(BaseModel):
     )
 
 
+class PlanCultureRoute(BaseModel):
+    """Plan ONE day culture route — a walking course of 2–3 cultural stops in order — near
+    the traveler within their time window. Use when the user wants an itinerary / route /
+    plan / course connecting several places, rather than a flat list of separate suggestions.
+    Location, date, and time come from the app context and official data, not from you.
+    """
+
+    preferences: str = Field(
+        default="",
+        description="The user's own words about preferences or conditions for the route "
+        "(interests, budget, things to avoid). Empty string if they stated none.",
+    )
+
+
 # bind_tools 에 넘길 tool 목록(순서=표시 우선 아님, 단순 등록).
-TOOL_SCHEMAS = [AnswerTravelQuestion, RecommendExperiences]
+TOOL_SCHEMAS = [AnswerTravelQuestion, RecommendExperiences, PlanCultureRoute]

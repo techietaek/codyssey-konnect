@@ -22,6 +22,7 @@ from app.agent.context import RequestContext
 from app.agent.tools.schemas import (
     TOOL_SCHEMAS,
     AnswerTravelQuestion,
+    PlanCultureRoute,
     RecommendExperiences,
 )
 from app.config import settings
@@ -34,15 +35,20 @@ from app.rag.retrieve import answer_question
 logger = logging.getLogger("konnect.agent")
 
 _SYSTEM = (
-    "You are KONNECT's assistant for foreign travelers in Seoul. Decide how to help by "
-    "choosing a tool:\n"
-    "- Use answer_travel_question for informational / FAQ questions (transport, money, "
-    "etiquette, connectivity, or what cultural things are).\n"
-    "- Use recommend_experiences when the user wants suggestions for things to see or do now.\n"
+    "You are KONNECT's assistant for foreign travelers in Seoul. Almost every message is "
+    "either a travel question or a request to do something — choose the single best tool and "
+    "call it. Do not answer from your own knowledge.\n"
+    "- answer_travel_question: informational / FAQ questions (transport, money, etiquette, "
+    "connectivity, or what a cultural thing is).\n"
+    "- recommend_experiences: the user wants a few individual suggestions for things to see "
+    "or do.\n"
+    "- plan_culture_route: the user wants a connected walking route / itinerary / plan / "
+    "course of several places (words like route, itinerary, plan, course, 'take me around', "
+    "'what should I do this afternoon').\n"
     "You only route and extract the user's own wording. You NEVER state facts like prices, "
-    "opening hours, or availability yourself — the tools provide verified data. If the "
-    "message is just chit-chat or the intent is unclear, do not call a tool; reply briefly "
-    "and ask what they'd like to know or do."
+    "opening hours, or availability yourself — the tools provide verified data. Only skip "
+    "calling a tool for a pure greeting or chit-chat with no travel intent; then reply "
+    "briefly and ask what they'd like to know or do."
 )
 _PROMPT = ChatPromptTemplate.from_messages(
     [("system", _SYSTEM), ("human", "{message}")]
@@ -76,9 +82,10 @@ async def dispatch_tool(
         ans = await answer_question(args.get("query") or "", trace)
         return ChatResponse(kind=ChatKind.ANSWER, tool=name, answer=ans)
 
-    if name == RecommendExperiences.__name__:
+    if name in (RecommendExperiences.__name__, PlanCultureRoute.__name__):
+        # 추천·루트 모두 필수 사실(위치·시간)이 필요 — 없으면 추정 않고 되묻기.
         if not has_trip_context(context):
-            trace.step("chat_clarify", reason="missing_trip_context")
+            trace.step("chat_clarify", reason="missing_trip_context", tool=name)
             return ChatResponse(
                 kind=ChatKind.CLARIFY, tool=name, message=_CLARIFY_NEED_TRIP
             )
@@ -91,13 +98,20 @@ async def dispatch_tool(
             note=(args.get("preferences") or None),
             conditions=None,
         )
-        # 지연 import: orchestrator 는 무거운 소스 체인을 끌어오므로 호출 시점에만.
-        from app.agent.orchestrator import recommend_a
+        # 지연 import: 무거운 소스 체인을 끌어오므로 호출 시점에만.
+        if name == RecommendExperiences.__name__:
+            from app.agent.orchestrator import recommend_a
 
-        data = await recommend_a(ctx, trace, saved_interests, prefer_shorter_walks)
-        return ChatResponse(
-            kind=ChatKind.RECOMMENDATION, tool=name, recommendation=data
+            data = await recommend_a(ctx, trace, saved_interests, prefer_shorter_walks)
+            return ChatResponse(
+                kind=ChatKind.RECOMMENDATION, tool=name, recommendation=data
+            )
+        from app.agent.route_orchestrator import recommend_route
+
+        route_data = await recommend_route(
+            ctx, trace, saved_interests, prefer_shorter_walks
         )
+        return ChatResponse(kind=ChatKind.ROUTE, tool=name, route=route_data)
 
     # 알 수 없는 tool → 되묻기(사실 지어내지 않음).
     trace.step("chat_clarify", reason="unknown_tool", tool=name)
