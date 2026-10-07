@@ -41,6 +41,27 @@ async function init() {
     });
   });
 
+  // OAuth 복귀 에러 처리: 이 Google 계정이 이미 다른(이전) user 에 연결된 경우
+  // (identity_already_exists). 링크 대신 기존 계정으로 **로그인**(signInWithOAuth)으로
+  // 1회 폴백(루프 방지 플래그). 그 외/재시도 후에는 URL 에러 파라미터만 정리.
+  const _params = new URLSearchParams(
+    window.location.search.slice(1) + "&" + window.location.hash.slice(1),
+  );
+  const _alreadyLinked = _params.get("error_code") === "identity_already_exists";
+  if (_alreadyLinked && !sessionStorage.getItem("konnect.oauthRetry")) {
+    sessionStorage.setItem("konnect.oauthRetry", "1");
+    await _client.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + window.location.pathname },
+    });
+    return _client; // Google 로 리다이렉트됨(기존 계정 로그인)
+  }
+  sessionStorage.removeItem("konnect.oauthRetry");
+  if (_params.has("error_code")) {
+    // 에러 파라미터가 남지 않게 URL 정리(새로고침 시 재트리거 방지)
+    history.replaceState({}, "", window.location.origin + window.location.pathname);
+  }
+
   // OAuth 복귀(해시/쿼리에 토큰·코드)면 세션이 곧 수립되므로 익명 재로그인하지 않는다
   // (익명 세션이 Google 세션을 덮지 않게). detectSessionInUrl 이 처리.
   const returning = /[#&?](access_token|code)=/.test(
