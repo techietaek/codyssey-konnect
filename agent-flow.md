@@ -163,15 +163,16 @@
 > 참조: `PRD.md §4.4`, `product/06-ai-tech-boundary.md`(P-01~P-09), Supabase(이미 Google·Anonymous·pgvector ON).
 
 ### L1 — 로그인 게이트 + 연속성/마이그레이션
-- [ ] Supabase Anonymous Sign-in으로 익명 user_id 선발급 → 요청조건·선택 저장
-- [ ] 비회원 첫 추천 결과까지 1회 → 두 번째/재추천 시 Google 로그인 유도 (FR-L1)
-- [ ] Google 로그인 시 **identity linking**으로 동일 user_id 승격(데이터 자동 보존) (FR-L2)
-- [ ] `Not now`는 기존 결과·탐색 유지, 로그인 후 현재 조건·결과·선택 연속
-- [ ] 백엔드 JWT 검증 = **JWKS**(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), 공유 secret 미사용
-- [ ] DB RLS: 각 user(익명 포함)는 `auth.uid()` 일치 데이터만 접근
-- [ ] 임시 상태를 Trip·장기 Preference로 **자동 승격 금지** (FR-L5)
-- [ ] 프론트: L-1 로그인 시트(Continue with Google / Not now · Kept context) (DESIGN 01 섹션 L-1~L-3)
-- **Done when:** 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름이 이어지고 데이터가 계정으로 보존된다.
+> 진행(2026-10-07): **L1a**(백엔드 JWT/JWKS 검증)·**L1b**(프론트 익명 로그인+토큰 부착)·**L1c**(서버 영속 `user_sessions`+RLS, saveChoice/요청 서버 미러) 완료·라이브 검증. **L1d**(Google 게이팅+identity linking) 남음.
+- [x] Supabase Anonymous Sign-in으로 익명 user_id 선발급 → 요청조건·선택 저장 (L1b·L1c)
+- [ ] 비회원 첫 추천 결과까지 1회 → 두 번째/재추천 시 Google 로그인 유도 (FR-L1) ← L1d (현재 isLoggedIn=비익명 반영, 버튼 활성화만 남음)
+- [ ] Google 로그인 시 **identity linking**으로 동일 user_id 승격(데이터 자동 보존) (FR-L2) ← L1d
+- [ ] `Not now`는 기존 결과·탐색 유지, 로그인 후 현재 조건·결과·선택 연속 ← L1d
+- [x] 백엔드 JWT 검증 = **JWKS**(`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), 공유 secret 미사용 (L1a, `core/auth.py`)
+- [x] DB RLS: 각 user(익명 포함)는 `auth.uid()` 일치 데이터만 접근 (L1c, `db/migrations/0001`)
+- [x] 임시 상태를 Trip·장기 Preference로 **자동 승격 금지** (FR-L5) — L1c는 세션 연속성만 저장, 선호 학습 없음
+- [~] 프론트: L-1 로그인 시트(Continue with Google / Not now · Kept context) — 디자인 구현됨, Google 버튼 활성화는 L1d
+- **Done when:** 비회원→로그인 전환 시 동일 요청 재입력 없이 흐름이 이어지고 데이터가 계정으로 보존된다. (L1d에서 충족)
 
 ### L2 — P-09 선호 온보딩
 - [ ] Google 최초 가입 1회·1화면: 관심사 6개 복수 + `□ Prefer shorter walks`(단일·미선택 허용), 모두 Skip 가능 (FR-L3)
