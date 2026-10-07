@@ -7,7 +7,14 @@
 from __future__ import annotations
 
 from app.domain.preferences_merge import merge_saved_interests
-from app.models.recommend import InterestCode, ParsedConditions
+from app.domain.ranking import display_sort_key
+from app.models.recommend import (
+    Candidate,
+    ExperienceType,
+    InterestCode,
+    ParsedConditions,
+    ResultStatus,
+)
 
 ART = InterestCode.ART_EXHIBITIONS
 TRAD = InterestCode.TRADITIONAL
@@ -52,3 +59,37 @@ def test_original_not_mutated():
     cond = ParsedConditions()
     merge_saved_interests(cond, [TRAD])
     assert cond.interests == []  # 원본 불변
+
+
+def _cand(etype, status=ResultStatus.FITS, title="x"):
+    return Candidate(
+        id=title,
+        title=title,
+        type=etype,
+        status=status,
+        reasons=[],
+        flags=[],
+        official_links=[],
+    )
+
+
+def test_saved_interest_bumps_order_when_note_silent():
+    """통합 seam: note 침묵 시 저장 관심사가 같은 등급 내 표시 순서를 올린다(제외 아님).
+
+    merge_saved_interests → display_sort_key 의 실제 연결을 검증한다. 저장=ART 면
+    같은 FITS 등급의 전시 후보가 역사 후보보다 앞선다(Soft tiebreak, A안).
+    """
+    cond = merge_saved_interests(ParsedConditions(), [ART])
+    art = _cand(ExperienceType.EXHIBITION, title="art")
+    hist = _cand(ExperienceType.HISTORIC_VISIT, title="hist")
+    ordered = sorted([hist, art], key=lambda c: display_sort_key(c, cond))
+    assert [c.title for c in ordered] == ["art", "hist"]
+
+
+def test_saved_interest_does_not_override_status_tier():
+    """저장 관심사는 등급을 넘지 못한다 — check_needed(비선호 아님)가 fits 앞으로 오지 않음."""
+    cond = merge_saved_interests(ParsedConditions(), [ART])
+    art_check = _cand(ExperienceType.EXHIBITION, ResultStatus.CHECK_NEEDED, "art_chk")
+    hist_fit = _cand(ExperienceType.HISTORIC_VISIT, ResultStatus.FITS, "hist_fit")
+    ordered = sorted([art_check, hist_fit], key=lambda c: display_sort_key(c, cond))
+    assert [c.title for c in ordered] == ["hist_fit", "art_chk"]
