@@ -1,7 +1,7 @@
 // 뷰 컨트롤러: 웰컴(W-0) → 홈(LF-01) → 입력(LF-02) → 결과(LF-03) 전환.
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
-import { postRecommend } from "./api.js";
+import { postRecommend, putSession } from "./api.js";
 import { ready as authReady } from "./auth.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
@@ -70,6 +70,8 @@ export function startRecommend(payload) {
         return;
       }
       setResults(payload, env.data.candidates);
+      // 현재 요청조건을 서버에 영속(선택 전에도 연속성 — L1c/FR-L2). 실패 무영향.
+      putSession({ last_request: payload }).catch(() => {});
       showResults({ request: payload, env });
     })
     .catch(() => {

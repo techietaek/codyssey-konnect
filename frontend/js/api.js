@@ -31,3 +31,15 @@ export function postParse(note) {
     body: JSON.stringify({ note }),
   });
 }
+
+// ── 세션 영속 (L1c) — 로그인(익명 포함) 사용자별 현재 요청·선택 저장/복원 ──
+export function getSession() {
+  return request("/api/session");
+}
+
+export function putSession(fields) {
+  return request("/api/session", {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
+}
