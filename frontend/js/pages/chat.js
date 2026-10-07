@@ -6,6 +6,7 @@ import { openLocationSheet } from "../components/location-sheet.js";
 import { openTimeSheet } from "../components/time-sheet.js";
 import { renderResultCard } from "../components/result-card.js";
 import { renderRouteCard } from "../components/route-card.js";
+import { renderMap, renderRouteMap } from "../map.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -169,6 +170,10 @@ export function renderChatView({ onBack }) {
       `Here ${cands.length > 1 ? "are" : "is"} ${cands.length} you could do near ${data.origin?.label ?? "you"}:`,
     );
     for (const n of data.notices ?? []) bubble("assistant", n);
+    // 지도: 출발점 + 후보 핀(실패/미등록 시 graceful 숨김). 카드보다 먼저.
+    const mapEl = el("div", "chat-map");
+    assistantBlock(mapEl);
+    renderMap(mapEl, data.origin, cands).catch(() => mapEl.remove());
     const list = el("div", "chat-cards");
     cands.forEach((c, i) => list.append(renderResultCard(c, data.origin, i)));
     assistantBlock(list);
@@ -185,7 +190,12 @@ export function renderChatView({ onBack }) {
       return;
     }
     bubble("assistant", "Here's a walking culture route for your day:");
-    for (const r of routes) assistantBlock(renderRouteCard(r, data.origin));
+    for (const r of routes) {
+      const mapEl = el("div", "chat-map");
+      assistantBlock(mapEl);
+      renderRouteMap(mapEl, data.origin, r).catch(() => mapEl.remove());
+      assistantBlock(renderRouteCard(r, data.origin));
+    }
   }
 
   // 어시스턴트 턴을 짧은 텍스트로 요약(멀티턴 맥락 — LLM 이 후속 교정을 이해하도록).

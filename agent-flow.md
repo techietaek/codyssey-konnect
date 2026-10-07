@@ -245,11 +245,13 @@
 - [x] 예산: 필수비용 하나라도 미확인이면 `Total cost needs checking`(전체 충족 주장 금지)
 - **Done when:** ✅ 신뢰 2~3 스톱 1코스가 순서·구간 도보시간·예산롤업·미확인 구분으로 구성, 2개 미만/시간초과면 `unmet`(개별 전환 안내). 라이브(Insadong 3스톱 14분·`/api/route`+`/api/chat` PlanCultureRoute 라우팅) + trace(`route_feasible`/`route_built`/`route_unmet`) Green. 균형 랭킹·루트별 reason·지도 UI(B3)·수정(B4)은 후속.
 
-### B3 — 루트 지도·이동 (LF-08)
-- [ ] 시작점→장소1→장소2[→장소3] 구간별 이동·시간·거리, 지도 번호↔장소명 대응 (FR-B6, B-T02/B-T03)
-- [ ] 루트 전체 이동부담 vs 전체 소요시간 구분, 일부 구간 미확인 명시
-- [ ] 경로 Fallback 3단계 동일 적용, 임의 직선 금지
-- [ ] 프론트: Route Stop·Walk Segment (DESIGN §3.6)
+### B3 — 루트 지도·이동 (LF-08) [x] 챗 인라인 지도 완료(2026-10-07, 라이브 Green)
+> 챗봇 결과에 Naver 지도 인라인: 추천=후보 핀(`renderMap` 재사용), 루트=출발점+순번 스톱 핀+**구간 path 이어붙인 전체 경로선**(`map.renderRouteMap` 신규). 미등록/실패 시 graceful 숨김(카드 유지).
+- [x] 시작점→스톱 번호 핀, 지도 번호↔스톱명 대응, 구간 도보시간은 route-card 에 표기 (FR-B6, B-T03)
+- [x] 루트 전체 도보시간(route-card total) vs 구간별 분리, 일부 구간 미확인은 "Route unavailable"로 명시
+- [x] 임의 직선 금지 — 측정된 Tmap path 만 이어붙여 그림. 핀만 있고 path 없으면 선 생략
+- [x] 프론트: Route Stop·Walk Segment(route-card) + 지도(chat-map) — 라이브 스크린샷(인사동 3스톱 경로선) 확인
+- **남음(후속):** 지도↔카드 포커스 연동(핀 탭→카드), 추천 카드 Select 확정, NCP 배포 도메인 등록.
 - **Done when:** 전체 동선이 신뢰수준과 함께 보이고 `Go with this route`로 확정.
 
 ### B4 — 수정·재구성·실패 Fallback [~] 코어 완료(2026-10-07, AG-3 대화형 위에서)

@@ -166,6 +166,68 @@ export async function renderMap(container, origin, candidates) {
   };
 }
 
+// 루트 지도(B3·LF-08) — 출발점 + 순번 스톱 핀 + 구간 경로선(실제 Tmap path 이어붙임).
+// 임의 직선 금지 — 측정된 구간 path 만 그린다. 실패/미등록 시 컨테이너 숨김(카드는 유지).
+export async function renderRouteMap(container, origin, route) {
+  const ok = await loadNaver();
+  if (!ok || !origin?.lat || !origin?.lng) {
+    container.remove();
+    return null;
+  }
+  window.navermap_authFailure = () => container.remove();
+  const { maps } = window.naver;
+  const map = new maps.Map(container, {
+    center: new maps.LatLng(origin.lat, origin.lng),
+    zoom: 15,
+    scaleControl: false,
+    mapDataControl: false,
+    logoControlOptions: { position: maps.Position.BOTTOM_RIGHT },
+  });
+  new maps.Marker({
+    position: new maps.LatLng(origin.lat, origin.lng),
+    map,
+    icon: { content: startPinHTML(), anchor: new maps.Point(9, 9) },
+    zIndex: 50,
+  });
+  const bounds = new maps.LatLngBounds(
+    new maps.LatLng(origin.lat, origin.lng),
+    new maps.LatLng(origin.lat, origin.lng),
+  );
+  (route.stops ?? []).forEach((s, i) => {
+    const c = s.candidate;
+    if (c?.lat == null || c?.lng == null) return;
+    const pos = new maps.LatLng(c.lat, c.lng);
+    new maps.Marker({
+      position: pos,
+      map,
+      icon: {
+        content: numPinHTML(TYPE_GLYPH[c.type] ?? TYPE_GLYPH.default, i + 1),
+        anchor: new maps.Point(16, 16),
+      },
+    });
+    bounds.extend(pos);
+  });
+  // 구간 path 를 순서대로 이어붙여 전체 동선 1선으로(측정된 구간만).
+  const latlngs = [];
+  for (const seg of route.segments ?? []) {
+    const p = seg.movement?.path;
+    if (p?.length) for (const [la, ln] of p) latlngs.push(new maps.LatLng(la, ln));
+  }
+  if (latlngs.length) {
+    new maps.Polyline({
+      map,
+      path: latlngs,
+      strokeColor: TEAL,
+      strokeWeight: 5,
+      strokeOpacity: 0.9,
+      strokeLineCap: "round",
+      strokeLineJoin: "round",
+    });
+  }
+  map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
+  return { map };
+}
+
 // 미니맵(홈 현재선택 카드) — 비상호작용, 출발점+단일 핀+실제 경로만. 실패 시 숨김.
 export async function renderMiniMap(container, origin, candidate) {
   const ok = await loadNaver();
