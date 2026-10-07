@@ -36,6 +36,7 @@ function conditionChips(cond) {
   const labels = (cond.interests ?? []).map((i) => INTEREST_LABEL[i] ?? i);
   for (const i of cond.avoid_interests ?? [])
     labels.push(`Not: ${INTEREST_LABEL[i] ?? i}`);
+  for (const c of cond.exclude_concepts ?? []) labels.push(`Without: ${c}`);
   if (cond.free_only) labels.push("Free only");
   if (cond.budget_krw) labels.push(`≤ ₩${cond.budget_krw.toLocaleString()}`);
   if (cond.indoor_outdoor)
@@ -90,6 +91,15 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
     understood.append(el("span", "understood-label", "+"));
     understood.append(el("span", null, chipLabels.join(" · ")));
     top.append(understood);
+  }
+  // 사용자-facing 안내(0건-세이프 등) — 조건을 다 못 지켰음을 투명하게 알린다.
+  for (const n of data.notices ?? []) {
+    const notice = el("div", "result-notice");
+    const ni = el("span", "result-notice-icon");
+    ni.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+    notice.append(ni, el("span", "result-notice-text", n));
+    top.append(notice);
   }
   root.append(top);
 

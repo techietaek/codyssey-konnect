@@ -23,6 +23,7 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
   const edited = JSON.parse(JSON.stringify(conditions || {}));
   edited.interests = edited.interests || [];
   edited.avoid_interests = edited.avoid_interests || [];
+  edited.exclude_concepts = edited.exclude_concepts || [];
 
   return openSheet((close) => {
     const root = el("div", "confirm-sheet");
@@ -72,6 +73,14 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
     for (const code of edited.avoid_interests.slice()) {
       addChip(`Not: ${INTEREST_LABEL[code] || code}`, () => {
         edited.avoid_interests = edited.avoid_interests.filter((c) => c !== code);
+      });
+    }
+    // 개방형 명시 배제 — ✕로 되돌리면 그 조건 없이 다시 추천(사용자 교정 우선).
+    for (const concept of edited.exclude_concepts.slice()) {
+      addChip(`Without: ${concept}`, () => {
+        edited.exclude_concepts = edited.exclude_concepts.filter(
+          (c) => c !== concept,
+        );
       });
     }
     if (edited.free_only)

@@ -10,14 +10,16 @@ from __future__ import annotations
 import asyncio
 
 from app.agent.context import RequestContext
+from app.agent.exclude_classifier import classify_excluded
 from app.agent.hours_parser import parse_hours
 from app.agent.note_parser import parse_note
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
+from app.domain.exclusion import select_with_exclusion
 from app.domain.locations import resolve_start_coords
-from app.domain.normalize import enrich_intro, normalize_candidate
+from app.domain.normalize import _strip_html, enrich_intro, normalize_candidate
 from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.preferences_merge import merge_saved_interests
 from app.domain.ranking import display_sort_key
@@ -85,8 +87,9 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
 
 async def _enrich(
     item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
-) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict]:
-    """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외."""
+) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
+    """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외.
+    4번째 값은 개방형 배제 의미분류용 텍스트(이름+공식 overview, 공식 데이터만)."""
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
     # 공식 상세(정본)·반복정보(detailInfo2)·Places businessStatus(폐업 음성 신호)를 병렬 조회.
@@ -113,13 +116,16 @@ async def _enrich(
 
     cand = normalize_candidate(item, intro, common)
     if cand is None:
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+
+    # 개방형 배제 의미분류용 텍스트(이름 + 공식 overview). 사실 생성 아님 — 공식 텍스트만.
+    classify_text = f"{cand.title}. {_strip_html(common.get('overview'))}"[:400]
 
     # [judge-0] 폐업/임시휴업(Places 음성 신호·좌표 교차확인) → Hard 제외.
     presence = judge_presence(place, cand.lat, cand.lng)
     if presence is not PresenceVerdict.OPERATIONAL:
         trace.step("presence_excluded", title=cand.title, status=presence.value)
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
 
     # [judge] 운영시간·휴무·행사기간 + 예산 → 3상태. Hard 충돌은 제외.
     timing, reason = judge_timing(intro, ctx.start_at, ctx.end_at)
@@ -134,10 +140,10 @@ async def _enrich(
     budget = judge_budget(cand, cond)
     status, flags = resolve_status(cand, timing, budget, cond)
     if status is None:
-        return None, timing, budget  # Hard 제외
+        return None, timing, budget, ""  # Hard 제외
     cand.status = status
     cand.flags = flags
-    return cand, timing, budget
+    return cand, timing, budget, classify_text
 
 
 async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
@@ -198,21 +204,34 @@ async def recommend_a(
     results = await asyncio.gather(
         *(_enrich(it, ctx, cond, trace) for it in pool[:_ENRICH_POOL])
     )
-    kept: list[tuple[Candidate, TimingVerdict, BudgetVerdict]] = []
-    excluded = 0
-    for cand, timing, budget in results:
-        if cand is None:
-            excluded += 1
-        elif len(kept) < _MAX_CANDIDATES:
-            kept.append((cand, timing, budget))
+    excluded_hard = sum(1 for r in results if r[0] is None)
+    valid = [(c, t, b, txt) for (c, t, b, txt) in results if c is not None]
 
+    # [filter] 개방형 명시 배제(옵션3): LLM은 매칭만 판단, 선별·0건-세이프는 코드(domain).
+    #   - 사실 생성 없음(이미 판정된 fact 후보 위에서 '고르기'만). graceful=빈 집합.
+    exclude_ids: set[str] = set()
+    if cond.exclude_concepts and valid:
+        exclude_ids = await classify_excluded(
+            [(c.id, txt) for (c, _, _, txt) in valid], cond.exclude_concepts, trace
+        )
+    by_id = {c.id: (c, t, b) for (c, t, b, _) in valid}
+    kept_ids, notices, applied = select_with_exclusion(
+        [c.id for (c, _, _, _) in valid],
+        exclude_ids,
+        cond.exclude_concepts,
+        _MAX_CANDIDATES,
+    )
+    if notices:  # 0건-세이프 발동 — trace 로 증빙
+        trace.step("exclude_safe_fallback", concepts=cond.exclude_concepts)
+    kept = [by_id[i] for i in kept_ids]
     candidates = [c for c, _, _ in kept]
     fits = sum(1 for c in candidates if c.status.value == "fits")
     alt = sum(1 for c in candidates if c.status.value == "alternative")
     trace.step(
         "judge",
         considered=len(results),
-        excluded_hard=excluded,
+        excluded_hard=excluded_hard,
+        excluded_pref=len(applied),
         fits=fits,
         alternative=alt,
         check_needed=len(candidates) - fits - alt,
@@ -238,4 +257,6 @@ async def recommend_a(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
-    return RecommendData(candidates=candidates, origin=origin, conditions=cond)
+    return RecommendData(
+        candidates=candidates, origin=origin, conditions=cond, notices=notices
+    )

@@ -22,6 +22,7 @@ function conditionLabels(cond) {
   const labels = (cond.interests ?? []).map((i) => INTEREST_LABEL[i] ?? i);
   for (const i of cond.avoid_interests ?? [])
     labels.push(`Not: ${INTEREST_LABEL[i] ?? i}`);
+  for (const c of cond.exclude_concepts ?? []) labels.push(`Without: ${c}`);
   if (cond.free_only) labels.push("Free only");
   if (cond.budget_krw) labels.push(`Under ₩${cond.budget_krw.toLocaleString()}`);
   if (cond.indoor_outdoor)

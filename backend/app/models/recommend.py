@@ -36,7 +36,15 @@ class ParsedConditions(BaseModel):
     )
     avoid_interests: list[InterestCode] = Field(
         default_factory=list,
-        description="Interests the user explicitly said they dislike / want to avoid. Empty if none stated.",
+        description="Interests (from the fixed enum) the user mildly dislikes. Soft only — "
+        "deprioritized within the same result grade, never excluded. Empty if none stated.",
+    )
+    exclude_concepts: list[str] = Field(
+        default_factory=list,
+        description="Open-ended concepts the user EXPLICITLY asked to exclude or clearly "
+        "refused (e.g. 'no museums', 'without temples', 'skip anything religious') as short "
+        "lowercase phrases like 'museums', 'temples'. Use only for a clear exclusion/refusal, "
+        "not a mild dislike. Empty if none stated.",
     )
     free_only: bool = Field(
         default=False,
@@ -184,5 +192,7 @@ class RecommendData(BaseModel):
     origin: StartLocation | None = None
     # AI가 note에서 이해한 조건(parsed chip 표시용 — '무엇을 이해했는지' 투명 공개).
     conditions: ParsedConditions | None = None
+    # 사용자-facing 안내(예: 0건-세이프 — 배제 조건을 못 지켜 가까운 대체를 보여줄 때).
+    notices: list[str] = Field(default_factory=list)
     # AI 관여 고지 (NFR-05, DESIGN §1): 프론트가 상단에 표시.
     ai_notice: str = "AI-assisted results · unconfirmed details marked"

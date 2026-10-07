@@ -15,6 +15,7 @@ note(Anything else) → `ParsedConditions`(LLM 추출). 추천에 미치는 실�
 | `free_only`·`budget_krw` | 상태(fits/alternative/check) + 예산 Reason |
 | `interests`(선호) | Reason 칩 + **표시 순서(A안)** |
 | `avoid_interests`(비선호) | **표시 순서(A안)** — 강등만, 제외 아님 |
+| `exclude_concepts`(명시 배제) | **배제(옵션3)** — LLM 의미분류로 매칭분 제거+대체, 0건-세이프. 랭킹 아님(`docs/agent-architecture.md`) |
 | `indoor_outdoor`·`prefer_shorter_walks` | **현재 무효과** (날씨 Context/개인화 Phase에서 다룸) |
 
 후보 **선발·순서의 1차 기준은 거리**다(현재). Soft 랭킹은 그 위에 얹는다.

@@ -436,6 +436,16 @@ body {
 }
 .understood-label { color: var(--c-primary); font-weight: var(--fw-bold); }
 
+/* 0건-세이프 등 안내 — 조건을 다 못 지켰음을 투명하게(check 상태 amber 팔레트) */
+.result-notice {
+  display: flex; align-items: flex-start; gap: var(--space-6);
+  background: var(--c-check-bg); color: var(--c-check-text);
+  border-radius: var(--r-card); padding: var(--space-8) var(--space-12);
+  font-size: var(--fs-body); font-weight: var(--fw-semibold); line-height: 1.35;
+}
+.result-notice-icon { flex: 0 0 auto; margin-top: 1px; display: flex; }
+.result-notice-text { color: var(--c-text); font-weight: var(--fw-medium); }
+
 /* 지도 박스 — 남는 세로 공간을 꽉 채움(충분히 큼). Naver SDK가 position 을
    relative 로 덮어써도 부모(map-box, flex 높이 확정) 기준으로 높이 유지. */
 .map-box { flex: 1 1 auto; min-height: 200px; position: relative; margin: 0 var(--space-14); border-radius: var(--r-card); overflow: hidden; background: var(--c-border); }

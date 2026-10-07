@@ -68,7 +68,11 @@ Sool Gallery       cat3=A02060300  ← 같은 코드에 한식공간·인권기�
 
 ## 4. 단계적 경로
 
-- [ ] **지금(슬라이스):** 옵션 3 — 개방형 배제/기피를 LLM 의미분류로 처리(사실은 코드, 0건-세이프, 확인시트 되돌리기). `exclude_interests`(명시 배제) vs `avoid_interests`(약한 기피) 분리. ※ 착수 여부 미정.
+- [x] **옵션 3 (완료, 2026-10-07):** 개방형 배제를 LLM 의미분류로 처리(사실은 코드, 0건-세이프, 확인시트 되돌리기). `exclude_concepts`(개방형 명시 배제, enum 밖 포함) vs `avoid_interests`(enum 약한 기피) 분리.
+  - **백엔드:** `models.ParsedConditions.exclude_concepts`·`RecommendData.notices` · `note_parser`(강·약 구분 프롬프트) · `agent/exclude_classifier.py`(후보 이름+overview 의미분류, structured·temp0·graceful) · `domain/exclusion.py`(선별·0건-세이프, 순수함수) · `orchestrator` [filter] 단계+trace(`exclude_filter`/`exclude_safe_fallback`). `test_exclusion.py`(+5), 125 pytest Green.
+  - **프론트:** `confirm-sheet`(Without 칩 ✕ 되돌리기) · `results`/`condition-summary`(Without 칩) · `results` notices 배너(check amber).
+  - **라이브 검증(Insadong):** "no museums" → Museum Kimchikan 외 2건 배제+대체(reorder 아님), exclude 비면 0건-세이프 유지+안내. 헤드리스 렌더/✕ 되돌리기 Green.
+  - **경계(의도):** 선발이 아닌 '거리순 유효 후보 중 제거+대체'. 저장 Preference·Trip 미반영(단건 note). avoid(약한 기피)는 기존 A안 tiebreak 유지.
 - [ ] **4단계(데이터):** KOPIS·서울문화포털 연동 — 2b의 [3] 멀티소스 전제 (`docs/data-quality.md` 4단계).
 - [ ] **Phase 3(전면 2b):** LLM 검색 오케스트레이션 + 최종 판단. 위 신뢰 경계·trace 유지. RAG·B 자연어 흐름과 통합.
 - [ ] **결정 필요(Product):** 선발 vs 순서 영향 범위 / 배제 정책 / 관심사 taxonomy 확장 여부(§soft-ranking B안과 공유).

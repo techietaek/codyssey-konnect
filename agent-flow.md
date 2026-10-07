@@ -29,7 +29,9 @@
   - [x] A7 상태 UX 보강 (branch `phase1-a-loading-states`, 2026-10-07) — 조회 대기 **로딩 화면**(shimmer 스켈레톤 + 회전 단계문구 + 펄스 sparkle, Cancel=요청 AbortController 취소) · 조회 플로우를 `app.js startRecommend`로 중앙화(로딩→결과/취소복귀/오류) · **0건** 지도 축소(NAVER 로고 노출 방지)+경고 아이콘/텍스트 · **전용 오류 화면**(Couldn't load, Try again/Edit conditions, 조건 유지) · 바텀시트 Cancel 버튼 제거 + **grip 스와이프-다운 닫기**(백드롭/Esc 유지). headless 렌더/드래그 검증 Green.
   - [x] A8 Soft 랭킹 A안 (2026-10-07) — 결과 표시 순서 **fits→alternative→check_needed**, 같은 등급 내 **관심사 선호↑/비선호↓**(`avoid_interests` LLM 추출), 그다음 거리순. 제외 아님(Soft only). 정본 `backend/app/domain/ranking.py`. **B안(본격 Soft 스코어링)은 Phase 2/3 — `docs/soft-ranking.md` §3 참조(Product 결정 3건 포함).**
 - [~] Phase 2 — 로그인·개인화 (branch `phase2-l2-preferences`) — **L1 완료**(L1a~d, 실로그인) · **L2 선호 온보딩 완료**(P-09, 실 Google 로그인 3건 Green — 이름표시·재노출차단·저장관심사 주입) · **L3 My Page 코드 완료**(FR-L6, 헤드리스 Green, 실로그인 라이브 1회 대기). **Phase 2 사실상 완료.** ⚑ **Soft 랭킹 B안**(걷기 선호 + 저장 Preference 선발/순위 본격화, `docs/soft-ranking.md` §3)은 **Phase 3 B 루트**로 이동(L2는 A안 tiebreak만).
-- [ ] Phase 3 — RAG · B 문화루트 · ⚑ **관심사·이동 균형 랭킹**(FR-B4) = Soft 랭킹 B안 구현부 · ⚑ **전면 Agentic 추천(2b)**: LLM 조건해석→멀티소스 조회→후보 재투입→LLM 최종 선별. 목표 아키텍처·신뢰 경계는 **`docs/agent-architecture.md`** (사실은 끝까지 코드 소유). 개방형 선호 배제/기피(옵션 3 슬라이스)는 그 전에 선행 가능.
+- [~] Phase 3 — RAG · B 문화루트 · ⚑ **관심사·이동 균형 랭킹**(FR-B4) = Soft 랭킹 B안 구현부 · ⚑ **전면 Agentic 추천(2b)**: LLM 조건해석→멀티소스 조회→후보 재투입→LLM 최종 선별. 목표 아키텍처·신뢰 경계는 **`docs/agent-architecture.md`** (사실은 끝까지 코드 소유).
+  - [x] **옵션 3 — 개방형 명시 배제** (2026-10-07) — `exclude_concepts`(개방형, enum 밖 포함)를 LLM 의미분류(후보 이름+overview)로 배제, **사실은 코드**(`domain/exclusion.py` 선별·0건-세이프). avoid(약한 기피 A안)와 분리. 확인시트 ✕ 되돌리기·notices 배너. 125 pytest·라이브(Insadong)·헤드리스 Green. 2b 디딤돌. 상세 `docs/agent-architecture.md §4`.
+  - [ ] R1 RAG · B1~B5 B 문화루트 · Soft 랭킹 B안 · 전면 Agentic 2b (미착수)
 - [ ] Phase 4 — 배포·실사용자 검증·발표
 
 ---
