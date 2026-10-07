@@ -44,6 +44,8 @@ _CULTURAL_TYPES = (76, 78, 85)
 _SEARCH_RADIUS_M = 1500
 _MAX_CANDIDATES = 4
 _ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 위한 보강 범위
+# 표시 순서 우선도: 조건 충족 > 완화 대안 > 추가 확인 필요 (같은 등급은 거리순 유지)
+_STATUS_RANK = {"fits": 0, "alternative": 1, "check_needed": 2}
 
 
 async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
@@ -216,6 +218,11 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
         )
     trace.step("explain", with_reasons=sum(1 for c in candidates if c.reasons))
 
-    trace.step("compose", kept=len(candidates))
+    # [compose] 표시 순서: 등급(fits→alternative→check_needed) 우선, 같은 등급은 거리순.
+    # candidates 는 이미 거리순 → status 로만 '안정 정렬'하면 등급 내 거리순이 유지된다.
+    candidates.sort(key=lambda c: _STATUS_RANK.get(c.status.value, 99))
+    trace.step(
+        "compose", kept=len(candidates), order=[c.status.value for c in candidates]
+    )
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
     return RecommendData(candidates=candidates, origin=origin, conditions=cond)
