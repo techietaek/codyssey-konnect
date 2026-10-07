@@ -25,6 +25,7 @@
   - [x] A4 지도/이동 — Tmap 도보 거리/시간/경로(A4a) + Naver 지도 핀/경로 렌더(A4b) + Google Map 딥링크(대중교통).
   - [x] A5 Reason+LLM — note LLM 구조화(LangChain) + Reason Copy 선택 + 예산→alternative + parsed chips. 74 pytest.
   - [x] A6 선택상태 — Select 확정·Current choice 배지·홈 재접근 배너(localStorage). **Phase 1 완료.**
+  - [~] **데이터 검색 품질 개선** (2026-10-07~) — check_needed 과다(실측 73%) 완화. 원인 집계·`detailInfo2` 발견·솔루션·로드맵은 **`docs/data-quality.md`** 에서 관리. 1단계(원인 집계) 완료, 2단계(`detailInfo2` 연동) 진행 중.
   - [x] A7 상태 UX 보강 (branch `phase1-a-loading-states`, 2026-10-07) — 조회 대기 **로딩 화면**(shimmer 스켈레톤 + 회전 단계문구 + 펄스 sparkle, Cancel=요청 AbortController 취소) · 조회 플로우를 `app.js startRecommend`로 중앙화(로딩→결과/취소복귀/오류) · **0건** 지도 축소(NAVER 로고 노출 방지)+경고 아이콘/텍스트 · **전용 오류 화면**(Couldn't load, Try again/Edit conditions, 조건 유지) · 바텀시트 Cancel 버튼 제거 + **grip 스와이프-다운 닫기**(백드롭/Esc 유지). headless 렌더/드래그 검증 Green.
 - [ ] Phase 2 — 로그인·개인화 ← **다음 Phase**
 - [ ] Phase 3 — RAG · B 문화루트
