@@ -8,12 +8,19 @@ let _client = null;
 let _ready = null;
 let _signedIn = false; // 비익명(정식 로그인) 여부 — FR-L1 게이팅용 동기 플래그
 let _displayName = null; // 정식 로그인 시 표시 이름(Google) — 동기 캐시
+const _listeners = new Set(); // 세션 변경 구독자(화면 갱신용)
 
 function _applySession(session) {
   const u = session?.user;
   _signedIn = !!u && u.is_anonymous !== true;
   const m = u?.user_metadata || {};
   _displayName = _signedIn ? m.full_name || m.name || m.email || null : null;
+}
+
+// 세션 상태가 바뀌면(로그인/로그아웃/OAuth 복귀) 구독자에게 통지 → 화면 재렌더.
+export function onAuthChange(cb) {
+  _listeners.add(cb);
+  return () => _listeners.delete(cb);
 }
 
 async function init() {
@@ -25,13 +32,24 @@ async function init() {
 
   _client.auth.onAuthStateChange((_event, session) => {
     _applySession(session);
+    _listeners.forEach((l) => {
+      try {
+        l();
+      } catch {
+        /* 구독자 오류가 auth 를 막지 않게 */
+      }
+    });
   });
 
-  // 세션이 없으면 익명으로 선발급(요청 조건·선택을 user_id 로 저장하기 위함, L1c)
+  // OAuth 복귀(해시/쿼리에 토큰·코드)면 세션이 곧 수립되므로 익명 재로그인하지 않는다
+  // (익명 세션이 Google 세션을 덮지 않게). detectSessionInUrl 이 처리.
+  const returning = /[#&?](access_token|code)=/.test(
+    window.location.hash + window.location.search,
+  );
   const {
     data: { session },
   } = await _client.auth.getSession();
-  if (!session) {
+  if (!session && !returning) {
     await _client.auth.signInAnonymously();
   } else {
     _applySession(session);

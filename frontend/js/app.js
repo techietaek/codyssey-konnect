@@ -2,7 +2,7 @@
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
 import { postRecommend, putSession } from "./api.js";
-import { ready as authReady } from "./auth.js";
+import { ready as authReady, onAuthChange } from "./auth.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
 import { renderInputView } from "./pages/input.js";
@@ -129,4 +129,9 @@ try {
 authReady().finally(() => {
   if (seen) showHome();
   else showWelcome();
+});
+
+// 로그인/로그아웃/OAuth 복귀로 세션이 바뀌면, 홈이 떠 있을 때 재렌더(Hello·Log out 반영).
+onAuthChange(() => {
+  if (document.querySelector(".home")) showHome();
 });
