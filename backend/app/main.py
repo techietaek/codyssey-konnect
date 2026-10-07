@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.preferences import router as preferences_router
 from app.api.recommend import router as recommend_router
 from app.api.session import router as session_router
 from app.config import settings
@@ -56,6 +57,7 @@ app.add_middleware(
 
 app.include_router(recommend_router)
 app.include_router(session_router)
+app.include_router(preferences_router)
 
 
 @app.exception_handler(KonnectError)

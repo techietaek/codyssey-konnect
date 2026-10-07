@@ -19,6 +19,7 @@ from app.domain.curation import is_cultural_experience
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import enrich_intro, normalize_candidate
 from app.domain.operational import PresenceVerdict, judge_presence
+from app.domain.preferences_merge import merge_saved_interests
 from app.domain.ranking import display_sort_key
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
@@ -31,6 +32,7 @@ from app.domain.timing import (
 )
 from app.models.recommend import (
     Candidate,
+    InterestCode,
     MovementInfo,
     ParsedConditions,
     Provenance,
@@ -158,7 +160,12 @@ async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
     )
 
 
-async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
+async def recommend_a(
+    ctx: RequestContext,
+    trace: Trace,
+    saved_interests: list[InterestCode] | None = None,
+    prefer_shorter_walks: bool | None = None,
+) -> RecommendData:
     lat, lng = resolve_start_coords(ctx.start_location)
 
     # [structure] 좌표 해석 + note 자연어 구조화(LLM)를 조회와 병렬로.
@@ -170,12 +177,18 @@ async def recommend_a(ctx: RequestContext, trace: Trace) -> RecommendData:
         cond, pool = await asyncio.gather(
             parse_note(ctx.note), _fetch_pool(lat, lng, trace)
         )
+    # 저장 선호를 Request 우선으로 병합(note 침묵 시에만 관심사 Soft 채움, FR-L5).
+    # 걷기 선호는 수치 변환 없이 trace 로만 기록(FR-L4, 순위 반영은 Soft 랭킹 B안).
+    filled_from_saved = not cond.interests and bool(saved_interests)
+    cond = merge_saved_interests(cond, saved_interests)
     trace.step(
         "structure",
         start=ctx.start_location.label,
         coords=f"{lat:.4f},{lng:.4f}",
         available_minutes=ctx.available_minutes,
         interests=[i.value for i in cond.interests],
+        interests_from_saved=filled_from_saved,
+        prefer_shorter_walks=prefer_shorter_walks,
         free_only=cond.free_only,
         budget_krw=cond.budget_krw,
     )

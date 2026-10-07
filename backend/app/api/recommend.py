@@ -16,9 +16,11 @@ from app.agent.note_parser import parse_note
 from app.agent.orchestrator import recommend_a
 from app.core.auth import AuthUser, get_optional_user
 from app.core.trace import Trace
+from app.db.preferences import get_preferences
 from app.domain.input_validation import validate_available_time
 from app.models.envelope import Envelope
 from app.models.recommend import (
+    InterestCode,
     ParsedConditions,
     ParseRequest,
     RecommendData,
@@ -65,7 +67,17 @@ async def recommend(
         conditions=req.conditions,
     )
 
+    # [preference] 로그인 사용자면 저장 선호를 읽어 Soft 신호로 전달(Request 우선 병합은
+    # 파이프라인에서). 비로그인/익명·미온보딩은 행이 없어 None → 영향 없음(FR-L5).
+    saved_interests: list[InterestCode] | None = None
+    prefer_shorter_walks: bool | None = None
+    if user is not None:
+        pref = await get_preferences(user.id)
+        if pref:
+            saved_interests = [InterestCode(i) for i in (pref.get("interests") or [])]
+            prefer_shorter_walks = pref.get("prefer_shorter_walks")
+
     # [fetch → judge → route] 조회·정규화·판정·도보 이동. 시스템 예외
     # (ExternalSourceError)는 main.py 핸들러가 503으로 변환. 0건은 정상(빈 candidates).
-    data = await recommend_a(ctx, trace)
+    data = await recommend_a(ctx, trace, saved_interests, prefer_shorter_walks)
     return Envelope.success(data=data, trace_id=trace.trace_id)
