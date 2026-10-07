@@ -1,10 +1,14 @@
 // 뷰 컨트롤러: 웰컴(W-0) → 홈(LF-01) → 입력(LF-02) → 결과(LF-03) 전환.
 // 단일 #view 컨테이너에 주입. 결과는 지도-풀스크린(full-bleed)이라 뷰별로
 // .app 패딩을 토글한다.
+import { postRecommend } from "./api.js";
 import { renderWelcomeView } from "./pages/welcome.js";
 import { renderHomeView } from "./pages/home.js";
 import { renderInputView } from "./pages/input.js";
+import { renderLoadingView } from "./pages/loading.js";
+import { renderErrorView } from "./pages/error.js";
 import { renderResultsView } from "./pages/results.js";
+import { setResults } from "./state.js";
 
 const viewEl = document.getElementById("view");
 const WELCOME_KEY = "konnect.seenWelcome";
@@ -32,9 +36,59 @@ export function showInput(prefill) {
     renderInputView({
       prefill,
       onBack: showHome,
-      onResults: showResults,
-      onViewChoice: showResults,
+      onRecommend: startRecommend,
     }),
+  );
+}
+
+// 공통 조회 플로우: 로딩(shimmer) → 성공(결과) / 취소(입력) / 실패(오류 화면).
+export function startRecommend(payload) {
+  const controller = new AbortController();
+  let done = false;
+
+  mount(
+    renderLoadingView({
+      request: payload,
+      conditions: payload.conditions ?? null,
+      onCancel: () => {
+        if (done) return;
+        done = true;
+        controller.abort();
+        showInput(payload); // 입력값 유지한 채 복귀
+      },
+    }),
+    { fullBleed: true },
+  );
+
+  postRecommend(payload, controller.signal)
+    .then((env) => {
+      if (done) return; // 취소됨
+      done = true;
+      if (!env.ok) {
+        showError(payload); // 시스템 예외 → 전용 오류 화면
+        return;
+      }
+      setResults(payload, env.data.candidates);
+      showResults({ request: payload, env });
+    })
+    .catch(() => {
+      if (done) return; // Cancel 로 인한 AbortError
+      done = true;
+      showError(payload); // 네트워크 실패 → 전용 오류 화면
+    });
+}
+
+// 전용 오류 화면 — 조건 유지, Try again / Edit conditions.
+export function showError(request) {
+  mount(
+    renderErrorView({
+      request,
+      conditions: request.conditions ?? null,
+      onRetry: () => startRecommend(request),
+      onEdit: () => showInput(request),
+      onBack: () => showInput(request),
+    }),
+    { fullBleed: true },
   );
 }
 

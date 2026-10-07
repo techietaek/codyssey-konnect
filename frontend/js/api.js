@@ -14,10 +14,11 @@ export function getHealth() {
   return request("/health");
 }
 
-export function postRecommend(payload) {
+export function postRecommend(payload, signal) {
   return request("/api/recommend", {
     method: "POST",
     body: JSON.stringify(payload),
+    signal, // 로딩 화면 Cancel 시 요청 취소(AbortController)
   });
 }
 

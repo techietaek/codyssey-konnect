@@ -98,11 +98,34 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
   root.append(mapBox);
 
   // ── 하단 덱: 상태 pill + 캐러셀 + dots + 액션 ──
-  const deck = el("div", "results-deck");
+  const isEmpty = !cands.length;
+  // 0건이면 지도를 작게 고정(--empty) → 거대한 지도로 NAVER 로고가 밀려나지 않게.
+  if (isEmpty) root.classList.add("results-view--empty");
 
-  const deckPills = el("div", "deck-pills");
-  deckPills.append(el("span", "ai-notice", data.ai_notice));
-  if (cands.length) {
+  const deck = el("div", "results-deck");
+  const carousel = el("div", "carousel");
+  const dots = el("div", "dots");
+
+  if (isEmpty) {
+    // 0건은 몰래 완화하지 않고 명시적으로 안내 (FR-A3 · §5.5).
+    // 지도 아래에 경고 아이콘 + 텍스트(DESIGN 참조) — 조건은 유지됨을 알린다.
+    const warn = el("div", "result-warning");
+    const warnIcon = el("div", "result-warning-icon");
+    warnIcon.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+    warn.append(
+      warnIcon,
+      el("h3", "result-warning-title", "No experiences fit these conditions"),
+      el(
+        "p",
+        "result-warning-sub",
+        "Try adjusting your time window or start point. Your conditions are kept.",
+      ),
+    );
+    deck.append(warn);
+  } else {
+    const deckPills = el("div", "deck-pills");
+    deckPills.append(el("span", "ai-notice", data.ai_notice));
     deckPills.append(
       el(
         "span",
@@ -110,25 +133,8 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
         `${cands.length} experience${cands.length > 1 ? "s" : ""} near your starting point`,
       ),
     );
-  }
-  deck.append(deckPills);
+    deck.append(deckPills);
 
-  const carousel = el("div", "carousel");
-  const dots = el("div", "dots");
-
-  if (!cands.length) {
-    // 0건은 몰래 완화하지 않고 명시적으로 안내 (FR-A3 · §5.5)
-    const empty = el("div", "empty-card");
-    empty.append(
-      el("h3", "empty-title", "No experiences fit these conditions"),
-      el(
-        "p",
-        "empty-sub",
-        "Try adjusting your time window or start point.",
-      ),
-    );
-    carousel.append(empty);
-  } else {
     cands.forEach((c, i) => {
       const card = renderResultCard(c, data.origin, i);
       card.dataset.id = c.id;
@@ -137,9 +143,9 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
       dot.dataset.id = c.id;
       dots.append(dot);
     });
+    deck.append(carousel);
+    if (cands.length > 1) deck.append(dots);
   }
-  deck.append(carousel);
-  if (cands.length > 1) deck.append(dots);
 
   const actions = el("div", "deck-actions");
   const editBtn = el("button", "btn-ghost", "Edit conditions");

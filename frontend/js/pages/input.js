@@ -1,11 +1,10 @@
 // LF-02 — 즉시 추천(A) 입력. Figma 정본(274:2272 + 인터랙션) 정확 반영.
 // Field Row(탭→바텀시트) · 시간 휠 시트 · 예시 칩 · note 포커스 시 Where&when 접힘 ·
 // 제출 시 "Here's what we understood" 확인 시트(4a). FR-A1·A2·A4·A5·A6.
-import { postParse, postRecommend } from "../api.js";
+import { postParse } from "../api.js";
 import { openConfirmSheet } from "../components/confirm-sheet.js";
 import { openLocationSheet } from "../components/location-sheet.js";
 import { openTimeSheet } from "../components/time-sheet.js";
-import { setResults } from "../state.js";
 
 // FR-A4 예시 칩 (Figma 문구)
 const EXAMPLE_CONDITIONS = [
@@ -64,7 +63,7 @@ function durText(startIso, endIso) {
   return `You have ${[h ? `${h} hr` : "", m ? `${m} min` : ""].filter(Boolean).join(" ")}`;
 }
 
-export function renderInputView({ prefill, onBack, onResults }) {
+export function renderInputView({ prefill, onBack, onRecommend }) {
   const root = el("section", "view input-view");
 
   // 상태값
@@ -294,12 +293,6 @@ export function renderInputView({ prefill, onBack, onResults }) {
     return ok;
   }
 
-  function showError(msg) {
-    errorBox.textContent = msg;
-    errorBox.hidden = false;
-    errorBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }
-
   function basePayload() {
     const start_location = { label: locationLabel.trim() };
     if (geoCoords) Object.assign(start_location, geoCoords);
@@ -311,25 +304,11 @@ export function renderInputView({ prefill, onBack, onResults }) {
     };
   }
 
-  async function runRecommend(conditions) {
+  // 조회(로딩→성공/오류)는 app.js 의 공통 플로우가 담당. 입력 뷰는 payload 만 넘긴다.
+  function runRecommend(conditions) {
     const payload = basePayload();
     if (conditions) payload.conditions = conditions;
-    cta.disabled = true;
-    cta.textContent = "Finding…";
-    try {
-      const env = await postRecommend(payload);
-      if (!env.ok) {
-        showError(env.error?.message ?? "Please check your input and try again.");
-        return;
-      }
-      setResults(payload, env.data.candidates);
-      onResults({ request: payload, env });
-    } catch {
-      showError("Could not reach the server. Please try again.");
-    } finally {
-      cta.textContent = "Find experiences";
-      validate();
-    }
+    onRecommend(payload);
   }
 
   form.addEventListener("submit", async (e) => {
