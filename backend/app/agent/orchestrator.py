@@ -32,7 +32,9 @@ from app.domain.ranking import display_sort_key, io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.status import resolve_status
 from app.domain.timing import (
+    EventPeriod,
     TimingVerdict,
+    judge_event_period,
     judge_extracted_hours,
     judge_timing,
     operating_hours_text,
@@ -126,6 +128,14 @@ async def _enrich(
 
     # 개방형 배제 의미분류용 텍스트(이름 + 공식 overview). 사실 생성 아님 — 공식 텍스트만.
     classify_text = f"{cand.title}. {_strip_html(common.get('overview'))}"[:400]
+
+    # [judge-event] 날짜형(축제·공연·행사, type 85)은 **이미 끝났거나 방문일 이전엔 미개최** →
+    # Hard 제외(끝난 콘텐츠 금지). 날짜 미상은 제외하지 않음(추정 금지).
+    if ctype == "85":
+        period = judge_event_period(intro, ctx.start_at.date())
+        if period in (EventPeriod.ENDED, EventPeriod.UPCOMING):
+            trace.step("event_excluded", title=cand.title, period=period.value)
+            return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
 
     # [judge-0] 폐업/임시휴업(Places 음성 신호·좌표 교차확인) → Hard 제외.
     presence = judge_presence(place, cand.lat, cand.lng)

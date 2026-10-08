@@ -25,6 +25,42 @@ class TimingVerdict(str, Enum):
     UNCERTAIN = "uncertain"  # 판단 불가 — 추가 확인 필요
 
 
+class EventPeriod(str, Enum):
+    """날짜형 콘텐츠(축제·공연·행사)의 개최 기간 상태 — '끝난 것 금지' 판정용."""
+
+    ACTIVE = "active"  # 방문일이 개최 기간 내 → 유지
+    ENDED = "ended"  # 종료일 지남 → Hard 제외(이미 끝난 콘텐츠 금지)
+    UPCOMING = "upcoming"  # 방문일 이전 시작 → 그 날엔 아직 없음, Hard 제외
+    UNKNOWN = "unknown"  # 날짜 미상 → 기간 근거로 제외하지 않음(추정 금지)
+
+
+def _parse_yyyymmdd(s: Any) -> date | None:
+    t = str(s or "").strip()
+    if len(t) != 8 or not t.isdigit():
+        return None
+    try:
+        return date(int(t[:4]), int(t[4:6]), int(t[6:8]))
+    except ValueError:
+        return None
+
+
+def judge_event_period(intro: dict[str, Any], ref_date: date) -> EventPeriod:
+    """TourAPI eventstartdate/eventenddate 로 개최 기간 판정(방문일 기준).
+
+    종료일이 방문일 이전이면 ENDED(이미 끝남), 시작일이 방문일 이후면 UPCOMING(아직 안 함).
+    날짜가 하나도 없으면 UNKNOWN(기간으로 제외하지 않음 — 미확인을 '끝남'으로 단정 금지).
+    """
+    start = _parse_yyyymmdd(intro.get("eventstartdate"))
+    end = _parse_yyyymmdd(intro.get("eventenddate"))
+    if end and end < ref_date:
+        return EventPeriod.ENDED
+    if start and start > ref_date:
+        return EventPeriod.UPCOMING
+    if start or end:
+        return EventPeriod.ACTIVE
+    return EventPeriod.UNKNOWN
+
+
 class ExtractedHours(BaseModel):
     """LLM이 공식 운영시간 자유텍스트에서 '추출'한 구조값 (생성 아님, A5 3단계).
 

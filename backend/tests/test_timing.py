@@ -178,3 +178,31 @@ def test_extracted_after_last_admission_stays_uncertain():
     )
     late = datetime(2026, 10, 6, 10, 0)
     assert judge_extracted_hours(h, late, DAY_END)[0] is TimingVerdict.UNCERTAIN
+
+
+def test_judge_event_period():
+    from datetime import date
+
+    from app.domain.timing import EventPeriod, judge_event_period
+
+    ref = date(2026, 10, 8)
+    assert (
+        judge_event_period(
+            {"eventstartdate": "20251010", "eventenddate": "20251026"}, ref
+        )
+        is EventPeriod.ENDED
+    )  # 작년 종료 → 끝남
+    assert (
+        judge_event_period(
+            {"eventstartdate": "20270101", "eventenddate": "20270110"}, ref
+        )
+        is EventPeriod.UPCOMING
+    )  # 미래 시작 → 아직
+    assert (
+        judge_event_period(
+            {"eventstartdate": "20261001", "eventenddate": "20261031"}, ref
+        )
+        is EventPeriod.ACTIVE
+    )  # 기간 내
+    assert judge_event_period({"eventenddate": "20261031"}, ref) is EventPeriod.ACTIVE
+    assert judge_event_period({}, ref) is EventPeriod.UNKNOWN  # 날짜 없음 → 제외 안 함
