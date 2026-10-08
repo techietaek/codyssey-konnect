@@ -193,23 +193,25 @@ def _present(state: LoopState, final_ai: AIMessage | None) -> ChatResponse:
         text = final_ai.content.strip()
     tool = ",".join(state.tools_used) or None
 
+    # 멀티의도: 모은 결과(추천+루트+FAQ답)를 모두 싣는다 — 하나만 담아 나머지를 버리지 않는다.
+    # kind 는 primary 힌트(route>recommendation>answer), 프론트는 실린 필드를 모두 렌더.
+    if state.route is None and state.recommendation is None and state.answer is None:
+        return ChatResponse(
+            kind=ChatKind.CLARIFY, tool=tool, message=text or _CLARIFY_DEFAULT
+        )
     if state.route is not None:
-        return ChatResponse(
-            kind=ChatKind.ROUTE, tool=tool, route=state.route, message=text or None
-        )
-    if state.recommendation is not None:
-        return ChatResponse(
-            kind=ChatKind.RECOMMENDATION,
-            tool=tool,
-            recommendation=state.recommendation,
-            message=text or None,
-        )
-    if state.answer is not None:
-        return ChatResponse(
-            kind=ChatKind.ANSWER, tool=tool, answer=state.answer, message=text or None
-        )
+        kind = ChatKind.ROUTE
+    elif state.recommendation is not None:
+        kind = ChatKind.RECOMMENDATION
+    else:
+        kind = ChatKind.ANSWER
     return ChatResponse(
-        kind=ChatKind.CLARIFY, tool=tool, message=text or _CLARIFY_DEFAULT
+        kind=kind,
+        tool=tool,
+        message=text or None,
+        recommendation=state.recommendation,
+        route=state.route,
+        answer=state.answer,
     )
 
 

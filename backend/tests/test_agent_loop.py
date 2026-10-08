@@ -147,8 +147,11 @@ def test_multi_intent_recommendation_wins_and_both_tools(monkeypatch):
     monkeypatch.setattr(orch, "recommend_a", fake_rec)
 
     resp = _run("subway? and what to do indoors?", _ctx())
-    assert resp.kind is ChatKind.RECOMMENDATION  # route > rec > answer
+    assert resp.kind is ChatKind.RECOMMENDATION  # primary = route > rec > answer
     assert "AnswerTravelQuestion" in resp.tool and "RecommendExperiences" in resp.tool
+    # 멀티의도: 추천 AND 답을 모두 실어야 한다(한쪽을 버리지 않음).
+    assert resp.recommendation is not None
+    assert resp.answer is not None and resp.answer.answer == "T-money."
 
 
 def test_missing_trip_context_clarifies(monkeypatch):

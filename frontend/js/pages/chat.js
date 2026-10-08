@@ -29,6 +29,17 @@ const SUGGESTIONS = [
   "Plan me a culture route for this afternoon",
 ];
 
+// 에이전트가 생각하는 동안 보여줄 단계별 진행 문구(§6.9f). 실제 파이프라인 흐름을 반영하되
+// 서버가 단계 이벤트를 스트리밍하진 않으므로 타이머로 순차 표시(끝 문구에서 멈춤).
+const PROGRESS = [
+  "Understanding your request…",
+  "Searching official sources near you…",
+  "Checking what's open and the details…",
+  "Finding the best matches…",
+  "Putting your results together…",
+];
+const PROGRESS_INTERVAL_MS = 1800;
+
 export function renderChatView({ onBack }) {
   const root = el("section", "view chat");
 
@@ -266,34 +277,52 @@ export function renderChatView({ onBack }) {
 
   // 어시스턴트 턴을 짧은 텍스트로 요약(멀티턴 맥락 — LLM 이 후속 교정을 이해하도록).
   function summarize(data) {
-    if (data.kind === "answer" && data.answer) return data.answer.answer;
-    if (data.kind === "recommendation" && data.recommendation) {
-      const t = (data.recommendation.candidates ?? []).map((c) => c.title);
-      return t.length
-        ? `Suggested experiences: ${t.join(", ")}`
-        : "No experiences fit those conditions.";
-    }
-    if (data.kind === "route" && data.route) {
+    // 멀티의도: 실린 결과를 모두 요약(히스토리 맥락 정확). 없으면 message.
+    const parts = [];
+    if (data.route) {
       const r = (data.route.routes ?? [])[0];
-      if (r)
-        return `Planned a route "${r.name}": ${r.stops
-          .map((s) => s.candidate.title)
-          .join(" → ")}`;
-      return data.route.unmet || "No route available.";
+      parts.push(
+        r
+          ? `Planned a route "${r.name}": ${r.stops
+              .map((s) => s.candidate.title)
+              .join(" → ")}`
+          : data.route.unmet || "No route available.",
+      );
     }
-    return data.message || "";
+    if (data.recommendation) {
+      const t = (data.recommendation.candidates ?? []).map((c) => c.title);
+      parts.push(
+        t.length
+          ? `Suggested experiences: ${t.join(", ")}`
+          : "No experiences fit those conditions.",
+      );
+    }
+    if (data.answer && data.answer.answer) parts.push(data.answer.answer);
+    return parts.join("\n") || data.message || "";
   }
 
   function renderResponse(data) {
-    if (data.kind === "answer" && data.answer) return renderAnswer(data.answer);
-    if (data.kind === "recommendation" && data.recommendation)
-      return renderRecommendation(data.recommendation);
-    if (data.kind === "route" && data.route) return renderRoute(data.route);
-    // clarify (또는 빈 결과) → 텍스트 되묻기
-    bubble(
-      "assistant",
-      data.message || "Could you tell me a bit more about what you'd like?",
-    );
+    // 멀티의도: 실린 결과를 모두 렌더(route→recommendation→answer). 한 종류만 그리지 않는다.
+    let rendered = false;
+    if (data.route && (data.route.routes ?? []).length) {
+      renderRoute(data.route);
+      rendered = true;
+    }
+    if (data.recommendation) {
+      renderRecommendation(data.recommendation);
+      rendered = true;
+    }
+    if (data.answer && data.answer.answer) {
+      renderAnswer(data.answer);
+      rendered = true;
+    }
+    // 아무 결과도 없으면(clarify/빈 결과) 텍스트 되묻기
+    if (!rendered) {
+      bubble(
+        "assistant",
+        data.message || "Could you tell me a bit more about what you'd like?",
+      );
+    }
   }
 
   // ── 입력 바 ──
@@ -317,6 +346,18 @@ export function renderChatView({ onBack }) {
   }
   log.append(suggest);
 
+  // 응답 대기 중 '진행 문구가 순환하는' 어시스턴트 버블. 끝 문구에서 멈추고, stop() 로 정리.
+  function thinkingBubble() {
+    const span = el("span", "chat-typing", PROGRESS[0]);
+    const node = bubble("assistant", span);
+    let i = 0;
+    const timer = setInterval(() => {
+      i = Math.min(i + 1, PROGRESS.length - 1);
+      span.textContent = PROGRESS[i];
+    }, PROGRESS_INTERVAL_MS);
+    return { node, stop: () => clearInterval(timer) };
+  }
+
   const history = []; // 멀티턴 맥락(AG-3) — 서버는 stateless, 매 턴 함께 전송
   let busy = false;
   async function send(text) {
@@ -331,10 +372,11 @@ export function renderChatView({ onBack }) {
     const prior = history.slice(); // 이번 사용자 메시지 '이전'까지의 맥락
     history.push({ role: "user", content: msg });
 
-    const typing = bubble("assistant", el("span", "chat-typing", "···"));
+    const thinking = thinkingBubble();
     try {
       const env = await postChat(msg, tripContext(), prior);
-      typing.remove();
+      thinking.stop();
+      thinking.node.remove();
       if (!env.ok) {
         const m =
           env.error?.message || "Sorry, something went wrong. Please try again.";
@@ -346,7 +388,8 @@ export function renderChatView({ onBack }) {
       }
     } catch {
       const m = "I couldn't reach the service. Please try again.";
-      typing.remove();
+      thinking.stop();
+      thinking.node.remove();
       bubble("assistant", m);
       history.push({ role: "assistant", content: m });
     } finally {
