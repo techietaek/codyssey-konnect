@@ -8,6 +8,7 @@ route(Tmap) → explain(Reason) → compose. 한 소스 실패가 전체 실패�
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 
 from app.agent.context import RequestContext
 from app.agent.environment import get_environment
@@ -21,15 +22,20 @@ from app.domain.curation import is_cultural_experience
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import (
+    _seoul_type,
     _strip_html,
+    _valid_seoul_coords,
     enrich_intro,
     normalize_candidate,
+    normalize_seoul_event,
+    seoul_event_intro,
     type_from_contenttype,
 )
 from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.preferences_merge import merge_saved_interests
 from app.domain.ranking import display_sort_key, io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
+from app.domain.route import haversine_m
 from app.domain.status import resolve_status
 from app.domain.timing import (
     EventPeriod,
@@ -49,7 +55,7 @@ from app.models.recommend import (
     RecommendData,
     StartLocation,
 )
-from app.sources import gplaces, tmap, tourapi
+from app.sources import gplaces, seoulculture, tmap, tourapi
 
 # 문화경험 콘텐츠 타입(EngService2): 관광지·문화시설·축제/공연/행사.
 # (식당·쇼핑·숙박 등은 제외 — PRD §6.4)
@@ -59,8 +65,8 @@ _MAX_CANDIDATES = 4
 _ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 위한 보강 범위
 
 
-async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
-    """문화 타입별 목록을 병렬 조회 → 병합·중복제거·거리순. 전부 실패 시 예외."""
+async def _fetch_tour_pool(lat: float, lng: float) -> tuple[list[dict], int]:
+    """TourAPI 문화 타입별 목록 병렬 조회 → 병합·중복제거. (pool, 실패소스수)."""
     results = await asyncio.gather(
         *(
             tourapi.location_based_list(lat, lng, _SEARCH_RADIUS_M, t)
@@ -80,24 +86,119 @@ async def _fetch_pool(lat: float, lng: float, trace: Trace) -> list[dict]:
         for it in items:
             cid = it.get("contentid")
             if cid and cid not in merged and is_cultural_experience(it):
+                it["_src"] = "tour"
+                it["_etype"] = type_from_contenttype(it.get("contenttypeid"))
                 merged[cid] = it
+    return list(merged.values()), failed
+
+
+async def _fetch_seoul_pool(
+    lat: float, lng: float, on_date: date, radius: int = _SEARCH_RADIUS_M
+) -> list[dict]:
+    """서울문화포털 '그날 열리는' 행사 조회 → 좌표 거리 후필터(반경 내)·거리 태깅.
+
+    API 가 dist 를 주지 않아 좌표로 haversine 계산(domain/route)해 반경 밖은 제외한다.
+    좌표 없는 행사는 지도 핀 불가 → drop(임의 좌표 생성 금지). 실패는 상위에서 graceful.
+    """
+    rows = await seoulculture.cultural_events(on_date)
+    pool: list[dict] = []
+    for row in rows:
+        coords = _valid_seoul_coords(row)
+        if coords is None:
+            continue
+        d = haversine_m(lat, lng, coords[0], coords[1])
+        if d > radius:
+            continue
+        row["dist"] = d
+        row["_src"] = "seoul"
+        row["_etype"] = _seoul_type(row.get("CODENAME"))
+        pool.append(row)
+    return pool
+
+
+async def _fetch_pool(
+    lat: float, lng: float, trace: Trace, on_date: date
+) -> list[dict]:
+    """멀티소스(TourAPI + 서울문화포털) 병렬 조회 → 병합·거리순. 부분 실패 허용(§6.2).
+
+    on_date 는 서울 행사 '그날 열림' 필터 기준(방문일, ctx.start_at.date()).
+    TourAPI 가 전부 실패하면 예외(기본 추천 성립 불가), 서울 소스 실패는 graceful 로 흡수.
+    """
+    tour_res, seoul_res = await asyncio.gather(
+        _fetch_tour_pool(lat, lng),
+        _fetch_seoul_pool(lat, lng, on_date),
+        return_exceptions=True,
+    )
+    if isinstance(tour_res, Exception):
+        raise tour_res
+    tour_pool, tour_failed = tour_res
+
+    if isinstance(seoul_res, Exception):
+        seoul_pool: list[dict] = []
+        seoul_ok = False
+    else:
+        seoul_pool = seoul_res
+        seoul_ok = True
 
     def _dist(it: dict) -> float:
         try:
             return float(it.get("dist") or 1e12)
-        except ValueError:
+        except (TypeError, ValueError):
             return 1e12
 
-    pool = sorted(merged.values(), key=_dist)
-    trace.step("fetch", pool=len(pool), sources_failed=failed)
+    pool = sorted([*tour_pool, *seoul_pool], key=_dist)
+    trace.step(
+        "fetch",
+        pool=len(pool),
+        tour=len(tour_pool),
+        seoul=len(seoul_pool),
+        tour_sources_failed=tour_failed,
+        seoul_ok=seoul_ok,
+    )
     return pool
+
+
+async def _enrich_seoul(
+    item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
+) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
+    """서울문화포털 행사 정규화→판정. 목록 응답이 완성형이라 2차 상세조회가 없다.
+
+    기간(종료/미개막)은 Hard 제외, 운영시간은 미제공→UNCERTAIN(CHECK_NEEDED). 행사는
+    venue 폐업 신호(Places) 대상이 아니라 presence 판정은 생략한다.
+    """
+    cand = normalize_seoul_event(item)
+    if cand is None:
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+
+    # 개방형 배제 의미분류용 텍스트(제목 + 공식 프로그램/설명). 사실 생성 아님.
+    desc = _strip_html(item.get("PROGRAM") or item.get("ETC_DESC"))
+    classify_text = f"{cand.title}. {desc}"[:400]
+
+    intro = seoul_event_intro(item)
+    # [judge-event] 끝났거나 방문일 이전 → Hard 제외(끝난 콘텐츠 금지). 날짜 미상은 유지.
+    period = judge_event_period(intro, ctx.start_at.date())
+    if period in (EventPeriod.ENDED, EventPeriod.UPCOMING):
+        trace.step("event_excluded", title=cand.title, period=period.value, src="seoul")
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+
+    timing, _reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    budget = judge_budget(cand, cond)
+    status, flags = resolve_status(cand, timing, budget, cond)
+    if status is None:
+        return None, timing, budget, ""  # Hard 제외
+    cand.status = status
+    cand.flags = flags
+    return cand, timing, budget, classify_text
 
 
 async def _enrich(
     item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
 ) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
     """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외.
-    4번째 값은 개방형 배제 의미분류용 텍스트(이름+공식 overview, 공식 데이터만)."""
+    4번째 값은 개방형 배제 의미분류용 텍스트(이름+공식 overview, 공식 데이터만).
+    소스별로 분기 — 서울문화포털 행사는 _enrich_seoul 로 위임."""
+    if item.get("_src") == "seoul":
+        return await _enrich_seoul(item, ctx, cond, trace)
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
     # 공식 상세(정본)·반복정보(detailInfo2)·Places businessStatus(폐업 음성 신호)를 병렬 조회.
@@ -195,12 +296,13 @@ async def recommend_a(
     if ctx.conditions is not None:
         cond = ctx.conditions
         pool, env = await asyncio.gather(
-            _fetch_pool(lat, lng, trace), get_environment(lat, lng, trace)
+            _fetch_pool(lat, lng, trace, ctx.start_at.date()),
+            get_environment(lat, lng, trace),
         )
     else:
         cond, pool, env = await asyncio.gather(
             parse_note(ctx.note),
-            _fetch_pool(lat, lng, trace),
+            _fetch_pool(lat, lng, trace, ctx.start_at.date()),
             get_environment(lat, lng, trace),
         )
     # 저장 선호를 Request 우선으로 병합(note 침묵 시에만 관심사 Soft 채움, FR-L5).
@@ -226,7 +328,8 @@ async def recommend_a(
     if cond.interests or cond.avoid_interests or cond.indoor_outdoor:
 
         def _soft_key(it: dict) -> tuple[int, int]:
-            etype = type_from_contenttype(it.get("contenttypeid"))
+            # _etype 는 fetch 단계에서 소스별로 산정(tour=contenttypeid, seoul=CODENAME).
+            etype = it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
             return (type_preference_rank(etype, cond), io_rank(etype, cond))
 
         pool.sort(key=_soft_key)

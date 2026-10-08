@@ -178,7 +178,8 @@ async def recommend_route(
     origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
 
     pool, env = await asyncio.gather(
-        _fetch_pool(lat, lng, trace), get_environment(lat, lng, trace)
+        _fetch_pool(lat, lng, trace, ctx.start_at.date()),
+        get_environment(lat, lng, trace),
     )
     # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
     # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).

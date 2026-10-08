@@ -152,6 +152,8 @@ class OfficialLink(BaseModel):
 class Candidate(BaseModel):
     id: str
     title: str
+    # 출처 배지(멀티소스, 설계 §6.2). 공식 소스 식별 — "tour"=TourAPI, "seoul"=서울문화포털.
+    source: str = "tour"
     type: ExperienceType = ExperienceType.DEFAULT
     status: ResultStatus
     reasons: list[Reason] = Field(default_factory=list, max_length=2)

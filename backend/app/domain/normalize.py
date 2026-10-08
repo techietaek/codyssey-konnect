@@ -223,6 +223,126 @@ def _valid_coords(item: dict[str, Any]) -> tuple[float, float] | None:
     return None
 
 
+# ── 서울문화포털 문화행사(culturalEventInfo) 정규화 ─────────────────────────────
+# CODENAME(분류) → 유형. 미상/일반은 festival_event(행사 포털 기본).
+_SEOUL_TYPE_KEYWORDS: list[tuple[tuple[str, ...], ExperienceType]] = [
+    (("전시", "미술"), ExperienceType.EXHIBITION),
+    (
+        ("공연", "콘서트", "연극", "뮤지컬", "클래식", "무용", "국악", "오페라"),
+        ExperienceType.PERFORMANCE,
+    ),
+    (("교육", "체험"), ExperienceType.HANDS_ON),
+    (("축제", "행사"), ExperienceType.FESTIVAL_EVENT),
+]
+
+
+def _seoul_type(codename: str | None) -> ExperienceType:
+    name = str(codename or "")
+    for keywords, etype in _SEOUL_TYPE_KEYWORDS:
+        if any(k in name for k in keywords):
+            return etype
+    return ExperienceType.FESTIVAL_EVENT
+
+
+def _seoul_yyyymmdd(s: Any) -> str:
+    """'2024-05-01 00:00:00.0' / '2024-05-01' → '20240501'. 파싱 불가면 ''(추정 금지)."""
+    digits = re.sub(r"\D", "", str(s or ""))[:8]
+    return digits if len(digits) == 8 else ""
+
+
+def _valid_seoul_coords(row: dict[str, Any]) -> tuple[float, float] | None:
+    """LOT/LAT 두 값을 범위로 안전 할당(이 API 는 이름이 관례와 뒤바뀜).
+
+    위도(33–39)·경도(124–132) 범위에 각각 들어맞는 값으로 (lat, lng) 재구성한다.
+    두 역할이 모두 채워질 때만 유효. 아니면 None(drop — 지도 핀 불가).
+    """
+    vals: list[float] = []
+    for key in ("LOT", "LAT"):
+        try:
+            vals.append(float(str(row.get(key) or "").strip()))
+        except (TypeError, ValueError):
+            continue
+    lat = next((v for v in vals if _LAT_RANGE[0] <= v <= _LAT_RANGE[1]), None)
+    lng = next((v for v in vals if _LNG_RANGE[0] <= v <= _LNG_RANGE[1]), None)
+    if lat is None or lng is None:
+        return None
+    return lat, lng
+
+
+def seoul_event_intro(row: dict[str, Any]) -> dict[str, Any]:
+    """서울 행사 row → 기간 판정용 합성 intro(STRTDATE/END_DATE 만). 운영시간은 미제공.
+
+    기존 결정론 판정(judge_event_period·judge_timing)을 소스 불문 그대로 재사용하기 위한
+    어댑터. 시간값을 지어내지 않는다 — 날짜만 매핑(없으면 빈값 → 미확인 판정).
+    """
+    return {
+        "eventstartdate": _seoul_yyyymmdd(row.get("STRTDATE")),
+        "eventenddate": _seoul_yyyymmdd(row.get("END_DATE")),
+    }
+
+
+def _seoul_price_text(row: dict[str, Any]) -> str:
+    """요금 텍스트: USE_FEE 우선, 없으면 IS_FREE('무료'/'유료')만 신호로.
+
+    빈값을 free 로 매핑하지 않는다(불변식). IS_FREE='무료'는 공식 소스의 '확인된 무료'.
+    """
+    fee = str(row.get("USE_FEE") or "").strip()
+    if fee:
+        return fee
+    is_free = str(row.get("IS_FREE") or "").strip()
+    return is_free  # '무료'→FREE, '유료'→UNKNOWN(금액 미확인), ''→UNKNOWN
+
+
+def normalize_seoul_event(row: dict[str, Any]) -> Candidate | None:
+    """서울문화포털 행사 row → Candidate. 좌표 이상치는 None(drop).
+
+    제목은 국문 그대로 노출(E1 — 영문화는 agentic 롤아웃 4단계). 출처 배지 source='seoul'.
+    """
+    coords = _valid_seoul_coords(row)
+    if coords is None:
+        return None
+    lat, lng = coords
+    title = str(row.get("TITLE") or "").strip()
+    if not title:
+        return None
+
+    price = normalize_price(_seoul_price_text(row))
+    # 행사는 '그날 안의 운영시간'이 구조화돼 있지 않다 → 미확인(시간 지어내지 않음).
+    time_info = None
+
+    flags: list[UnconfirmedFlag] = []
+    if price.status == PriceStatus.UNKNOWN:
+        flags.append(UnconfirmedFlag(text="Price needs checking"))
+    flags.append(UnconfirmedFlag(text="Hours need checking"))
+
+    links: list[OfficialLink] = []
+    link = str(row.get("ORG_LINK") or row.get("HMPG_ADDR") or "").strip()
+    if link.startswith("http"):
+        links.append(OfficialLink(label="View official details", url=link))
+
+    image = str(row.get("MAIN_IMG") or "").strip() or None
+
+    # 안정적 id: 좌표 없는 소스라 TITLE+시작일로 합성(중복제거·재조회 일관성).
+    uid = f"{title}|{_seoul_yyyymmdd(row.get('STRTDATE'))}"
+
+    return Candidate(
+        id=f"seoul-{abs(hash(uid)) % (10**10)}",
+        title=title,
+        source="seoul",
+        type=_seoul_type(row.get("CODENAME")),
+        status=ResultStatus.CHECK_NEEDED,  # 판정 전(orchestrator 에서 3상태 산정)
+        reasons=[],
+        time=time_info,
+        price=price,
+        movement=None,
+        flags=flags,
+        image_url=image,
+        official_links=links,
+        lat=lat,
+        lng=lng,
+    )
+
+
 def normalize_candidate(
     item: dict[str, Any], intro: dict[str, Any], common: dict[str, Any]
 ) -> Candidate | None:
