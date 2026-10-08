@@ -84,3 +84,93 @@ Sool Gallery       cat3=A02060300  ← 같은 코드에 한식공간·인권기�
 - `agent/note_parser.py`·`hours_parser.py` — [2] LLM 구조화/추출 패턴(structured output·temp 0·graceful·trace)의 선례.
 - `domain/*`(status·timing·budget·normalize·ranking) — **[5] 이후에도 사실 판정의 정본**(LLM이 대체하지 않음).
 - `sources/*` — [3] 멀티소스 클라이언트(TourAPI 완비, KOPIS·서울 신규 필요).
+
+---
+
+## 6. 전체 Agentic 설계 (챗 전체 · 2026-10-08 승인)
+
+> **승인 범위:** 챗 전체(A 즉시추천 · B 문화루트 · FAQ)를 **하나의 agentic 루프**로. 오케스트레이션 LLM은 **상위 모델 허용**(gpt-4o-mini의 tool-calling 변동성 회피). 사실 판정 tool은 그대로 결정론 코드.
+> **한 줄 목표:** "LLM을 통해 사용자의 조건·요청에 맞는 **최적의 문화 콘텐츠**를 제공한다." → 코드=가용성(참여 가능?) / **LLM=적합성(이 사용자에게 최적?) 선별**.
+
+### 6.0 핵심 원칙 (불변 — 바꾸려면 Product 재조율)
+1. **코드=사실/가용성, LLM=해석/선별.** 가격·운영시간·휴무·회차·좌표·예약은 **소스 공식 데이터 → 코드 정규화·판정**이 소유. LLM은 그 **fact 객체를 읽고** 어떤 소스를 조회할지·무엇이 적합한지·어떤 순서로 보여줄지만 결정. LLM은 사실을 **생성/뒤집지 않는다**.
+2. **참여 가능한 것만 선별 입력.** LLM 최종 선별에는 **코드가 이미 가용성 판정(fits/check, Hard 제외)한 후보만** 들어간다. 가용성≠적합성.
+3. **미확인≠긍정.** 멀티소스 어디서 와도 빈값/모호는 `unknown`(무료·예약불필요·이용가능으로 매핑 금지).
+4. **표시 사실값은 코드 fact 객체에서 렌더** — LLM 산문이 가격/시간을 다시 쓰지 못함. LLM은 "어떤 후보를 어떤 순서로"만 반환, 코드가 fact와 재결합.
+5. **루프 상한·graceful·trace.** 무한루프 방지(max steps), 한 tool/소스 실패가 전체를 막지 않음, 모든 step trace(NFR-08).
+
+### 6.1 Agentic 루프 (while-loop tool-calling)
+```
+messages = [SYSTEM, *history, user(자연어)]
+for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용 방어
+    ai = orchestrator_llm.bind_tools(TOOLS).invoke(messages)   # 상위 모델
+    trace.step("agent_turn", step, tools=[c.name for c in ai.tool_calls])
+    if not ai.tool_calls:              # 더 쓸 tool 없음 → 종료
+        return finalize(messages, ai)  # 최종 응답(선별된 fact 후보 + 설명)
+    results = await gather(run_tool(c) for c in ai.tool_calls)  # 병렬 실행
+    messages += [ai, *tool_results]    # 결과를 다시 LLM에 투입(ReAct)
+# 상한 도달 → 지금까지의 best 후보로 graceful 종료
+```
+- **종료 조건:** LLM이 tool_call 없이 최종 답을 낼 때(= "더 쓸 도구 없음"). 사용자 요청 충족.
+- **표시:** 최종 후보 id·순서는 LLM, **사실값은 코드가 보관한 Candidate에서 렌더**(id로 재결합).
+- LangChain 수동 루프(LangGraph 금지, CLAUDE §2). tool-runner 패턴.
+
+### 6.2 멀티소스 어댑터 (사실 정규화 — LLM 아님)
+소스별 클라이언트 + `domain/normalize_{source}` → **공통 `Candidate`**(단일 지점). 이종 스키마·시간모델·지오를 코드가 흡수:
+
+| 소스 | 질의 | 시간 모델 → 판정 | 지오 |
+|---|---|---|---|
+| **TourAPI**(76/78/85) | 위치기반(lat/lng+반경) | 일 운영시간·휴무 → `domain/timing` | 네이티브 좌표 |
+| **KOPIS**(공연) | 날짜·장르·지역 | **고정 회차**(공연기간+회차시간 ∈ 사용자창?) → 회차 판정 | 공연시설 좌표 별도조회+캐시 → 거리 후필터 |
+| **서울문화포털**(행사) | 구·날짜 | **행사기간**(오늘 ∈ 기간? +시간) → 기간 판정 | LAT/LOT → 거리 후필터 |
+
+- 셋 다 **동일 3상태(fits/check/Hard제외)로 수렴** → 하위 선별·루트 로직은 소스 불문.
+- **병합·dedup**(제목+좌표 근접), **부분실패 허용**.
+- **언어:** TourAPI=영문, KOPIS/서울=국문 → 제목 그대로(장소명). LLM 번역은 옵션.
+- `Candidate`에 최소 추가: `source`(출처 배지), `schedule`(고정행사 회차/기간).
+
+### 6.3 툴 계약 (초안 — 사실/의미 소유 명시)
+| tool | 입력 | 하는 일 | 소유 |
+|---|---|---|---|
+| `structure_request` | user NL, history | 조건 구조화(관심사·배제·시간창·실내외·예산·요청유형) | **LLM** 해석 |
+| `search_experiences` | area/coords, when, intent, source?("auto") | 의도별 소스 선택·병렬 조회 → 정규화 Candidate 풀 | **코드**(공식) |
+| `classify_places` | [cand.text] | per-place 실내/외·카테고리 의미태그(park→outdoor, museum→indoor) | **LLM** 해석 |
+| `check_availability` | cands, time window | 운영/휴무/회차/기간·폐업 → fits/check/Hard제외 | **코드**(공식) |
+| `check_budget` | cands, budget | 예산 상태(일반가 기준) | **코드** |
+| `walk_route` | origin, stops | Tmap 도보 거리/시간/경로 | **코드** |
+| `answer_knowledge` | query | RAG 근거내 답변(FAQ) | 코드검색+LLM답(근거내) |
+| `plan_day_route` | feasible cands, window | 하루 동선 조립(fit_count·스케줄) | **코드** |
+| `finalize` | selected ids, order, reasons | 최종 선별 확정(사실은 코드 fact 재결합) | **LLM** 선택 |
+
+- **FAQ·추천·루트가 한 툴셋**: LLM이 요청에 따라 조합(FAQ면 answer_knowledge, 지금 추천이면 search+classify+check+finalize, 하루면 +plan_day_route).
+- 각 tool: structured I/O(Pydantic), graceful, trace. 사실 tool은 결정론 → **단위테스트 유지**.
+
+### 6.4 신뢰 경계 매핑
+- **가용성(참여 가능?)** = `search_experiences`+`check_availability` (코드·공식). LLM 선별 입력엔 이 통과분만.
+- **적합성(이 사용자에게 최적?)** = `classify_places`+`finalize` (LLM). 단 **참여 가능 후보 내에서만** 고르고, 표시 사실은 코드 fact로 렌더.
+- 그래서 "indoor only"·"not outdoor"·"조용한 곳" 같은 **개방형 적합성**은 LLM이 per-place로 처리(유형 휴리스틱 탈피 → 앞서 본 Tapgol/Kimchikan 오분류 해소).
+
+### 6.5 trace · 테스트
+- **trace:** `agent_turn`(step·선택tool), 각 tool 입·출력 요약, 종료사유. PoC 증빙(NFR-08) 자동 축적.
+- **테스트:** 사실 tool(normalize·timing·budget·route·fit_count)은 결정론 → 단위테스트 유지·확장. 루프/LLM선별은 비결정 → trace 스냅샷 + 소수 e2e 스모크(게이트: 미확인 긍정매핑 없음·닫힌 곳 제외·사실 렌더).
+
+### 6.6 점진 롤아웃 (안전하게)
+1. **멀티소스 어댑터** 먼저: KOPIS·서울문화포털 클라이언트 + 정규화 + 병합/dedup(기존 추천 파이프라인에 투입, agentic 아직 아님). 사실 레이어 탄탄히.
+2. **툴 래핑**: 기존 `orchestrator`·`domain/`·`rag/`를 위 tool 계약으로 노출(얇은 어댑터).
+3. **Agentic 루프**: `agent/agent_loop.py`(while-loop) + 상위 모델 + `/api/chat` 교체(기존 단일 라우팅 → 루프). trace·max_steps.
+4. **classify_places(실내/외·적합성)** + finalize 선별을 루프에 투입 → 3대 품질 이슈 해소.
+5. 검증·튜닝(프롬프트·상한·비용/지연 측정) → 기존 결정론 경로는 fallback으로 유지.
+
+### 6.7 결정 대기 (Product/Tech)
+- **오케스트레이션 모델**: 상위 모델 허용됨 → 구체 모델/비용 상한(예: gpt-4o vs gpt-4o-mini 혼용 — 라우팅=상위, 보조추출=mini).
+- **KOPIS 지오**: 공연시설 좌표 조회 비용 vs 사전 캐시 범위(서울 주요 공연장).
+- **"only/not" = 제외 강도**: 명시 배제어는 Hard 제외(정확 판정 전제), 약한 선호는 Soft — 경계 copy 확정.
+- **언어**: KOPIS/서울 국문 제목 그대로 vs LLM 번역(비용).
+- **응답 지연 허용치**: 루프 다중 LLM+멀티소스 → 목표 p50/p95(로딩 UX와 함께).
+
+### 6.8 현재 코드 재사용
+- `orchestrator`·`route_orchestrator` → `search_experiences`·`check_availability`·`plan_day_route` tool로 분해/노출.
+- `domain/{normalize,timing,budget,status,route,ranking,exclusion}` → 사실 tool 내부(정본 유지).
+- `agent/{note_parser,hours_parser,exclude_classifier}` → `structure_request`·`classify_places`의 선례/부품.
+- `rag/retrieve` → `answer_knowledge` tool.
+- `sources/{tourapi,tmap,gplaces,kma,airkorea}` 재사용 + `sources/{kopis,seoulculture}` 신규.
