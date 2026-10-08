@@ -63,10 +63,6 @@ async function init() {
       _signedIn = false;
       _displayName = null;
       _email = null;
-    } else if (_signedIn && session?.user?.is_anonymous === true) {
-      // 이미 정식 로그인인데 is_anonymous=true 이벤트가 뒤늦게 오는 경우(링크 직후 stale
-      // 클레임). 다운그레이드하면 "로그인됐다가 다시 로그인창"이 된다 → 무시(로그인 유지).
-      return;
     } else {
       _applySession(session);
     }
@@ -79,24 +75,8 @@ async function init() {
     });
   });
 
-  // OAuth 복귀 에러 처리: 이 Google 계정이 이미 다른(이전) user 에 연결된 경우
-  // (identity_already_exists). 링크 대신 기존 계정으로 **로그인**(signInWithOAuth)으로
-  // 1회 폴백(루프 방지 플래그). 그 외/재시도 후에는 URL 에러 파라미터만 정리.
-  const _params = new URLSearchParams(
-    window.location.search.slice(1) + "&" + window.location.hash.slice(1),
-  );
-  const _alreadyLinked = _params.get("error_code") === "identity_already_exists";
-  if (_alreadyLinked && !sessionStorage.getItem("konnect.oauthRetry")) {
-    sessionStorage.setItem("konnect.oauthRetry", "1");
-    await _client.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin + window.location.pathname },
-    });
-    return _client; // Google 로 리다이렉트됨(기존 계정 로그인)
-  }
-  sessionStorage.removeItem("konnect.oauthRetry");
-  if (_params.has("error_code")) {
-    // 에러 파라미터가 남지 않게 URL 정리(새로고침 시 재트리거 방지)
+  // 에러 파라미터가 URL 에 남았으면 정리(새로고침 시 재트리거 방지).
+  if (/[?#&]error/.test(window.location.search + window.location.hash)) {
     history.replaceState({}, "", window.location.origin + window.location.pathname);
   }
 
@@ -109,19 +89,12 @@ async function init() {
     data: { session },
   } = await _client.auth.getSession();
   if (!session && !returning) {
+    // 비로그인: 익명 세션 선발급(백엔드 JWT 연속성). 로그인은 signInWithGoogle(표준 OAuth).
     await _client.auth.signInAnonymously();
     const { data } = await _client.auth.getSession();
     _applySession(data.session);
   } else {
-    // identity linking 직후엔 기존 토큰에 is_anonymous=true 클레임이 남아있다.
-    // 익명 클레임이면 서버에서 토큰을 refresh → 링크됐으면 새 토큰은 is_anonymous=false
-    // (+ Google user_metadata). 진짜 익명이면 그대로 익명.
-    let current = session;
-    if (current?.user?.is_anonymous === true) {
-      const { data } = await _client.auth.refreshSession();
-      if (data?.session) current = data.session;
-    }
-    _applySession(current);
+    _applySession(session);
     // 세션 user 객체가 identities/metadata 를 덜 담고 있으면 이름이 비는 경우가 있다.
     // 로그인 상태인데 이름이 없으면 getUser() 로 완전한 user 를 한 번 더 받아 보강
     // → 잡히면 구독자 통지로 홈/온보딩 greeting 갱신(graceful, 실패 무영향).
@@ -196,14 +169,14 @@ export async function signOut() {
 export async function signInWithGoogle() {
   await ready();
   if (!_client) throw new Error("Auth is not ready.");
-  const redirectTo = window.location.href;
-  const {
-    data: { session },
-  } = await _client.auth.getSession();
-  const opts = { provider: "google", options: { redirectTo } };
-  const { error } = session?.user?.is_anonymous
-    ? await _client.auth.linkIdentity(opts)
-    : await _client.auth.signInWithOAuth(opts);
+  // 표준 OAuth 로그인(항상). 익명 identity linking 은 쓰지 않는다 — returning user 의
+  // identity_already_exists / is_anonymous stale 로 "재로그인이 안 되는" 문제와, 모바일
+  // 시크릿창의 저장소 왕복 취약성을 피하기 위함. (대가: FR-L2 비로그인→계정 데이터 자동
+  // 이관 미지원. 되살리려면 session.user.is_anonymous 시 linkIdentity 분기를 복원.)
+  const { error } = await _client.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin + window.location.pathname },
+  });
   if (error) throw error;
 }
 
