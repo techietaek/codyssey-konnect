@@ -1,0 +1,43 @@
+# Render 배포 명세 (backend only). 대시보드에서 'New > Blueprint'로 이 파일을 쓰거나,
+# Web Service를 수동 생성해도 된다(아래 build/start 동일). 시크릿(sync:false)은 커밋하지 말고
+# Render 대시보드 Environment에 값으로 입력한다.
+services:
+  - type: web
+    name: konnect-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      # ── 배포마다 바뀌는 값 ──
+      - key: CORS_ALLOW_ORIGINS
+        value: https://REPLACE-WITH-VERCEL-URL.vercel.app # 프론트 배포 URL(여러 개면 콤마로)
+      # ── 시크릿: 대시보드에서 값 입력(커밋 금지) ──
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        sync: false
+      - key: OPENAI_EMBEDDING_MODEL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: DATA_GO_KR_SERVICE_KEY
+        sync: false
+      - key: TMAP_API_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: NAVER_MAP_CLIENT_ID
+        sync: false
