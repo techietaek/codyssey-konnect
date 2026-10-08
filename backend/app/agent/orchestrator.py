@@ -8,7 +8,9 @@ route(Tmap) → explain(Reason) → compose. 한 소스 실패가 전체 실패�
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from app.agent.context import RequestContext
 from app.agent.environment import get_environment
@@ -168,47 +170,46 @@ async def _fetch_pool(
     return pool
 
 
-async def _enrich_seoul(
-    item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
-) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
-    """서울문화포털 행사 정규화→판정. 목록 응답이 완성형이라 2차 상세조회가 없다.
+@dataclass
+class SourceRecord:
+    """정규화된 사실(Candidate) + 가용성 판정에 필요한 공식 입력 묶음.
 
-    기간(종료/미개막)은 Hard 제외, 운영시간은 미제공→UNCERTAIN(CHECK_NEEDED). 행사는
-    venue 폐업 신호(Places) 대상이 아니라 presence 판정은 생략한다.
+    search(사실)와 check(가용성)를 분리하기 위한 단위(§6.2·§6.4). search 단계가 만들고
+    check 단계가 소비한다. judge_intro 는 timing/event 판정용 공식 dict(tour=실제 intro,
+    seoul=기간 합성). 사실은 요청(ctx)과 무관 — 여기엔 사용자 시간·선호를 담지 않는다.
     """
-    cand = normalize_seoul_event(item)
-    if cand is None:
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
 
-    # 개방형 배제 의미분류용 텍스트(제목 + 공식 프로그램/설명). 사실 생성 아님.
-    desc = _strip_html(item.get("PROGRAM") or item.get("ETC_DESC"))
-    classify_text = f"{cand.title}. {desc}"[:400]
-
-    intro = seoul_event_intro(item)
-    # [judge-event] 끝났거나 방문일 이전 → Hard 제외(끝난 콘텐츠 금지). 날짜 미상은 유지.
-    period = judge_event_period(intro, ctx.start_at.date())
-    if period in (EventPeriod.ENDED, EventPeriod.UPCOMING):
-        trace.step("event_excluded", title=cand.title, period=period.value, src="seoul")
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
-
-    timing, _reason = judge_timing(intro, ctx.start_at, ctx.end_at)
-    budget = judge_budget(cand, cond)
-    status, flags = resolve_status(cand, timing, budget, cond)
-    if status is None:
-        return None, timing, budget, ""  # Hard 제외
-    cand.status = status
-    cand.flags = flags
-    return cand, timing, budget, classify_text
+    candidate: Candidate
+    source: str
+    judge_intro: dict[str, Any]
+    classify_text: str
+    place: dict[str, Any] | None = None  # Places businessStatus (tour 폐업 신호용)
+    check_event_period: bool = (
+        False  # 날짜형(행사/공연·type85) 종료/미개막 Hard 판정 대상
+    )
+    check_presence: bool = False  # Places 폐업 신호 Hard 판정 대상(tour 전용)
+    allow_llm_hours: bool = False  # 운영시간 UNCERTAIN→OPEN LLM 재추출 허용(tour 전용)
 
 
-async def _enrich(
-    item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
-) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
-    """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외.
-    4번째 값은 개방형 배제 의미분류용 텍스트(이름+공식 overview, 공식 데이터만).
-    소스별로 분기 — 서울문화포털 행사는 _enrich_seoul 로 위임."""
+async def _fetch_and_normalize(item: dict) -> SourceRecord | None:
+    """[search 사실] 상세 조회 → 공통 Candidate 정규화. 판정은 하지 않는다(요청 무관).
+
+    소스별 분기: 서울 행사는 목록이 완성형(2차 조회 없음), TourAPI 는 detail 2차 조회.
+    이상치(좌표/제목)는 None(drop). Hard 판정에 필요한 공식 입력은 SourceRecord 에 싣는다.
+    """
     if item.get("_src") == "seoul":
-        return await _enrich_seoul(item, ctx, cond, trace)
+        cand = normalize_seoul_event(item)
+        if cand is None:
+            return None
+        desc = _strip_html(item.get("PROGRAM") or item.get("ETC_DESC"))
+        return SourceRecord(
+            candidate=cand,
+            source="seoul",
+            judge_intro=seoul_event_intro(item),
+            classify_text=f"{cand.title}. {desc}"[:400],
+            check_event_period=True,  # 행사기간 종료/미개막 Hard 판정
+        )
+
     cid = str(item.get("contentid"))
     ctype = str(item.get("contenttypeid"))
     # 공식 상세(정본)·반복정보(detailInfo2)·Places businessStatus(폐업 음성 신호)를 병렬 조회.
@@ -235,30 +236,56 @@ async def _enrich(
 
     cand = normalize_candidate(item, intro, common)
     if cand is None:
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+        return None
 
-    # 개방형 배제 의미분류용 텍스트(이름 + 공식 overview). 사실 생성 아님 — 공식 텍스트만.
-    classify_text = f"{cand.title}. {_strip_html(common.get('overview'))}"[:400]
+    return SourceRecord(
+        candidate=cand,
+        source="tour",
+        judge_intro=intro,
+        # 개방형 배제 의미분류용 텍스트(이름 + 공식 overview). 사실 생성 아님 — 공식 텍스트만.
+        classify_text=f"{cand.title}. {_strip_html(common.get('overview'))}"[:400],
+        place=place,
+        check_event_period=(ctype == "85"),  # 날짜형만 종료/미개막 판정
+        check_presence=True,  # Places 폐업 신호 교차확인
+        allow_llm_hours=True,  # 운영시간 자유텍스트 LLM 재추출 허용
+    )
 
-    # [judge-event] 날짜형(축제·공연·행사, type 85)은 **이미 끝났거나 방문일 이전엔 미개최** →
-    # Hard 제외(끝난 콘텐츠 금지). 날짜 미상은 제외하지 않음(추정 금지).
-    if ctype == "85":
-        period = judge_event_period(intro, ctx.start_at.date())
+
+async def _judge_record(
+    rec: SourceRecord, ctx: RequestContext, cond: ParsedConditions, trace: Trace
+) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
+    """[check 가용성] SourceRecord → 운영/휴무/기간/폐업/예산 판정 → 3상태. Hard 는 (None,...).
+
+    판정은 전부 결정론 코드(공식 데이터만). 성공 시 candidate.status/flags 를 세팅해 반환한다.
+    """
+    cand = rec.candidate
+
+    # [judge-event] 날짜형(축제·공연·행사) 종료/미개막 → Hard 제외(끝난 콘텐츠 금지).
+    if rec.check_event_period:
+        period = judge_event_period(rec.judge_intro, ctx.start_at.date())
         if period in (EventPeriod.ENDED, EventPeriod.UPCOMING):
-            trace.step("event_excluded", title=cand.title, period=period.value)
+            trace.step(
+                "event_excluded",
+                title=cand.title,
+                period=period.value,
+                src=rec.source,
+            )
             return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
 
     # [judge-0] 폐업/임시휴업(Places 음성 신호·좌표 교차확인) → Hard 제외.
-    presence = judge_presence(place, cand.lat, cand.lng)
-    if presence is not PresenceVerdict.OPERATIONAL:
-        trace.step("presence_excluded", title=cand.title, status=presence.value)
-        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+    if rec.check_presence:
+        presence = judge_presence(rec.place, cand.lat, cand.lng)
+        if presence is not PresenceVerdict.OPERATIONAL:
+            trace.step("presence_excluded", title=cand.title, status=presence.value)
+            return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
 
     # [judge] 운영시간·휴무·행사기간 + 예산 → 3상태. Hard 충돌은 제외.
-    timing, reason = judge_timing(intro, ctx.start_at, ctx.end_at)
+    timing, reason = judge_timing(rec.judge_intro, ctx.start_at, ctx.end_at)
     # regex가 '텍스트는 있으나 파싱 애매'로 UNCERTAIN → LLM 파서로 추출 재시도(OPEN 승격만).
-    if should_retry_hours_with_llm(timing, reason):
-        extracted = await parse_hours(operating_hours_text(intro), ctx.start_at)
+    if rec.allow_llm_hours and should_retry_hours_with_llm(timing, reason):
+        extracted = await parse_hours(
+            operating_hours_text(rec.judge_intro), ctx.start_at
+        )
         if extracted is not None:
             v, _r = judge_extracted_hours(extracted, ctx.start_at, ctx.end_at)
             if v is TimingVerdict.OPEN:
@@ -270,7 +297,19 @@ async def _enrich(
         return None, timing, budget, ""  # Hard 제외
     cand.status = status
     cand.flags = flags
-    return cand, timing, budget, classify_text
+    return cand, timing, budget, rec.classify_text
+
+
+async def _enrich(
+    item: dict, ctx: RequestContext, cond: ParsedConditions, trace: Trace
+) -> tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]:
+    """상세 조회→정규화→판정(운영/휴무/예산/폐업). Hard 충돌은 (None,...)로 제외.
+    4번째 값은 개방형 배제 의미분류용 텍스트. search(_fetch_and_normalize)+check(_judge_record)
+    두 단계로 분해돼 있으며(§6.2), 이 함수는 기존 파이프라인용으로 둘을 합성한다(동작 불변)."""
+    rec = await _fetch_and_normalize(item)
+    if rec is None:
+        return None, TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN, ""
+    return await _judge_record(rec, ctx, cond, trace)
 
 
 async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
