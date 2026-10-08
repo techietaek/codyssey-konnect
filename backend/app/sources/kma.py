@@ -6,9 +6,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
-import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -25,10 +23,6 @@ from app.config import settings
 _URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst"
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
 _KST = timezone(timedelta(hours=9))
-
-_cache: dict[str, tuple[float, dict[str, str]]] = {}
-_cache_lock = asyncio.Lock()
-_TTL = 1200  # 20분 (초단기실황은 매시 갱신)
 
 
 def _grid(lat: float, lon: float) -> tuple[int, int]:
@@ -80,13 +74,6 @@ async def ultra_ncst(lat: float, lon: float) -> dict[str, str]:
     """초단기실황 category→value (예: {'PTY':'1','T1H':'8.0'}). 실패/미확보는 {}."""
     nx, ny = _grid(lat, lon)
     base_date, base_time = _base()
-    key = f"{nx},{ny},{base_time}"
-    now = _time.time()
-    async with _cache_lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < _TTL:
-            return hit[1]
-
     params = {
         "serviceKey": settings.data_go_kr_service_key,
         "pageNo": 1,
@@ -106,11 +93,8 @@ async def ultra_ncst(lat: float, lon: float) -> dict[str, str]:
 
     body = ((data.get("response") or {}).get("body")) or {}
     items = (body.get("items") or {}).get("item") or []
-    out = {
+    return {
         str(it.get("category")): str(it.get("obsrValue"))
         for it in items
         if it.get("category") is not None
     }
-    async with _cache_lock:
-        _cache[key] = (now, out)
-    return out

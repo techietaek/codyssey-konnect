@@ -1,6 +1,7 @@
 """서울문화포털 문화행사 API (서울 열린데이터광장 culturalEventInfo) 클라이언트.
 
-경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity)·단기 TTL 캐시 내장.
+경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity) 내장. 응답 캐싱은 하지 않는다
+(API 정책·데이터 신선도 — 매 요청 직접 조회).
 - culturalEventInfo: 날짜 필터로 '그 날 열리는' 문화행사 목록(제목·기간·좌표·요금·링크·이미지)
 
 행사 row 는 목록 응답에 모든 필드가 들어있어 TourAPI 처럼 상세 2차 조회가 필요 없다.
@@ -12,8 +13,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
 from datetime import date
 from typing import Any
 from urllib.parse import quote
@@ -32,11 +31,6 @@ from app.core.exceptions import ExternalSourceError
 _BASE = "http://openapi.seoul.go.kr:8088"
 _SERVICE = "culturalEventInfo"
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
-
-# 단기 TTL 캐시 (경량 조회 방어, NFR-03). 행사 목록은 날짜 단위라 10분이면 충분.
-_cache: dict[str, tuple[float, Any]] = {}
-_cache_lock = asyncio.Lock()
-_TTL_LIST = 600
 
 _OK_CODES = ("INFO-000",)
 
@@ -73,13 +67,6 @@ async def cultural_events(
         f"{quote(date_str)}"
     )
 
-    cache_key = f"{_SERVICE}:{date_str}:{start}-{end}"
-    now = time.time()
-    async with _cache_lock:
-        hit = _cache.get(cache_key)
-        if hit and now - hit[0] < _TTL_LIST:
-            return hit[1]
-
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             data = await _get(client, url)
@@ -98,6 +85,4 @@ async def cultural_events(
     else:
         raise ExternalSourceError(f"Seoul culturalEventInfo error code={code}")
 
-    async with _cache_lock:
-        _cache[cache_key] = (now, rows)
     return rows

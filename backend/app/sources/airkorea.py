@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import time as _time
 from typing import Any
 
 import httpx
@@ -22,10 +20,6 @@ from app.config import settings
 
 _URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty"
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
-
-_cache: dict[str, tuple[float, str | None]] = {}
-_cache_lock = asyncio.Lock()
-_TTL = 1200  # 20분 (실시간 대기질 갱신 주기)
 
 
 @retry(
@@ -42,12 +36,6 @@ async def _get(client: httpx.AsyncClient, params: dict[str, Any]) -> httpx.Respo
 
 async def khai_grade(sido: str = "서울") -> str | None:
     """시도 실시간 측정소들의 khaiGrade 대표값(평균 등급, '1'~'4'). 실패/없음은 None."""
-    now = _time.time()
-    async with _cache_lock:
-        hit = _cache.get(sido)
-        if hit and now - hit[0] < _TTL:
-            return hit[1]
-
     params = {
         "serviceKey": settings.data_go_kr_service_key,
         "returnType": "json",
@@ -69,7 +57,4 @@ async def khai_grade(sido: str = "서울") -> str | None:
         for it in items
         if (g := str(it.get("khaiGrade") or "").strip()) in ("1", "2", "3", "4")
     ]
-    result = str(round(sum(grades) / len(grades))) if grades else None
-    async with _cache_lock:
-        _cache[sido] = (now, result)
-    return result
+    return str(round(sum(grades) / len(grades))) if grades else None

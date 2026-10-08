@@ -1,6 +1,7 @@
 """TourAPI (한국관광공사 EngService2) 클라이언트.
 
-경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity)·단기 TTL 캐시 내장.
+경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity) 내장. 응답 캐싱은 하지 않는다
+(API 정책·데이터 신선도 — 매 요청 직접 조회).
 - locationBasedList2: 좌표 기반 후보 발견(title·좌표·type·dist·image)
 - detailIntro2: 타입별 운영시간·요금·휴무 (list에는 없음)
 - detailCommon2: homepage(공식 링크)·overview
@@ -10,8 +11,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any
 
 import httpx
@@ -29,17 +28,6 @@ _BASE = "https://apis.data.go.kr/B551011/EngService2"
 _COMMON = {"MobileOS": "ETC", "MobileApp": "KONNECT", "_type": "json"}
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
 
-# 단기 TTL 캐시 (경량 조회 방어, NFR-03)
-_cache: dict[str, tuple[float, Any]] = {}
-_cache_lock = asyncio.Lock()
-_TTL_LIST = 600  # 목록 10분
-_TTL_DETAIL = 3600  # 상세 1시간 (거의 변하지 않음)
-
-
-def _cache_key(path: str, params: dict[str, Any]) -> str:
-    items = sorted((k, str(v)) for k, v in params.items() if k != "serviceKey")
-    return f"{path}?{items}"
-
 
 @retry(
     reraise=True,
@@ -53,14 +41,7 @@ async def _get(client: httpx.AsyncClient, path: str, params: dict[str, Any]) -> 
     return r.json()
 
 
-async def _call(path: str, params: dict[str, Any], ttl: int) -> Any:
-    key = _cache_key(path, params)
-    now = time.time()
-    async with _cache_lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < ttl:
-            return hit[1]
-
+async def _call(path: str, params: dict[str, Any]) -> Any:
     full = {**_COMMON, "serviceKey": settings.data_go_kr_service_key, **params}
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -73,9 +54,6 @@ async def _call(path: str, params: dict[str, Any], ttl: int) -> Any:
         raise ExternalSourceError(
             f"TourAPI {path} error resultCode={header.get('resultCode')}"
         )
-
-    async with _cache_lock:
-        _cache[key] = (now, data)
     return data
 
 
@@ -104,7 +82,6 @@ async def location_based_list(
             "radius": radius,
             "contentTypeId": content_type_id,
         },
-        _TTL_LIST,
     )
     return _items(data)
 
@@ -114,7 +91,6 @@ async def detail_intro(content_id: str, content_type_id: str) -> dict[str, Any]:
     data = await _call(
         "detailIntro2",
         {"contentId": content_id, "contentTypeId": content_type_id},
-        _TTL_DETAIL,
     )
     items = _items(data)
     return items[0] if items else {}
@@ -122,7 +98,7 @@ async def detail_intro(content_id: str, content_type_id: str) -> dict[str, Any]:
 
 async def detail_common(content_id: str) -> dict[str, Any]:
     """공통 상세(homepage·overview)."""
-    data = await _call("detailCommon2", {"contentId": content_id}, _TTL_DETAIL)
+    data = await _call("detailCommon2", {"contentId": content_id})
     items = _items(data)
     return items[0] if items else {}
 
@@ -133,6 +109,5 @@ async def detail_info(content_id: str, content_type_id: str) -> list[dict[str, A
     data = await _call(
         "detailInfo2",
         {"contentId": content_id, "contentTypeId": content_type_id},
-        _TTL_DETAIL,
     )
     return _items(data)

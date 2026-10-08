@@ -1,6 +1,7 @@
 """Google Places API (New) 클라이언트 — 보조 한정(PRD §6.7).
 
-경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity)·단기 TTL 캐시 내장.
+경량 직접 조회(CLAUDE §4.2): 타임아웃·재시도(tenacity) 내장. 응답 캐싱은 하지 않는다
+(ToS·API 정책상 응답 저장 금지 — 매 요청 직접 조회).
 - searchText: 이름+좌표 bias 로 장소 1건 매칭 → businessStatus 회수
 
 허용 용도는 §6.7 범위(좌표·주소·링크·이미지 보조)에 더해, 운영 사실인
@@ -12,8 +13,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any
 
 import httpx
@@ -30,16 +29,6 @@ _SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 _TIMEOUT = httpx.Timeout(5.0, connect=3.0)
 # businessStatus 만 필요 — FieldMask 최소화(과금·페이로드 절감).
 _FIELD_MASK = "places.businessStatus,places.location,places.displayName"
-
-# 단기 TTL 캐시. businessStatus 는 자주 변하지 않으나 ToS 상 장기 캐싱 불가 →
-# 요청 단위 중복 억제 수준(1시간)만.
-_cache: dict[str, tuple[float, Any]] = {}
-_cache_lock = asyncio.Lock()
-_TTL = 3600
-
-
-def _cache_key(query: str, lat: float, lng: float) -> str:
-    return f"{query}@{lat:.4f},{lng:.4f}"
 
 
 @retry(
@@ -74,13 +63,6 @@ async def find_place(
     if not settings.google_places_api_key or not query:
         return None
 
-    key = _cache_key(query, lat, lng)
-    now = time.time()
-    async with _cache_lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < _TTL:
-            return hit[1]
-
     body = {
         "textQuery": query,
         "maxResultCount": 1,
@@ -98,8 +80,4 @@ async def find_place(
         return None  # graceful — 보조 소스 실패는 '미확인'으로 흘려보냄
 
     places = data.get("places") if isinstance(data, dict) else None
-    result = places[0] if isinstance(places, list) and places else None
-
-    async with _cache_lock:
-        _cache[key] = (now, result)
-    return result
+    return places[0] if isinstance(places, list) and places else None

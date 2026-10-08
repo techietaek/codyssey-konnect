@@ -8,8 +8,6 @@ provenance: 도보시간은 '예상값(estimate)'이지 실제 ETA 보장이 아
 
 from __future__ import annotations
 
-import asyncio
-import time as _time
 from typing import Any
 
 import httpx
@@ -24,10 +22,6 @@ from app.config import settings
 
 _URL = "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&format=json"
 _TIMEOUT = httpx.Timeout(6.0, connect=4.0)
-
-_cache: dict[str, tuple[float, Any]] = {}
-_cache_lock = asyncio.Lock()
-_TTL = 1800  # 30분 (도보 경로는 자주 안 변함 + 호출 제한 방어)
 
 
 @retry(
@@ -50,13 +44,6 @@ async def pedestrian_route(
     start_lat: float, start_lng: float, end_lat: float, end_lng: float
 ) -> dict[str, Any] | None:
     """도보 경로. 성공 시 {distance_m, walk_minutes, path:[[lat,lng],...]}, 실패 시 None."""
-    key = f"{start_lat:.5f},{start_lng:.5f}->{end_lat:.5f},{end_lng:.5f}"
-    now = _time.time()
-    async with _cache_lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < _TTL:
-            return hit[1]
-
     body = {
         "startX": f"{start_lng}",
         "startY": f"{start_lat}",
@@ -90,11 +77,8 @@ async def pedestrian_route(
             for lng, lat in g.get("coordinates", []):
                 path.append([lat, lng])
 
-    result = {
+    return {
         "distance_m": int(dist),
         "walk_minutes": max(1, round(int(secs) / 60)),
         "path": path,
     }
-    async with _cache_lock:
-        _cache[key] = (now, result)
-    return result
