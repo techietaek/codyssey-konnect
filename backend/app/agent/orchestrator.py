@@ -312,24 +312,31 @@ async def _enrich(
     return await _judge_record(rec, ctx, cond, trace)
 
 
-async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
-    """후보에 도보 이동정보(Tmap) 부착. 실패/좌표없음 → Route unavailable(직선 위조 금지)."""
-    route = None
-    if cand.lat is not None and cand.lng is not None:
-        route = await tmap.pedestrian_route(olat, olng, cand.lat, cand.lng)
-    if route is None:
-        cand.movement = MovementInfo(
+def movement_from_leg(leg: dict | None) -> MovementInfo:
+    """Tmap 구간 결과 → MovementInfo. None(실패/좌표없음) → Route unavailable(직선 위조 금지).
+
+    도보시간은 예상값(estimate)이지 실제 ETA 보장이 아니다(PRD §6.2). _attach_movement·
+    walk_route tool 공용 빌더(단일 지점)."""
+    if leg is None:
+        return MovementInfo(
             display="Route unavailable", provenance=Provenance.UNCONFIRMED
         )
-        return
-    wm = route["walk_minutes"]
-    cand.movement = MovementInfo(
+    wm = leg["walk_minutes"]
+    return MovementInfo(
         walk_minutes=wm,
-        distance_m=route["distance_m"],
+        distance_m=leg["distance_m"],
         display=f"≈{wm} min walk",
-        provenance=Provenance.ESTIMATE,  # 예상값 — 실제 ETA 보장 아님
-        path=route["path"] or None,
+        provenance=Provenance.ESTIMATE,
+        path=leg["path"] or None,
     )
+
+
+async def _attach_movement(cand: Candidate, olat: float, olng: float) -> None:
+    """후보에 도보 이동정보(Tmap) 부착. 실패/좌표없음 → Route unavailable(직선 위조 금지)."""
+    leg = None
+    if cand.lat is not None and cand.lng is not None:
+        leg = await tmap.pedestrian_route(olat, olng, cand.lat, cand.lng)
+    cand.movement = movement_from_leg(leg)
 
 
 async def recommend_a(
