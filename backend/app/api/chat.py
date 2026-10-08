@@ -11,7 +11,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.agent.agent_loop import run_chat_loop
 from app.agent.chat_agent import run_chat
+from app.config import settings
 from app.core.auth import AuthUser, get_optional_user
 from app.core.trace import Trace
 from app.db.preferences import get_preferences
@@ -42,7 +44,9 @@ async def chat(
             saved_interests = [InterestCode(i) for i in (pref.get("interests") or [])]
             prefer_shorter_walks = pref.get("prefer_shorter_walks")
 
-    data = await run_chat(
+    # agentic while-loop(§6) on/off — off 면 기존 단일 라우팅(fallback).
+    chat_fn = run_chat_loop if settings.agent_loop else run_chat
+    data = await chat_fn(
         req.message,
         req.context,
         trace,

@@ -70,7 +70,7 @@ def test_walk_route_empty_stops():
 
 def test_plan_day_route_delegates(monkeypatch):
     class _StubRoute:
-        stops = [1, 2]
+        stops = (1, 2)
 
     stub = _StubRoute()
 

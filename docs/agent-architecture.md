@@ -165,7 +165,7 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 ### 6.7 결정 대기 (Product/Tech)
 - **오케스트레이션 모델**: 상위 모델 허용됨 → 구체 모델/비용 상한(예: gpt-4o vs gpt-4o-mini 혼용 — 라우팅=상위, 보조추출=mini).
 - ~~**KOPIS 지오**~~: **해소** — KOPIS 제외로 종결(§6.10).
-- **"only/not" = 제외 강도**: 명시 배제어는 Hard 제외(정확 판정 전제), 약한 선호는 Soft — 경계 copy 확정.
+- **"only/not" = 제외 강도 (결정, 2026-10-08):** 명시 "실내만/실외만"(indoor only·not outdoor 등)은 **Hard 제외**로 취급 — classify_places(4단계) 가 **확신을 갖고** 반대(실외/실내)로 분류한 후보만 제외한다(분류 불가·애매는 유지, A1식 보수). 약한 선호(그냥 "실내 좋아")는 Soft. 적용 지점: 4단계 classify + finalize. (경계 copy 는 DESIGN.)
 - **언어**: 서울 국문 제목 그대로 vs LLM 번역(비용).
 - **응답 지연 허용치**: 루프 다중 LLM+멀티소스 → 목표 p50/p95(로딩 UX와 함께).
 

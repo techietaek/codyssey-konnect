@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     cors_allow_origins: str = "http://localhost:5500,http://127.0.0.1:5500"
     api_base_url: str = "http://localhost:8000"
 
+    # ── Agent ──
+    # 전체 agentic while-loop(§6) 사용 여부. off 면 기존 단일 라우팅(chat_agent)이 fallback.
+    agent_loop: bool = False
+
     # ── OpenAI ──
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
