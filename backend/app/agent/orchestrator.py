@@ -19,6 +19,7 @@ from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.curation import is_cultural_experience
+from app.domain.dedup import dedup_cross_source
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
 from app.domain.normalize import (
@@ -88,6 +89,11 @@ async def _fetch_tour_pool(lat: float, lng: float) -> tuple[list[dict], int]:
             if cid and cid not in merged and is_cultural_experience(it):
                 it["_src"] = "tour"
                 it["_etype"] = type_from_contenttype(it.get("contenttypeid"))
+                try:
+                    it["_lat"] = float(it.get("mapy"))
+                    it["_lng"] = float(it.get("mapx"))
+                except (TypeError, ValueError):
+                    it["_lat"] = it["_lng"] = None
                 merged[cid] = it
     return list(merged.values()), failed
 
@@ -112,6 +118,7 @@ async def _fetch_seoul_pool(
         row["dist"] = d
         row["_src"] = "seoul"
         row["_etype"] = _seoul_type(row.get("CODENAME"))
+        row["_lat"], row["_lng"] = coords
         pool.append(row)
     return pool
 
@@ -146,12 +153,15 @@ async def _fetch_pool(
         except (TypeError, ValueError):
             return 1e12
 
-    pool = sorted([*tour_pool, *seoul_pool], key=_dist)
+    # [dedup] 같은 행사가 TourAPI 85·서울 양쪽에 중복될 수 있어 좌표근접 교차 제거(§6.2).
+    merged, dup_removed = dedup_cross_source([*tour_pool, *seoul_pool])
+    pool = sorted(merged, key=_dist)
     trace.step(
         "fetch",
         pool=len(pool),
         tour=len(tour_pool),
         seoul=len(seoul_pool),
+        dup_removed=dup_removed,
         tour_sources_failed=tour_failed,
         seoul_ok=seoul_ok,
     )
