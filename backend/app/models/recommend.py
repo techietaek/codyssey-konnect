@@ -48,6 +48,12 @@ class ParsedConditions(BaseModel):
         "lowercase phrases like 'museums', 'temples'. Use only for a clear exclusion/refusal, "
         "not a mild dislike. Empty if none stated.",
     )
+    open_preferences: list[str] = Field(
+        default_factory=list,
+        description="Open-ended POSITIVE qualities the user wants (not an interest enum, not an "
+        "exclusion) as short lowercase phrases — e.g. 'quiet', 'romantic', 'family-friendly', "
+        "'photogenic', 'relaxing'. Soft ranking only. Empty if none stated.",
+    )
     exclude_places: list[str] = Field(
         default_factory=list,
         description="Specific named places the user asked to remove or skip (e.g. 'remove "

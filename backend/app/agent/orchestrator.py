@@ -407,17 +407,22 @@ async def recommend_a(
         valid = [v for v in valid if v[0].id not in place_ids]
         trace.step("exclude_places", places=cond.exclude_places, removed=len(place_ids))
 
-    # [classify-io] 실내/외 per-place LLM 분류(§6.4) — 유형추측 대체. 실내외 선호 있을 때만 1콜.
-    #   사실 생성 아님(공식 텍스트 분류). 결과는 strict Hard 제외 + Soft 순위에 쓴다.
+    # [classify] per-candidate LLM 판정(§6.4) — 실내/외(유형추측 대체) + 개방형 정성선호 적합도.
+    #   한 콜. 사실 생성 아님(공식 텍스트 분류). 실내외 Hard/Soft + 정성 Soft 순위에 쓴다.
     io_verdicts: dict[str, str] = {}
+    vibe_ranks: dict[str, int] = {}
     io_notices: list[str] = []
-    if cond.indoor_outdoor and valid:
-        io_verdicts = await classify_places(
-            [(c.id, txt) for (c, _, _, txt) in valid], trace
+    if (cond.indoor_outdoor or cond.open_preferences) and valid:
+        verdicts = await classify_places(
+            [(c.id, txt) for (c, _, _, txt) in valid],
+            trace,
+            cond.open_preferences,
         )
+        io_verdicts = {cid: v.setting for cid, v in verdicts.items()}
+        vibe_ranks = {cid: (0 if v.fits_vibe else 1) for cid, v in verdicts.items()}
         # "실내만/실외만"(strict, §6.7) → 반대로 '확신 분류'된 후보만 Hard 제외.
         #   unknown·동일은 유지(확신 없을 때 유효 후보 제거 금지 — A1식 보수).
-        if cond.indoor_outdoor_strict:
+        if cond.indoor_outdoor and cond.indoor_outdoor_strict:
             opposite = "outdoor" if cond.indoor_outdoor == "indoor" else "indoor"
             before = len(valid)
             valid = [v for v in valid if io_verdicts.get(v[0].id) != opposite]
@@ -479,7 +484,7 @@ async def recommend_a(
     # display_sort_key 로 '안정 정렬'하면 같은 키 안에서 거리순이 유지된다(domain/ranking).
     candidates.sort(
         key=lambda c: display_sort_key(
-            c, cond, adverse=env.adverse, io_verdicts=io_verdicts
+            c, cond, adverse=env.adverse, io_verdicts=io_verdicts, vibe_ranks=vibe_ranks
         )
     )
     trace.step(

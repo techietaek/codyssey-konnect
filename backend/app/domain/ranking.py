@@ -112,13 +112,15 @@ def display_sort_key(
     cond: ParsedConditions,
     adverse: bool = False,
     io_verdicts: dict[str, str] | None = None,
-) -> tuple[int, int, int, int]:
-    """(관심사, 실내외 선호, 날씨, 상태등급). 명시 선호(관심사·실내외)가 먼저 →
-    악천후면 실내 소폭 우선 → 상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지.
-    io_verdicts(LLM 분류 {id:setting})가 있으면 유형추측 대신 그것으로 실내외 순위."""
+    vibe_ranks: dict[str, int] | None = None,
+) -> tuple[int, int, int, int, int]:
+    """(관심사, 실내외 선호, 정성선호, 날씨, 상태등급). 명시 선호(관심사·실내외·정성)가
+    먼저 → 악천후면 실내 소폭 우선 → 상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지.
+    io_verdicts(LLM 실내외 {id:setting})·vibe_ranks(개방형 선호 적합 {id:0/1})는 Soft only."""
     return (
         preference_rank(cand, cond),
         io_rank_with_verdict(cand, cond, (io_verdicts or {}).get(cand.id)),
+        (vibe_ranks or {}).get(cand.id, 0),  # 0=적합/중립, 1=부적합(Soft 강등)
         weather_rank(cand, adverse),
         _STATUS_RANK.get(cand.status, 99),
     )

@@ -11,7 +11,7 @@ import asyncio
 from langchain_core.runnables import RunnableLambda
 
 from app.agent import classify as cl
-from app.agent.classify import PlaceClassification, _PlaceIO, classify_places
+from app.agent.classify import PlaceClassification, PlaceVerdict, classify_places
 from app.core.trace import Trace
 from app.domain.ranking import io_rank_with_verdict
 from app.models.recommend import (
@@ -43,17 +43,24 @@ def _patch(monkeypatch, result=None, boom=False):
 def test_classify_maps_verdicts(monkeypatch):
     result = PlaceClassification(
         places=[
-            _PlaceIO(id="a", setting="indoor"),
-            _PlaceIO(id="b", setting="outdoor"),
-            _PlaceIO(id="c", setting="unknown"),
-            _PlaceIO(id="x", setting="indoor"),  # valid_ids 밖 → 버려짐
+            PlaceVerdict(id="a", setting="indoor", fits_vibe=True),
+            PlaceVerdict(id="b", setting="outdoor", fits_vibe=False),
+            PlaceVerdict(id="c", setting="unknown", fits_vibe=True),
+            PlaceVerdict(id="x", setting="indoor"),  # valid_ids 밖 → 버려짐
         ]
     )
     _patch(monkeypatch, result)
     out = asyncio.run(
-        classify_places([("a", "museum"), ("b", "park"), ("c", "??")], Trace())
+        classify_places(
+            [("a", "museum"), ("b", "park"), ("c", "??")], Trace(), ["quiet"]
+        )
     )
-    assert out == {"a": "indoor", "b": "outdoor", "c": "unknown"}
+    assert {k: v.setting for k, v in out.items()} == {
+        "a": "indoor",
+        "b": "outdoor",
+        "c": "unknown",
+    }
+    assert out["a"].fits_vibe is True and out["b"].fits_vibe is False
 
 
 def test_classify_empty_items_no_call():
@@ -98,3 +105,17 @@ def test_no_verdict_falls_back_to_type():
 def test_no_preference_is_neutral():
     cond = ParsedConditions()  # indoor_outdoor None
     assert io_rank_with_verdict(_cand(ExperienceType.EXHIBITION), cond, "outdoor") == 1
+
+
+def test_vibe_rank_demotes_misfit():
+    from app.domain.ranking import display_sort_key
+
+    cond = ParsedConditions(open_preferences=["quiet"])
+    good = _cand(ExperienceType.EXHIBITION)
+    good.id = "g"
+    bad = _cand(ExperienceType.EXHIBITION)
+    bad.id = "b"
+    vibe = {"g": 0, "b": 1}  # b 는 부적합
+    kg = display_sort_key(good, cond, vibe_ranks=vibe)
+    kb = display_sort_key(bad, cond, vibe_ranks=vibe)
+    assert kg < kb  # 적합이 앞(Soft)
