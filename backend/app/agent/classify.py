@@ -83,7 +83,7 @@ async def classify_places(
     vibe = ", ".join(open_preferences) if open_preferences else "(none)"
     try:
         llm = ChatOpenAI(
-            model=settings.openai_model,
+            model=settings.agent_orchestrator_model,  # 실내외/정성 분류(보조) — 경량 모델
             temperature=0,
             api_key=settings.openai_api_key,
             timeout=20,

@@ -1,8 +1,9 @@
 """Agentic while-loop — 챗 전체(A 추천·B 루트·FAQ)를 하나의 다단계 tool-calling 루프로.
 
-설계 docs/agent-architecture.md §6.1·§6.4. 3단계(루프 뼈대): LLM 이 '어떤 tool 을 어떤
-순서로'만 결정하고, 사실·판정·사실 렌더는 코드가 소유한다. LLM 선별(classify_places·
-finalize)은 4단계에서 투입한다. 기본 off(settings.agent_loop) — 기존 chat_agent 가 fallback.
+설계 docs/agent-architecture.md §6.1·§6.4. 루프: LLM 이 '어떤 tool 을 어떤 순서로'만
+결정하고, 사실·판정·사실 렌더는 코드가 소유한다. 오케스트레이션은 경량 모델 허용
+(settings.orchestrator_model, §6.7 — tool 선택만이라 신뢰경계 불변). 기본 off
+(settings.agent_loop) — 기존 chat_agent 가 fallback.
 
 신뢰 경계(불변):
 - LLM 은 가격·운영시간·좌표·가용성을 생성하지 않는다. tool 이 공식 데이터·domain 으로 판정.
@@ -12,6 +13,7 @@ finalize)은 4단계에서 투입한다. 기본 off(settings.agent_loop) — 기
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 
@@ -229,8 +231,10 @@ async def run_chat_loop(
         prefer_shorter_walks=prefer_shorter_walks,
         history=history,
     )
+    # 오케스트레이션(tool 선택)은 경량 모델 허용(§6.7, settings.orchestrator_model) — 지연↓.
+    # tool 선택만 담당하고 사실·판정은 코드(tool)가 소유하므로 신뢰경계는 불변.
     llm = ChatOpenAI(
-        model=settings.openai_model,
+        model=settings.agent_orchestrator_model,
         temperature=0,
         api_key=settings.openai_api_key,
         timeout=30,
@@ -259,10 +263,15 @@ async def run_chat_loop(
             return _present(state, ai)
 
         messages.append(ai)
-        for (
-            call
-        ) in calls:  # 순차 실행(공유 state 안전·trace 가독). 병렬화는 이후 최적화.
-            obs = await _run_tool(call["name"], call.get("args") or {}, state, trace)
+        # 같은 턴의 tool 들은 병렬 실행(멀티의도 지연↓). asyncio 단일스레드라 서로 다른
+        # state 필드 기록은 안전. gather 는 순서 보존 → ToolMessage 를 tool_call 순서대로 붙인다.
+        observations = await asyncio.gather(
+            *(
+                _run_tool(call["name"], call.get("args") or {}, state, trace)
+                for call in calls
+            )
+        )
+        for call, obs in zip(calls, observations):
             messages.append(ToolMessage(obs, tool_call_id=call.get("id", call["name"])))
         if state.clarify is not None:  # 필수사실/선호 미비 → 즉시 되묻기
             return state.clarify

@@ -48,7 +48,7 @@ async def parse_hours(
         return None
     try:
         llm = ChatOpenAI(
-            model=settings.openai_model,
+            model=settings.agent_orchestrator_model,  # 운영시간 추출(보조) — 경량 모델
             temperature=0,
             api_key=settings.openai_api_key,
             timeout=20,

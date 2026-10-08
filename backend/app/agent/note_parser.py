@@ -46,7 +46,7 @@ async def parse_note(note: str | None) -> ParsedConditions:
         return ParsedConditions()
     try:
         llm = ChatOpenAI(
-            model=settings.openai_model,
+            model=settings.agent_orchestrator_model,  # 조건 추출(보조) — 경량 모델
             temperature=0,
             api_key=settings.openai_api_key,
             timeout=20,

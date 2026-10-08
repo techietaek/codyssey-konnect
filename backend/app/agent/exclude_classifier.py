@@ -60,7 +60,7 @@ async def classify_excluded(
     valid_ids = {i for i, _ in items}
     try:
         llm = ChatOpenAI(
-            model=settings.openai_model,
+            model=settings.agent_orchestrator_model,  # 개방형 배제 분류(보조) — 경량 모델
             temperature=0,
             api_key=settings.openai_api_key,
             timeout=20,
