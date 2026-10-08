@@ -58,8 +58,18 @@ async function init() {
     auth: { persistSession: true, autoRefreshToken: true },
   });
 
-  _client.auth.onAuthStateChange((_event, session) => {
-    _applySession(session);
+  _client.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT") {
+      _signedIn = false;
+      _displayName = null;
+      _email = null;
+    } else if (_signedIn && session?.user?.is_anonymous === true) {
+      // 이미 정식 로그인인데 is_anonymous=true 이벤트가 뒤늦게 오는 경우(링크 직후 stale
+      // 클레임). 다운그레이드하면 "로그인됐다가 다시 로그인창"이 된다 → 무시(로그인 유지).
+      return;
+    } else {
+      _applySession(session);
+    }
     _listeners.forEach((l) => {
       try {
         l();

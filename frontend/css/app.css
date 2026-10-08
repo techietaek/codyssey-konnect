@@ -15,14 +15,17 @@ body {
 }
 
 /* ── 디바이스 프레임 ──
-   실제 모바일/에뮬레이션(좁은 뷰포트): max-width 없이 화면을 꽉 채운다. */
+   실제 모바일/에뮬레이션(좁은 뷰포트): max-width 없이 화면을 꽉 채운다.
+   ⚠ 높이는 '뷰포트 고정'(height:100dvh)으로 둔다 — min-height 로 두면 콘텐츠가 길 때
+   프레임이 뷰포트보다 커지고, 바텀시트(이 프레임 기준 absolute)가 화면 밖(아래)에 앵커돼
+   Done 버튼 등이 안 보인다. 내부 스크롤은 .app 이 담당. */
 .device-frame {
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   background: var(--c-bg);
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;                  /* 가로 넘침 차단 */
+  overflow: hidden;                    /* 세로·가로 클립 → 바텀시트가 뷰포트 기준 */
   position: relative;                  /* 바텀시트(absolute)의 기준 컨테이너 */
 }
 
