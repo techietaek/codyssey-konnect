@@ -67,6 +67,12 @@ class ParsedConditions(BaseModel):
         default=None,
         description="Set only if the user explicitly preferred indoor or outdoor. Null otherwise.",
     )
+    indoor_outdoor_strict: bool = Field(
+        default=False,
+        description="True ONLY if the user made the indoor/outdoor preference exclusive — e.g. "
+        "'indoor only', 'nothing outdoors', 'strictly indoor'. False for a mild preference like "
+        "'I'd prefer indoor'. Requires indoor_outdoor to be set.",
+    )
     prefer_shorter_walks: bool = Field(
         default=False,
         description="True only if the user said they prefer shorter walks / less walking.",

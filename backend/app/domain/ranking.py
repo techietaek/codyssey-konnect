@@ -92,14 +92,33 @@ def weather_rank(cand: Candidate, adverse: bool) -> int:
     return 1 if adverse and cand.type in OUTDOOR_EXPOSED_TYPES else 0
 
 
+def io_rank_with_verdict(
+    cand: Candidate, cond: ParsedConditions, verdict: str | None
+) -> int:
+    """실내외 Soft 순위 — LLM per-place 분류(verdict) 우선, 없으면 유형 휴리스틱 fallback.
+    verdict 'unknown'/없음+선호없음은 중립(1). 유형추측보다 정확(탑골공원 등 오분류 해소)."""
+    pref = cond.indoor_outdoor
+    if pref is None:
+        return 1
+    if verdict in ("indoor", "outdoor"):
+        return 0 if verdict == pref else 2
+    if verdict == "unknown":
+        return 1  # 분류 불가 → 중립(강등 안 함)
+    return io_rank(cand.type, cond)  # 분류 없음 → 유형 휴리스틱
+
+
 def display_sort_key(
-    cand: Candidate, cond: ParsedConditions, adverse: bool = False
+    cand: Candidate,
+    cond: ParsedConditions,
+    adverse: bool = False,
+    io_verdicts: dict[str, str] | None = None,
 ) -> tuple[int, int, int, int]:
     """(관심사, 실내외 선호, 날씨, 상태등급). 명시 선호(관심사·실내외)가 먼저 →
-    악천후면 실내 소폭 우선 → 상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지."""
+    악천후면 실내 소폭 우선 → 상태등급. 안정 정렬이면 같은 키 안에서 거리순 유지.
+    io_verdicts(LLM 분류 {id:setting})가 있으면 유형추측 대신 그것으로 실내외 순위."""
     return (
         preference_rank(cand, cond),
-        io_rank(cand.type, cond),
+        io_rank_with_verdict(cand, cond, (io_verdicts or {}).get(cand.id)),
         weather_rank(cand, adverse),
         _STATUS_RANK.get(cand.status, 99),
     )

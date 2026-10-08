@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+from app.agent.classify import classify_places
 from app.agent.context import RequestContext
 from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
@@ -406,6 +407,30 @@ async def recommend_a(
         valid = [v for v in valid if v[0].id not in place_ids]
         trace.step("exclude_places", places=cond.exclude_places, removed=len(place_ids))
 
+    # [classify-io] 실내/외 per-place LLM 분류(§6.4) — 유형추측 대체. 실내외 선호 있을 때만 1콜.
+    #   사실 생성 아님(공식 텍스트 분류). 결과는 strict Hard 제외 + Soft 순위에 쓴다.
+    io_verdicts: dict[str, str] = {}
+    io_notices: list[str] = []
+    if cond.indoor_outdoor and valid:
+        io_verdicts = await classify_places(
+            [(c.id, txt) for (c, _, _, txt) in valid], trace
+        )
+        # "실내만/실외만"(strict, §6.7) → 반대로 '확신 분류'된 후보만 Hard 제외.
+        #   unknown·동일은 유지(확신 없을 때 유효 후보 제거 금지 — A1식 보수).
+        if cond.indoor_outdoor_strict:
+            opposite = "outdoor" if cond.indoor_outdoor == "indoor" else "indoor"
+            before = len(valid)
+            valid = [v for v in valid if io_verdicts.get(v[0].id) != opposite]
+            removed = before - len(valid)
+            if removed:
+                trace.step(
+                    "io_strict_exclude", pref=cond.indoor_outdoor, removed=removed
+                )
+                io_notices.append(
+                    f"Showing {cond.indoor_outdoor} options only — some "
+                    f"{opposite} results were set aside."
+                )
+
     # [filter] 개방형 명시 배제(옵션3): LLM은 매칭만 판단, 선별·0건-세이프는 코드(domain).
     #   - 사실 생성 없음(이미 판정된 fact 후보 위에서 '고르기'만). graceful=빈 집합.
     exclude_ids: set[str] = set()
@@ -422,6 +447,7 @@ async def recommend_a(
     )
     if notices:  # 0건-세이프 발동 — trace 로 증빙
         trace.step("exclude_safe_fallback", concepts=cond.exclude_concepts)
+    notices = [*io_notices, *notices]  # 실내외 strict 안내를 함께 전달(투명)
     kept = [by_id[i] for i in kept_ids]
     candidates = [c for c, _, _ in kept]
     fits = sum(1 for c in candidates if c.status.value == "fits")
@@ -451,7 +477,11 @@ async def recommend_a(
     # [compose] 표시 순서: 등급(fits→alternative→check_needed) 우선, 같은 등급 안에서
     # 관심사 선호↑·비선호↓(Soft, 제외 아님), 그다음 거리순. candidates 는 이미 거리순 →
     # display_sort_key 로 '안정 정렬'하면 같은 키 안에서 거리순이 유지된다(domain/ranking).
-    candidates.sort(key=lambda c: display_sort_key(c, cond, adverse=env.adverse))
+    candidates.sort(
+        key=lambda c: display_sort_key(
+            c, cond, adverse=env.adverse, io_verdicts=io_verdicts
+        )
+    )
     trace.step(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
