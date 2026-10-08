@@ -165,7 +165,7 @@ Photo Challenge + Stamp (폐기 아님, 핵심 완성 후 검토) / 음성 보�
 |---|---|
 | **TourAPI (EngService2)** | 기본 데이터 소스. 후보 생성·기본 정보. |
 | **서울문화포털 문화행사 API** (`culturalEventInfo`) | 행사·문화정보 보완. |
-| **KOPIS** | 공연 시간·가격·러닝타임·예매경로 보완. |
+| ~~**KOPIS**~~ | **제외(2026-10-08).** 레이트 10/s 초과 시 서비스 중지·Render 공유IP 리스크, 위치 쿼리 부재(지오 부적합), 서울문화포털·TourAPI 85와 커버리지 중복. 결정 근거 `docs/agent-architecture.md` §6.10. |
 | **기상청** | 날씨 Context(강수·눈·기온). |
 | **AirKorea** | 대기질 Context(PM 등). |
 | **Google Places API (New)** · *보조* | 좌표·주소 보정·공식 링크 등 **보조 정보 한정.** 이미지는 **공식 소스 우선**(Places는 보조 Fallback·정식 키 시). `price_level`·평점·리뷰는 판정 사용 금지. **예외:** `businessStatus`는 폐업 **음성 신호**로 Hard 제외 판정에 허용. 상세 §6.7. |

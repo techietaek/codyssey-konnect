@@ -121,13 +121,14 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 | 소스 | 질의 | 시간 모델 → 판정 | 지오 |
 |---|---|---|---|
 | **TourAPI**(76/78/85) | 위치기반(lat/lng+반경) | 일 운영시간·휴무 → `domain/timing` | 네이티브 좌표 |
-| **KOPIS**(공연) | 날짜·장르·지역 | **고정 회차**(공연기간+회차시간 ∈ 사용자창?) → 회차 판정 | 공연시설 좌표 별도조회+캐시 → 거리 후필터 |
 | **서울문화포털**(행사) | 구·날짜 | **행사기간**(오늘 ∈ 기간? +시간) → 기간 판정 | LAT/LOT → 거리 후필터 |
 
-- 셋 다 **동일 3상태(fits/check/Hard제외)로 수렴** → 하위 선별·루트 로직은 소스 불문.
+> **KOPIS 제외(2026-10-08, §6.10).** 레이트 제한(10/s·공유IP)·지오 부적합·커버리지 중복으로 멀티소스에서 뺀다. 멀티소스 = TourAPI + 서울문화포털.
+
+- 둘 다 **동일 3상태(fits/check/Hard제외)로 수렴** → 하위 선별·루트 로직은 소스 불문.
 - **병합·dedup**(제목+좌표 근접), **부분실패 허용**.
-- **언어:** TourAPI=영문, KOPIS/서울=국문 → 제목 그대로(장소명). LLM 번역은 옵션.
-- `Candidate`에 최소 추가: `source`(출처 배지), `schedule`(고정행사 회차/기간).
+- **언어:** TourAPI=영문, 서울=국문 → 제목 그대로(장소명). LLM 번역은 옵션.
+- `Candidate`에 최소 추가: `source`(출처 배지). (`schedule` 고정행사 필드는 KOPIS 전용이라 제외와 함께 폐기 — 서울 행사는 기간만 판정.)
 
 ### 6.3 툴 계약 (초안 — 사실/의미 소유 명시)
 | tool | 입력 | 하는 일 | 소유 |
@@ -155,7 +156,7 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 - **테스트:** 사실 tool(normalize·timing·budget·route·fit_count)은 결정론 → 단위테스트 유지·확장. 루프/LLM선별은 비결정 → trace 스냅샷 + 소수 e2e 스모크(게이트: 미확인 긍정매핑 없음·닫힌 곳 제외·사실 렌더).
 
 ### 6.6 점진 롤아웃 (안전하게)
-1. **멀티소스 어댑터** 먼저: KOPIS·서울문화포털 클라이언트 + 정규화 + 병합/dedup(기존 추천 파이프라인에 투입, agentic 아직 아님). 사실 레이어 탄탄히.
+1. **멀티소스 어댑터** 먼저: 서울문화포털 클라이언트 + 정규화 + 병합/dedup(기존 추천 파이프라인에 투입, agentic 아직 아님). 사실 레이어 탄탄히. (KOPIS는 제외 — §6.10.)
 2. **툴 래핑**: 기존 `orchestrator`·`domain/`·`rag/`를 위 tool 계약으로 노출(얇은 어댑터).
 3. **Agentic 루프**: `agent/agent_loop.py`(while-loop) + 상위 모델 + `/api/chat` 교체(기존 단일 라우팅 → 루프). trace·max_steps.
 4. **classify_places(실내/외·적합성)** + finalize 선별을 루프에 투입 → 3대 품질 이슈 해소.
@@ -163,9 +164,9 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 
 ### 6.7 결정 대기 (Product/Tech)
 - **오케스트레이션 모델**: 상위 모델 허용됨 → 구체 모델/비용 상한(예: gpt-4o vs gpt-4o-mini 혼용 — 라우팅=상위, 보조추출=mini).
-- **KOPIS 지오**: 공연시설 좌표 조회 비용 vs 사전 캐시 범위(서울 주요 공연장).
+- ~~**KOPIS 지오**~~: **해소** — KOPIS 제외로 종결(§6.10).
 - **"only/not" = 제외 강도**: 명시 배제어는 Hard 제외(정확 판정 전제), 약한 선호는 Soft — 경계 copy 확정.
-- **언어**: KOPIS/서울 국문 제목 그대로 vs LLM 번역(비용).
+- **언어**: 서울 국문 제목 그대로 vs LLM 번역(비용).
 - **응답 지연 허용치**: 루프 다중 LLM+멀티소스 → 목표 p50/p95(로딩 UX와 함께).
 
 ### 6.8 현재 코드 재사용
@@ -173,12 +174,27 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 - `domain/{normalize,timing,budget,status,route,ranking,exclusion}` → 사실 tool 내부(정본 유지).
 - `agent/{note_parser,hours_parser,exclude_classifier}` → `structure_request`·`classify_places`의 선례/부품.
 - `rag/retrieve` → `answer_knowledge` tool.
-- `sources/{tourapi,tmap,gplaces,kma,airkorea}` 재사용 + `sources/{kopis,seoulculture}` 신규.
+- `sources/{tourapi,tmap,gplaces,kma,airkorea}` 재사용 + `sources/seoulculture` 신규. (KOPIS 제외 — §6.10.)
 
 ### 6.9 피드백 반영 (2026-10-08 승인)
-- **(a) 끝난 콘텐츠 Hard 제외** — 날짜형(공연 회차·행사기간)은 **종료일 지남/남은 회차 없음**이면 제외. `check_availability`에 날짜형 종료 판정 추가(TourAPI 85 `eventenddate`·KOPIS `prfpdto`·서울 `END_DATE`). 가용성=코드.
+- **(a) 끝난 콘텐츠 Hard 제외** — 날짜형(행사기간)은 **종료일 지남/미개막**이면 제외. `check_availability`에 날짜형 종료 판정 추가(TourAPI 85 `eventenddate`·서울 `END_DATE`). 가용성=코드. (KOPIS `prfpdto`는 제외 — §6.10.)
 - **(b) 모델 전부 gpt-4o** — `.env`·Render의 `OPENAI_MODEL=gpt-4o`(임베딩은 별개 유지). 비용↑(루프).
-- **(c) KOPIS 공연장 좌표 매번 조회** — 공연시설 API로 venue 좌표, 짧은 TTL 캐시만.
+- ~~**(c) KOPIS 공연장 좌표 매번 조회**~~ — **폐기**(KOPIS 제외, §6.10).
 - **(d) 영어 전용 + 표시 정형화** — 결과에 한국어 금지. `normalize_content_display` tool(LLM: 공식 원문 → **영문·정형 표시**). 단 **번역/정형은 '표시'만, 가격/시간 status·열림판정은 코드**(없는 값 생성 금지). TourAPI 지저분 텍스트(`[F1,F5:…]`·`16:00 session`)도 이 tool이 정형.
 - **(e) Reason → 근거기반 카테고리 라벨** — 긴 문장("open when you can visit") 폐기, 짧은 색상 칩으로: `Free`·`Paid/Budget`·`Indoor`·`Outdoor`·`Fits time`·`Your interest`. **각 라벨은 사실 근거 있을 때만**(free=확인무료, time=확인열림, interest=말한 관심사, in/out=classify). 색은 tokens.css/DESIGN 정합으로 확정.
 - **(f) 응답 지연 → 로딩 UX** — 루프 단계별 진행 문구.
+
+### 6.10 결정 기록 — KOPIS 제외 (2026-10-08)
+
+**결정:** 멀티소스에서 **KOPIS(공연예술통합전산망)를 제외**한다. 추천 파이프라인은 **TourAPI + 서울문화포털** 2소스로 간다. (어댑터/판정 코드는 구현·테스트까지 갔으나 **연결하지 않고 제거** — 1b 서울문화포털·캐싱 제거는 유지.)
+
+**근거:**
+1. **레이트 제한이 아키텍처와 충돌.** KOPIS는 **초당 10회 초과 시 서비스 중지**(IP 단위 페널티). 공연은 목록에 좌표·`mt10id`가 없어 **추천 1회당 ≈21호출**(목록 1 + 상세 N + 공연시설 좌표 N)이 강제된다. 배포(Render)는 **단일 IP를 전 사용자 공유** → 동시 사용자 몇 명만으로 합산 한도를 초과해 **IP 전체 중지** 위험. 라이브에서 facility 배치 400(스로틀) 간헐 재현 확인.
+2. **커버리지 중복.** 공연·콘서트·뮤지컬은 **서울문화포털**(CODENAME 공연 계열)과 **TourAPI type 85**(축제/공연/행사)가 이미 포함. KOPIS 없이도 공연이 사라지지 않음.
+3. **지오 부적합.** KOPIS는 위치 쿼리 파라미터가 없어 서울 전역 샘플→거리 후필터라 "지금 여기서 가능한" 핵심가치와 맞물림이 약함(공연은 목적지·티켓형).
+4. **투자 대비 신뢰도.** 유일한 XML 소스 + 3단계 호출 + 전용 레이트 리미터 + 회차(`dtguidance`) 파싱(보수 판정상 대부분 check_needed) — 최다 코드로 최저 신뢰.
+
+**영향·후속:**
+- §6.2 멀티소스 표에서 KOPIS 행 삭제, §6.6-1은 서울문화포털만, §6.7 "KOPIS 지오" 결정항목 해소(제외로 종결), §6.9(a)의 날짜형 종료 판정은 TourAPI 85·서울 `END_DATE` 기준으로 유지(KOPIS `prfpdto` 제외), §6.9(c) KOPIS 좌표 조회 항목 폐기.
+- **1d 병합/dedup**은 TourAPI + 서울문화포털 2소스 기준.
+- `.env`의 `KOPIS_API_KEY` 슬롯은 남겨둬도 무방(미사용). 향후 공연 특화 요구가 생기면 **공연 의도일 때만 조회**(agentic 소스선택)로 재검토 가능 — 단 레이트/공유IP 문제 해결이 전제.
