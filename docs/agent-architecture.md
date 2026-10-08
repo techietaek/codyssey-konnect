@@ -174,3 +174,11 @@ for step in range(MAX_STEPS):          # 상한(예: 6) — 무한루프·비용
 - `agent/{note_parser,hours_parser,exclude_classifier}` → `structure_request`·`classify_places`의 선례/부품.
 - `rag/retrieve` → `answer_knowledge` tool.
 - `sources/{tourapi,tmap,gplaces,kma,airkorea}` 재사용 + `sources/{kopis,seoulculture}` 신규.
+
+### 6.9 피드백 반영 (2026-10-08 승인)
+- **(a) 끝난 콘텐츠 Hard 제외** — 날짜형(공연 회차·행사기간)은 **종료일 지남/남은 회차 없음**이면 제외. `check_availability`에 날짜형 종료 판정 추가(TourAPI 85 `eventenddate`·KOPIS `prfpdto`·서울 `END_DATE`). 가용성=코드.
+- **(b) 모델 전부 gpt-4o** — `.env`·Render의 `OPENAI_MODEL=gpt-4o`(임베딩은 별개 유지). 비용↑(루프).
+- **(c) KOPIS 공연장 좌표 매번 조회** — 공연시설 API로 venue 좌표, 짧은 TTL 캐시만.
+- **(d) 영어 전용 + 표시 정형화** — 결과에 한국어 금지. `normalize_content_display` tool(LLM: 공식 원문 → **영문·정형 표시**). 단 **번역/정형은 '표시'만, 가격/시간 status·열림판정은 코드**(없는 값 생성 금지). TourAPI 지저분 텍스트(`[F1,F5:…]`·`16:00 session`)도 이 tool이 정형.
+- **(e) Reason → 근거기반 카테고리 라벨** — 긴 문장("open when you can visit") 폐기, 짧은 색상 칩으로: `Free`·`Paid/Budget`·`Indoor`·`Outdoor`·`Fits time`·`Your interest`. **각 라벨은 사실 근거 있을 때만**(free=확인무료, time=확인열림, interest=말한 관심사, in/out=classify). 색은 tokens.css/DESIGN 정합으로 확정.
+- **(f) 응답 지연 → 로딩 UX** — 루프 단계별 진행 문구.
