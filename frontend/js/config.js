@@ -6,4 +6,4 @@ const LOCAL_HOSTS = ["localhost", "127.0.0.1"];
 
 export const API_BASE =
   window.KONNECT_API_BASE ||
-  (LOCAL_HOSTS.includes(location.hostname) ? "http://localhost:8000" : PROD_API);
+  (LOCAL_HOSTS.includes(location.hostname) ? "http://localhost:8000" : "https://codyssey-konnect.onrender.com");
