@@ -175,7 +175,7 @@
 
 > 아래는 "버그"가 아니라 **현재 아키텍처가 만든 상한**이다. 신뢰 경계(사실=코드, 추정 금지)는 올바르게 지켜지고 있으며, 한계는 대부분 **retrieval 전략**에서 온다.
 
-### L1. 고정 반경 1500m + 거리순 1차 컷이 recall 상한을 결정 ★최우선
+### L1. 고정 반경 1500m + 거리순 1차 컷이 recall 상한을 결정 ★최우선 — **P1로 완화(희소 시 반경 확대)**
 `_SEARCH_RADIUS_M=1500`, `pool[:8]`(A)/`pool[:12]`(B). **선호·관심사·정성 조건을 보기 전에** 공간(반경)과 거리로 후보를 잘라낸다. 관심사가 아무리 명확해도 1501m의 완벽한 후보는 **조회조차 되지 않는다.** 선호 재정렬은 "이미 잘린 풀 안에서 순서만" 바꾸므로 recall을 늘리지 못한다. 외국인 FIT가 "오늘 오후 전시 보고 싶다"처럼 **콘텐츠 중심**으로 생각할 때, 공간 우선 검색은 미스매치가 크다.
 
 ### L2. 키워드/의미(semantic) 검색의 부재 — **P2로 부분 해소(selection 내 의미 재정렬)**
@@ -188,7 +188,7 @@ TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py
 ### L3. 정성 선호(fits_vibe)가 selection이 아니라 rerank에만 작용 — **P2로 해소(의미 유사도가 selection 반영)**
 `classify_places`는 judge를 통과한 생존 후보(최대 8개 중)에만 돈다(`orchestrator.py:415-422`). "로맨틱한 곳" 요청인데 반경 안 로맨틱 후보가 2개뿐이면 **그 2개가 최대치**다. 정성 선호는 recall에 기여 0.
 
-### L4. "agentic retry/refinement"가 없다 — 적응 없는 단발 검색
+### L4. "agentic retry/refinement"가 없다 — 적응 없는 단발 검색 — **P1로 부분(코드 반경 ladder; LLM 적응은 P3)**
 §2에서 본 대로 루프는 intent 선택만 agentic하다. **후보가 0~1건이어도 반경 확대·시간창 완화·관심사 완화로 자동 재검색하지 않는다.** A는 적게 반환하고, B는 `unmet` 메시지를 낸다. LLM이 관측하는 것은 개수 요약뿐이라 "다시 같은 tool"을 불러도 **동일 파라미터·동일 결과**다. §3.3의 세분 tool(`search_experiences(radius)` 등)이 **배선되지 않아** 파라미터를 바꿔 재검색할 통로 자체가 없다.
 
 ### L5. latency/비용이 pool 크기를 억제 → recall과 직접 상충
@@ -238,12 +238,21 @@ TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py
 
 > ⚠ **발견된 문서 불일치:** `agent/tools/schemas.py`의 `PlanCultureRoute` docstring과 설계 설명은 루트를 "2–3 stops"로 쓰지만, 실제 코드(`domain/route.MAX_DAY_STOPS=8`, "개수 제한 대신 시간창 허용분")는 **최대 8스톱**을 허용한다. eval 불변식을 코드 기준(2~`MAX_DAY_STOPS`)으로 맞췄다. LLM tool 설명 ↔ 코드 정합은 Product와 재조율 대상(§1 라우팅: 동작 영향 가능).
 
-### P1. 적응형 반경 + 조건 완화 ladder (L1·L4 직접 해소)
-단발 조회를 **단계적 재조회 루프**로. 예:
-```
-radius=1500 → valid<K? → radius=3000 재조회 → 여전히 부족? → 시간창/관심사 strictness 완화
-```
-각 단계는 `notices`로 고지("주변에 적어 반경을 넓혔어요"). 이미 `io_strict_exclude`·`exclude_safe_fallback`에 "완화+투명 고지" 패턴이 있으니 동일 톤으로. 코드 루프로 구현해도 되고(간단·결정론), LLM 루프에 노출해도 된다(P3).
+### P1. 적응형 반경 ladder (L1·L4 완화) — **구현됨 (2026-10-09)**
+단발 조회를 **희소할 때만 넓히는 단계적 재조회**로. 유효 후보가 `_MIN_VIABLE=2` 미만이면 반경을 `_RADIUS_LADDER=(1500, 3000, 5000)`로 확대 재조회한다. **강제 채움이 아니라 '선택지가 2개도 안 될 때만'** 넓히므로, 밀집 지역은 1단계에서 충족돼 **확장이 트리거되지 않는다(지연 불변)**.
+
+**구현:** `orchestrator.py`
+- `_fetch_pool`/`_fetch_tour_pool`에 `radius` 파라미터 추가(기본 1500m).
+- `collect_judged(..., first_pool, enrich_pool, min_viable)` — 1단계 풀(호출부가 parse_note·env와 병렬로 이미 조회)로 판정 후, 유효<min_viable면 ladder로 확대. 이미 판정한 아이템은 `_pool_item_key`로 걸러 **재판정하지 않는다**(증분 누적). 반환 (유효결과, Hard 제외 수, 최종 반경).
+- `_rerank_and_judge` — P2 의미 재정렬 + 상위 K 판정을 단일 지점으로 모은 공용 헬퍼(A·B·ladder 공유).
+- `recommend_a`·`recommend_route` 모두 `collect_judged` 사용. 확대 시 `notices`에 "Few options were nearby, so we widened the search area to find more." (RouteData에 `notices` 필드 신설).
+- trace `radius_expand`(radius·viable·hard)·`fetch`에 radius 기록. 단위테스트 `tests/test_radius_ladder.py`(확장/미확장/상한 종료).
+
+**신뢰 경계:** 반경은 검색 파라미터일 뿐 사실이 아니다 — 확대는 아무것도 지어내지 않는다. 확대는 항상 `notices`로 투명 고지. `_MIN_VIABLE`로 멈추므로 가까운 결과가 충분하면 먼 후보로 채우지 않는다(강제 채움 금지 불변).
+
+**결과 (라이브 확증):** **서울숲**(37.5444,127.0374) "any cultural" → 1500m 풀 **1개** → 3000m 확대 → 풀 7 → **후보 4개**(Waterworks/Cheonggyecheon/Seongsu Museum, Park Ryu Sook Gallery) + 안내 노출. 이전이면 ~1개로 끝날 외곽 요청이 실결과 4개로. 반면 도심(강동 6개/경복궁권)은 1500m에서 충족 → 확장 안 함. eval 12쿼리 **empty_rate 0%**(외곽 2쿼리 포함) 유지.
+
+**남은 한계:** 상한 5000m. 여전히 **공간(반경)이 1차 필터**이고, 완화는 반경에 한정(시간창·관심사 strictness 완화는 미구현 — 필요 시 ladder에 단계 추가). 진짜 적응은 LLM이 파라미터를 고르는 **P3**에서.
 
 ### P2. Semantic rerank를 **selection 전으로** 이동 (L2·L3 해소) — **구현됨 (2026-10-09)**
 이미 보유한 **OpenAI Embeddings**(RAG 스택, `rag/embed.py`)를 추천에도 재사용. 상세조회 컷(`pool[:K]`) **전에**, 조회 풀을 사용자 의도와의 의미 유사도로 재정렬해 **어떤 후보를 판정할지**를 거리·enum만이 아니라 관련도로 정한다.

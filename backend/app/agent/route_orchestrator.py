@@ -18,17 +18,16 @@ from app.agent.context import RequestContext
 from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
 from app.agent.note_parser import parse_note
-from app.agent.orchestrator import _enrich, _fetch_pool
-from app.agent.semantic_rank import (
-    build_intent_text,
-    pool_item_text,
-    semantic_similarities,
+from app.agent.orchestrator import (
+    _RADIUS_EXPANDED_NOTICE,
+    _RADIUS_LADDER,
+    _fetch_pool,
+    collect_judged,
 )
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
 from app.domain.locations import resolve_start_coords
-from app.domain.normalize import type_from_contenttype
 from app.domain.ranking import io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import (
@@ -190,41 +189,18 @@ async def recommend_route(
     # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
     # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
     cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
+    route_notices: list[str] = []  # 반경 확대 등 투명 안내(RouteData.notices)
 
-    # [select] 의미 관련도 + 관심사 enum 으로 '판정할 상위 K' 재정렬(P2, A 와 동일 정책).
-    # 목록 단계 텍스트로 임베딩 유사도 → 선발을 거리·enum 만이 아닌 관련도로. 순서만(사실 불변).
-    intent = build_intent_text(cond, ctx.note)
-    sims = await semantic_similarities(
-        [pool_item_text(it) for it in pool], intent, trace
+    # [select+judge] 의미 관련도 선발(P2) + 적응형 반경(P1) — A 와 동일 정책을 공용 헬퍼로.
+    # feasible 가 2개도 안 되면 반경을 넓혀 재조회(루트 'unmet' 감소, 강제 채움 아님).
+    results, _hard, used_radius = await collect_judged(
+        lat, lng, ctx, cond, trace, first_pool=pool, enrich_pool=_ROUTE_POOL
     )
-    if cond.interests or cond.avoid_interests or cond.indoor_outdoor or intent:
-
-        def _etype_of(it: dict) -> object:
-            return it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
-
-        def _dist_of(it: dict) -> float:
-            try:
-                return float(it.get("dist") or 1e12)
-            except (TypeError, ValueError):
-                return 1e12
-
-        order = sorted(
-            range(len(pool)),
-            key=lambda i: (
-                type_preference_rank(_etype_of(pool[i]), cond),
-                -sims[i],
-                io_rank(_etype_of(pool[i]), cond),
-                _dist_of(pool[i]),
-            ),
-        )
-        pool = [pool[i] for i in order]
-
-    results = await asyncio.gather(
-        *(_enrich(it, ctx, cond, trace) for it in pool[:_ROUTE_POOL])
-    )
-    valid = [(c, txt) for (c, _, _, txt) in results if c is not None]
+    if used_radius > _RADIUS_LADDER[0]:
+        route_notices.append(_RADIUS_EXPANDED_NOTICE)
+    valid = [(c, txt) for (c, _, _, txt) in results]
     # 스톱별 Reason(코스 "왜 이 장소")용 판정 보관 — 관심사·시간·예산 근거 재사용(A와 동일).
-    verdicts = {c.id: (t, b) for (c, t, b, _) in results if c is not None}
+    verdicts = {c.id: (t, b) for (c, t, b, _) in results}
 
     # [filter-places] 명시 장소 제외(B4): 사용자가 이름 댄 스톱 제거(재삽입 금지 — 조건이
     # 히스토리로 캐리포워드되는 한 매 재구성에서 다시 빠진다). 결정론 title 매칭.
@@ -276,6 +252,7 @@ async def recommend_route(
             routes=[],
             origin=origin,
             unmet="We couldn't build a reliable 2–3 stop route from what's open now — see individual experiences instead.",
+            notices=route_notices,
             environment=env,
         )
 
@@ -288,6 +265,7 @@ async def recommend_route(
             routes=[],
             origin=origin,
             unmet="The nearest open experiences don't fit your time window as one walking route — try a longer window or see individual experiences.",
+            notices=route_notices,
             environment=env,
         )
     trace.step(
@@ -296,4 +274,6 @@ async def recommend_route(
         total_walk=route.total_walk_minutes,
         route_name=route.name,
     )
-    return RouteData(routes=[route], origin=origin, environment=env)
+    return RouteData(
+        routes=[route], origin=origin, notices=route_notices, environment=env
+    )

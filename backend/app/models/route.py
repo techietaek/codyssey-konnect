@@ -69,6 +69,8 @@ class RouteData(BaseModel):
     origin: StartLocation | None = None
     # 신뢰 조합 부족/실패 사유(FR-B7) — 2개 미만이면 개별추천 전환 안내.
     unmet: str | None = None
+    # 사용자-facing 투명 안내(예: 반경 확대 — '주변이 적어 검색 범위를 넓혔다'). A 와 일관.
+    notices: list[str] = Field(default_factory=list)
     # 환경(날씨·대기질) Context — 악조건 시 주의 배너(PRD §6.6, Soft).
     environment: EnvironmentContext | None = None
     ai_notice: str = (

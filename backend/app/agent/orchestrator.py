@@ -73,14 +73,21 @@ _SEARCH_RADIUS_M = 1500
 _MAX_CANDIDATES = 4
 _ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 위한 보강 범위
 
+# [P1] 적응형 반경 ladder — 결과가 희소할 때만 단계적으로 넓혀 재조회(§7 P1, L1/L4).
+# 흔한 밀집 지역은 1단계(1500m)에서 바로 충족돼 확장이 트리거되지 않는다(지연 불변).
+_RADIUS_LADDER = (1500, 3000, 5000)
+_MIN_VIABLE = 2  # 유효 후보가 이 수 미만이면 '선택지 부족' → 반경 확대(강제 채움 아님)
+_RADIUS_EXPANDED_NOTICE = (
+    "Few options were nearby, so we widened the search area to find more."
+)
 
-async def _fetch_tour_pool(lat: float, lng: float) -> tuple[list[dict], int]:
+
+async def _fetch_tour_pool(
+    lat: float, lng: float, radius: int = _SEARCH_RADIUS_M
+) -> tuple[list[dict], int]:
     """TourAPI 문화 타입별 목록 병렬 조회 → 병합·중복제거. (pool, 실패소스수)."""
     results = await asyncio.gather(
-        *(
-            tourapi.location_based_list(lat, lng, _SEARCH_RADIUS_M, t)
-            for t in _CULTURAL_TYPES
-        ),
+        *(tourapi.location_based_list(lat, lng, radius, t) for t in _CULTURAL_TYPES),
         return_exceptions=True,
     )
     ok_lists = [r for r in results if not isinstance(r, Exception)]
@@ -132,16 +139,21 @@ async def _fetch_seoul_pool(
 
 
 async def _fetch_pool(
-    lat: float, lng: float, trace: Trace, on_date: date
+    lat: float,
+    lng: float,
+    trace: Trace,
+    on_date: date,
+    radius: int = _SEARCH_RADIUS_M,
 ) -> list[dict]:
     """멀티소스(TourAPI + 서울문화포털) 병렬 조회 → 병합·거리순. 부분 실패 허용(§6.2).
 
     on_date 는 서울 행사 '그날 열림' 필터 기준(방문일, ctx.start_at.date()).
+    radius 는 조회 반경(m) — P1 적응형 ladder 가 희소 결과 시 넓혀 호출한다.
     TourAPI 가 전부 실패하면 예외(기본 추천 성립 불가), 서울 소스 실패는 graceful 로 흡수.
     """
     tour_res, seoul_res = await asyncio.gather(
-        _fetch_tour_pool(lat, lng),
-        _fetch_seoul_pool(lat, lng, on_date),
+        _fetch_tour_pool(lat, lng, radius),
+        _fetch_seoul_pool(lat, lng, on_date, radius),
         return_exceptions=True,
     )
     if isinstance(tour_res, Exception):
@@ -166,6 +178,7 @@ async def _fetch_pool(
     pool = sorted(merged, key=_dist)
     trace.step(
         "fetch",
+        radius=radius,
         pool=len(pool),
         tour=len(tour_pool),
         seoul=len(seoul_pool),
@@ -318,6 +331,104 @@ async def _enrich(
     return await _judge_record(rec, ctx, cond, trace)
 
 
+EnrichResult = tuple[Candidate | None, TimingVerdict, BudgetVerdict, str]
+
+
+def _pool_item_key(it: dict) -> str:
+    """풀 아이템의 안정 키(반경 확대 시 이미 판정한 것 재판정 방지). 소스별."""
+    if it.get("_src") == "seoul":
+        return f"seoul:{it.get('_lat')},{it.get('_lng')}:{it.get('TITLE', '')}"
+    return f"tour:{it.get('contentid')}"
+
+
+def _etype_of(it: dict) -> Any:
+    """풀 아이템 유형(fetch 단계 _etype, 없으면 contenttypeid 유추). 선호 랭킹용."""
+    return it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
+
+
+def _pool_dist(it: dict) -> float:
+    """풀 아이템 거리(m). 없으면 큰 값(뒤로)."""
+    try:
+        return float(it.get("dist") or 1e12)
+    except (TypeError, ValueError):
+        return 1e12
+
+
+async def _rerank_and_judge(
+    pool: list[dict],
+    ctx: RequestContext,
+    cond: ParsedConditions,
+    trace: Trace,
+    enrich_pool: int,
+) -> tuple[list[EnrichResult], int, set[str]]:
+    """[select+judge] 풀을 (관심사 enum→의미유사도→실내외→거리)로 재정렬 후 상위 K 판정.
+
+    P2 의미 재정렬(selection 전)을 단일 지점으로 모은 헬퍼 — A·B·반경 ladder 가 공용한다.
+    반환: (유효 판정결과, Hard 제외 수, 판정에 소비한 아이템 키 집합). 사실·가용성은 _enrich 소유.
+    """
+    if not pool:
+        return [], 0, set()
+    intent = build_intent_text(cond, ctx.note)
+    sims = await semantic_similarities(
+        [pool_item_text(it) for it in pool], intent, trace
+    )
+    if cond.interests or cond.avoid_interests or cond.indoor_outdoor or intent:
+        order = sorted(
+            range(len(pool)),
+            key=lambda i: (
+                type_preference_rank(_etype_of(pool[i]), cond),
+                -sims[i],
+                io_rank(_etype_of(pool[i]), cond),
+                _pool_dist(pool[i]),
+            ),
+        )
+        pool = [pool[i] for i in order]
+    batch = pool[:enrich_pool]
+    seen = {_pool_item_key(it) for it in batch}
+    results = await asyncio.gather(*(_enrich(it, ctx, cond, trace) for it in batch))
+    hard = sum(1 for r in results if r[0] is None)
+    judged = [r for r in results if r[0] is not None]
+    return judged, hard, seen
+
+
+async def collect_judged(
+    lat: float,
+    lng: float,
+    ctx: RequestContext,
+    cond: ParsedConditions,
+    trace: Trace,
+    *,
+    first_pool: list[dict],
+    enrich_pool: int,
+    min_viable: int = _MIN_VIABLE,
+) -> tuple[list[EnrichResult], int, int]:
+    """[P1 적응형 반경] 1단계 풀로 판정 → 유효가 min_viable 미만이면 반경 ladder 로 확대 재조회.
+
+    first_pool 은 호출부가 반경 1단계로 이미 조회해 넘긴 풀(parse_note/env 와 병렬 유지용).
+    확장은 '선택지 부족'일 때만 — 밀집 지역은 트리거되지 않아 지연 불변. 이미 판정한 아이템은
+    키로 걸러 재판정하지 않는다(사실·가용성은 _enrich 소유, 여기선 '얼마나 넓힐지'만 결정).
+    반환: (유효 판정결과, Hard 제외 수, 최종 사용 반경).
+    """
+    judged, hard, seen = await _rerank_and_judge(
+        first_pool, ctx, cond, trace, enrich_pool
+    )
+    used_radius = _RADIUS_LADDER[0]
+    for radius in _RADIUS_LADDER[1:]:
+        if len(judged) >= min_viable:
+            break
+        pool = await _fetch_pool(lat, lng, trace, ctx.start_at.date(), radius)
+        pool = [it for it in pool if _pool_item_key(it) not in seen]
+        j2, h2, seen2 = await _rerank_and_judge(pool, ctx, cond, trace, enrich_pool)
+        judged += j2
+        hard += h2
+        seen |= seen2
+        used_radius = radius
+        trace.step(
+            "radius_expand", radius=radius, viable=len(judged), hard_excluded=hard
+        )
+    return judged, hard, used_radius
+
+
 def movement_from_leg(leg: dict | None) -> MovementInfo:
     """Tmap 구간 결과 → MovementInfo. None(실패/좌표없음) → Route unavailable(직선 위조 금지).
 
@@ -384,45 +495,16 @@ async def recommend_a(
         budget_krw=cond.budget_krw,
     )
 
-    # [select] 명시 선호 + 의미 관련도 우선 선발(FR-B4 · P2): 조회 풀(반경 1500m 내, 거리순)을
-    # (관심사 enum → 의미 유사도 → 실내외 → 거리) 로 재정렬해 '상세조회·판정할 상위 K'를 고른다.
-    # 관심사 enum 은 명시 신호라 1차(Product: 관심사 우선), 의미 유사도(note/open_preferences)는
-    # enum 이 못 잡는 뉘앙스를 2차로 반영해 선발을 관련도 기반으로 끌어올린다(거리는 최후 키).
-    # 의미 랭킹은 순서만 — 사실·가용성 불변(신뢰 경계). 신호 없으면 유사도 0 → 거리순 그대로.
-    intent = build_intent_text(cond, ctx.note)
-    sims = await semantic_similarities(
-        [pool_item_text(it) for it in pool], intent, trace
+    # [select+judge] 의미 관련도 우선 선발(P2) + 적응형 반경(P1): 1단계 풀을 (관심사 enum →
+    # 의미 유사도 → 실내외 → 거리)로 재정렬해 상위 K 를 판정하고, 유효가 부족하면 반경을 넓혀
+    # 재조회한다(강제 채움 아님 — 선택지가 2개도 안 될 때만 확대). 사실·가용성은 _enrich 소유.
+    judged, excluded_hard, used_radius = await collect_judged(
+        lat, lng, ctx, cond, trace, first_pool=pool, enrich_pool=_ENRICH_POOL
     )
-    if cond.interests or cond.avoid_interests or cond.indoor_outdoor or intent:
-
-        def _etype_of(it: dict) -> Any:
-            # _etype 는 fetch 단계에서 소스별로 산정(tour=contenttypeid, seoul=CODENAME).
-            return it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
-
-        def _dist_of(it: dict) -> float:
-            try:
-                return float(it.get("dist") or 1e12)
-            except (TypeError, ValueError):
-                return 1e12
-
-        order = sorted(
-            range(len(pool)),
-            key=lambda i: (
-                type_preference_rank(_etype_of(pool[i]), cond),
-                -sims[i],
-                io_rank(_etype_of(pool[i]), cond),
-                _dist_of(pool[i]),
-            ),
-        )
-        pool = [pool[i] for i in order]
-
-    # 관심사 우선 순으로 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로
-    # 대체. 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 최대 4개).
-    results = await asyncio.gather(
-        *(_enrich(it, ctx, cond, trace) for it in pool[:_ENRICH_POOL])
+    valid = list(judged)
+    radius_notices = (
+        [_RADIUS_EXPANDED_NOTICE] if used_radius > _RADIUS_LADDER[0] else []
     )
-    excluded_hard = sum(1 for r in results if r[0] is None)
-    valid = [(c, t, b, txt) for (c, t, b, txt) in results if c is not None]
 
     # [filter-places] 명시 장소 제외(B4, 결정론 title 매칭) — 사용자가 이름 댄 장소 hard 제거.
     place_ids = match_excluded_places(
@@ -477,14 +559,15 @@ async def recommend_a(
     )
     if notices:  # 0건-세이프 발동 — trace 로 증빙
         trace.step("exclude_safe_fallback", concepts=cond.exclude_concepts)
-    notices = [*io_notices, *notices]  # 실내외 strict 안내를 함께 전달(투명)
+    # 반경 확대·실내외 strict 안내를 함께 전달(투명 — 왜 이 결과인지 사용자에게 고지).
+    notices = [*radius_notices, *io_notices, *notices]
     kept = [by_id[i] for i in kept_ids]
     candidates = [c for c, _, _ in kept]
     fits = sum(1 for c in candidates if c.status.value == "fits")
     alt = sum(1 for c in candidates if c.status.value == "alternative")
     trace.step(
         "judge",
-        considered=len(results),
+        considered=len(judged) + excluded_hard,
         excluded_hard=excluded_hard,
         excluded_pref=len(applied),
         fits=fits,

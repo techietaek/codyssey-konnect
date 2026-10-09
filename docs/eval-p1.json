@@ -1,0 +1,146 @@
+{
+  "total": 12,
+  "errors": 0,
+  "empty_rate": 0.0,
+  "recall_at_k": 1.0,
+  "recall_denominator": 4,
+  "constraint_violation_rate": 0.0,
+  "mean_fits_ratio": 0.4375,
+  "mean_hard_exclude_rate": 0.05,
+  "latency_p50_ms": 3708.6,
+  "latency_p95_ms": 14944.1,
+  "queries": [
+    {
+      "id": "a-gbg-history",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 14944.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-art-indoor",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 5861.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-quiet-galleries",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 5178.0,
+      "error": null
+    },
+    {
+      "id": "a-insadong-free",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.25,
+      "latency_ms": 3088.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-exclude-place",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 10095.5,
+      "error": null
+    },
+    {
+      "id": "a-myeongdong-anything",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.125,
+      "latency_ms": 2946.3,
+      "error": null
+    },
+    {
+      "id": "a-ddp-handson",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.125,
+      "latency_ms": 2853.8,
+      "error": null
+    },
+    {
+      "id": "a-gbg-outdoor-strict",
+      "mode": "recommend",
+      "returned": 1,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.0,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 6175.2,
+      "error": null
+    },
+    {
+      "id": "a-seoulforest-outer",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 1.0,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 4479.1,
+      "error": null
+    },
+    {
+      "id": "a-olympicpark-outer",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 3708.6,
+      "error": null
+    },
+    {
+      "id": "b-gbg-route-afternoon",
+      "mode": "route",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": null,
+      "latency_ms": 3287.9,
+      "error": null
+    },
+    {
+      "id": "b-insadong-route-history",
+      "mode": "route",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": null,
+      "latency_ms": 3165.1,
+      "error": null
+    }
+  ]
+}

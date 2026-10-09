@@ -99,6 +99,30 @@
       "comment": "indoor_outdoor_strict → 반대(실내) 확신분류만 Hard 제외. notices 투명고지 확인용."
     },
     {
+      "id": "a-seoulforest-outer",
+      "mode": "recommend",
+      "start": { "label": "Seoul Forest", "lat": 37.5444, "lng": 127.0374 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "any cultural experiences nearby",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "외곽(서울숲) — 1500m 내 문화 POI 희소 가능. P1 적응형 반경 확대 트리거·empty_rate 측정용(기대값 없음)."
+    },
+    {
+      "id": "a-olympicpark-outer",
+      "mode": "recommend",
+      "start": { "label": "Olympic Park", "lat": 37.5203, "lng": 127.1216 },
+      "start_at": "2026-10-15T11:00:00",
+      "end_at": "2026-10-15T17:00:00",
+      "note": "museums or exhibitions",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "외곽(올림픽공원) — 미술/전시 요구. 반경 확대 + semantic 상호작용 측정용."
+    },
+    {
       "id": "b-gbg-route-afternoon",
       "mode": "route",
       "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
