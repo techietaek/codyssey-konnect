@@ -36,6 +36,7 @@ from app.agent.chat_agent import (
     to_lc_messages,
 )
 from app.agent.context import RequestContext
+from app.agent.note_parser import parse_note
 from app.agent.tools.knowledge import answer_knowledge
 from app.agent.tools.schemas import (
     AnswerTravelQuestion,
@@ -44,13 +45,28 @@ from app.agent.tools.schemas import (
 )
 from app.config import settings
 from app.core.trace import Trace
+from app.domain.conflict import conflict_message, io_interest_conflict
 from app.domain.input_validation import validate_available_time
+from app.domain.locations import detect_location_in_text
 from app.models.chat import ChatContext, ChatKind, ChatResponse, ChatTurn
 from app.models.rag import RagAnswer
-from app.models.recommend import InterestCode, RecommendData
+from app.models.recommend import InterestCode, ParsedConditions, RecommendData
 from app.models.route import RouteData
 
 logger = logging.getLogger("konnect.agent")
+
+# 이전 어시스턴트 턴이 실내/외 충돌을 물었는지 판정하는 마커(재질문 방지).
+_IO_CONFLICT_MARKS = ("are mostly outdoor", "are mostly indoor")
+
+
+def _asked_io_conflict(history: list[ChatTurn] | None) -> bool:
+    """직전까지 실내/외 충돌 되묻기를 이미 했으면 True(답을 받은 뒤 또 묻지 않음)."""
+    return any(
+        t.role == "assistant"
+        and any(m in t.content.lower() for m in _IO_CONFLICT_MARKS)
+        for t in (history or [])
+    )
+
 
 _MAX_STEPS = 6  # 무한루프·비용 방어
 _LOOP_TOOLS = [AnswerTravelQuestion, RecommendExperiences, PlanCultureRoute]
@@ -81,6 +97,9 @@ class LoopState:
     """한 요청 동안 tool 결과(코드 사실)를 모은다. 사실 렌더는 여기서만(§6.4)."""
 
     context: ChatContext | None
+    message: str = (
+        ""  # 원본 사용자 메시지(위치 지명 감지용 — preferences 는 일부만 담음)
+    )
     saved_interests: list[InterestCode] | None = None
     prefer_shorter_walks: bool | None = None
     history: list[ChatTurn] | None = None
@@ -133,12 +152,33 @@ async def _run_recommend_or_route(
         )
 
     validate_available_time(context.start_at, context.end_at)
+
+    # 조건을 여기서 한 번만 구조화(아래 recommend 에 conditions 로 넘겨 재파싱 방지).
+    cond = await parse_note(preferences) if preferences else ParsedConditions()
+
+    # [충돌 되묻기] 실내/외 선호 ↔ 관심사 모순(예: indoor + 궁궐)이면 조용히 한쪽을 버리지
+    # 않고 되묻는다(Request 우선 — 사용자 프롬프트가 최우선). 이미 물었으면 그대로 진행.
+    conflicting = io_interest_conflict(cond)
+    if conflicting and not _asked_io_conflict(state.history):
+        trace.step("loop_clarify", reason="io_interest_conflict", tool=name)
+        state.clarify = ChatResponse(
+            kind=ChatKind.CLARIFY,
+            tool=name,
+            message=conflict_message(cond.indoor_outdoor or "", conflicting),
+        )
+        return (
+            "Conflicting request (indoor/outdoor vs interests); ask the user to choose."
+        )
+
+    # [위치 우선] 사용자가 프롬프트에 직접 밝힌 지명을 앱 컨텍스트보다 우선(결정론 조회).
+    # 원본 메시지에서 감지(preferences 는 선호만 담아 "I am at Myeongdong"을 누락할 수 있음).
+    loc = detect_location_in_text(state.message) or context.start_location
     ctx = RequestContext(
-        start_location=context.start_location,
+        start_location=loc,
         start_at=context.start_at,
         end_at=context.end_at,
         note=(preferences or None),
-        conditions=None,
+        conditions=cond,
     )
     if name == RecommendExperiences.__name__:
         from app.agent.orchestrator import recommend_a
@@ -229,6 +269,7 @@ async def run_chat_loop(
 
     state = LoopState(
         context=context,
+        message=message.strip(),
         saved_interests=saved_interests,
         prefer_shorter_walks=prefer_shorter_walks,
         history=history,

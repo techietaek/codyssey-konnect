@@ -30,8 +30,9 @@ class Settings(BaseSettings):
     api_base_url: str = "http://localhost:8000"
 
     # ── Agent ──
-    # 전체 agentic while-loop(§6) 사용 여부. off 면 기존 단일 라우팅(chat_agent)이 fallback.
-    agent_loop: bool = False
+    # 전체 agentic while-loop(§6) 사용 여부. 기본 ON — 멀티 인텐트(추천+FAQ 동시)를 살린다.
+    # off 로 두면 단일 라우팅(chat_agent)이 fallback 이지만 멀티 인텐트 2번째 의도를 버린다.
+    agent_loop: bool = True
     # 보조 LLM 공용 경량 모델(§6.7): 루프 tool 선택 + 추출·분류(note 파싱·실내외/정성 분류·
     # 개방형 배제·운영시간 추출). 전부 사실 '생성'이 아니라 선택/추출/분류라 신뢰경계 불변.
     # 지연·비용↓. 빈 값이면 openai_model 사용. (RAG 답변 등 사용자-facing 산문은 openai_model.)

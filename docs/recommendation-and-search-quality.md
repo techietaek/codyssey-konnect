@@ -370,3 +370,17 @@ P0는 선행 필수, P2는 보유 인프라로 가장 빠르게 recall을 올리
 
 ### 공통 불변(모든 작업에서 유지 — [[working-style]] §6)
 LLM/임베딩은 **순서·발견·설명만**; 가격·시간·가용성·좌표는 코드·공식데이터 소유. 완화·확대는 항상 `notices` 투명 고지. 강제 채움 금지(유효 후보만). 변경은 eval before/after로 검증 + 테스트.
+
+---
+
+## 10. 챗 동작 수정 (2026-10-09, 멀티인텐트·위치·충돌)
+
+사용자 테스트에서 드러난 챗 UX 3건 수정(추천 로직이 아니라 **챗 라우팅/입력처리** 계층):
+
+1. **멀티 인텐트 — `AGENT_LOOP` 기본 True** (`config.py`). off(단일 라우팅 `run_chat`)는 tool 하나만 불러 "루트 짜줘 **+** 팁 필요해?"의 2번째 의도(FAQ)를 버렸다. 루프는 `_present`가 추천+루트+답변을 **모두** 싣는다(`fed55ee`). 비용: 멀티 인텐트 턴은 단발 대비 ~2배 지연(메모 참고).
+2. **프롬프트 위치 우선** — "I am at Myeongdong"처럼 메시지에 직접 밝힌 지명을 앱 default보다 우선. `domain/locations.detect_location_in_text`(결정론 — `_QUICK_COORDS` 테이블 매칭, 좌표 생성 아님; 미등록 지명은 None→앱 폴백). 루프 `_run_recommend_or_route`가 **원본 메시지**에서 감지(preferences는 선호만 담아 위치 누락 가능). 정밀 지오코딩은 미구현(테이블 밖은 폴백).
+3. **입력 충돌 되묻기** — "indoor" + 궁궐/축제(실외) 같은 모순이면 조용히 한쪽을 버리지 않고 `CLARIFY`로 되묻는다(`domain/conflict.io_interest_conflict`/`conflict_message`). 이미 물었으면(히스토리 마커) 재질문 안 함. 단 orchestrator LLM이 `preferences`에서 "indoor"를 누락하면 충돌 신호가 안 잡혀 되묻기가 생략될 수 있음(2-LLM 추출 편차). **알려진 제약:** 충돌 clarify는 같은 턴의 tip 답변을 함께 싣지 않고 clarify만 반환(다음 턴에 해소).
+
+대화 기억(5턴): **DB 불필요** — 프론트가 `history`를 매 턴 전송(서버 stateless), 백엔드 `to_lc_messages`가 최근 10메시지(≈5턴) 사용. 장기 선호만 Supabase. 테스트: `test_conflict.py`·`test_locations.py`·`test_loop_conflict_location.py`.
+
+> fallback `chat_agent.run_chat`(AGENT_LOOP off)에는 위 2·3이 미적용 — 루프가 기본이라 방치. off로 돌리면 degraded.

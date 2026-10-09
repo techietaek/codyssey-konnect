@@ -34,3 +34,21 @@ def resolve_start_coords(loc: StartLocation) -> tuple[float, float]:
         if name in key:
             return coords
     return _DEFAULT
+
+
+def detect_location_in_text(text: str | None) -> StartLocation | None:
+    """자유 텍스트에서 '알려진 대표 지명'을 감지해 StartLocation 으로 반환(없으면 None).
+
+    사용자가 프롬프트에 직접 밝힌 위치(예: "I am at Myeongdong")를 앱 default 보다 우선
+    적용하기 위한 결정론 조회 — LLM 생성이 아니라 _QUICK_COORDS 테이블 매칭이다. 좌표를
+    지어내지 않으며, 테이블에 없는 임의 지명은 None(앱 컨텍스트/기본값으로 폴백, 정밀
+    지오코딩은 이후 슬라이스). 가장 긴 이름부터 매칭해 부분일치 오인을 줄인다.
+    """
+    if not text:
+        return None
+    low = text.lower()
+    for name in sorted(_QUICK_COORDS, key=len, reverse=True):
+        if name in low:
+            lat, lng = _QUICK_COORDS[name]
+            return StartLocation(label=name.title(), lat=lat, lng=lng)
+    return None
