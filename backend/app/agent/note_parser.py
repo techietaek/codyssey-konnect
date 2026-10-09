@@ -35,9 +35,19 @@ _SYSTEM = (
     "'hanbok', 'ceramics', 'Bukchon', 'lantern festival') — also put it in 'keywords' as a short "
     "English noun (this is for search; vibe adjectives like 'quiet' stay in open_preferences). "
     "Never place the same thing "
-    "in both 'interests' and an avoid/exclude field. Budget is in "
+    "in both 'interests' and an avoid/exclude field. "
+    "An indoor/outdoor preference goes ONLY in 'indoor_outdoor' (and 'indoor_outdoor_strict' "
+    "for exclusive wording like 'indoor only'); never put 'indoor'/'outdoor' in "
+    "open_preferences or keywords. Budget is in "
     "Korean won (KRW); only fill budget if the user gave a concrete amount. Never invent "
-    "prices, times, or availability."
+    "prices, times, or availability.\n"
+    "Examples:\n"
+    "- 'quiet indoor art galleries, no temples' -> interests:[art_exhibitions], "
+    "indoor_outdoor:indoor, open_preferences:['quiet'], exclude_concepts:['temples']\n"
+    "- 'try calligraphy near Bukchon, but not Gyeongbokgung' -> interests:[hands_on], "
+    "keywords:['calligraphy','Bukchon'], exclude_places:['Gyeongbokgung']\n"
+    "- 'outdoor only, free palaces' -> interests:[palaces_historic], indoor_outdoor:outdoor, "
+    "indoor_outdoor_strict:true, free_only:true"
 )
 
 _PROMPT = ChatPromptTemplate.from_messages(

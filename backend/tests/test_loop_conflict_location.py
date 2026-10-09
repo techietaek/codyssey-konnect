@@ -78,6 +78,26 @@ def test_io_interest_conflict_short_circuits_to_clarify(monkeypatch):
     assert r.route is None  # 충돌 → 루트 생성 안 함
 
 
+def test_io_backfill_from_raw_message_triggers_conflict(monkeypatch):
+    # parse_note 가 indoor 를 놓쳐도(라우터 요약 유실), 원본 메시지의 'indoor only' 를
+    # 결정론으로 보강해 충돌 되묻기가 발동해야 한다.
+    _patch_llm(
+        monkeypatch,
+        [_call("PlanCultureRoute", {"preferences": "palaces"}), AIMessage(content="x")],
+    )
+
+    async def fake_parse(note):
+        # 라우터가 'indoor' 를 흘려 indoor_outdoor=None 인 상황을 재현.
+        return ParsedConditions(interests=[InterestCode.PALACES_HISTORIC])
+
+    monkeypatch.setattr(al, "parse_note", fake_parse)
+    r = asyncio.run(
+        al.run_chat_loop("indoor only route, but I love palaces", _ctx(), Trace())
+    )
+    assert r.kind == ChatKind.CLARIFY
+    assert "mostly outdoor" in (r.message or "")
+
+
 def test_short_window_surfaces_validation_message(monkeypatch):
     # 30분 미만 창 → generic tool-error 로 삼켜지지 말고 사용자-facing 사유를 되묻는다.
     _patch_llm(

@@ -49,6 +49,7 @@ from app.core.trace import Trace
 from app.domain.conflict import conflict_message, io_interest_conflict
 from app.domain.input_validation import validate_available_time
 from app.domain.locations import detect_location_in_text
+from app.domain.text_signals import detect_indoor_outdoor
 from app.models.chat import ChatContext, ChatKind, ChatResponse, ChatTurn
 from app.models.rag import RagAnswer
 from app.models.recommend import InterestCode, ParsedConditions, RecommendData
@@ -165,6 +166,15 @@ async def _run_recommend_or_route(
 
     # 조건을 여기서 한 번만 구조화(아래 recommend 에 conditions 로 넘겨 재파싱 방지).
     cond = await parse_note(preferences) if preferences else ParsedConditions()
+
+    # [io 보강] 라우터 LLM 이 preferences 로 요약하며 'indoor/outdoor' 를 흘렸을 수 있다 →
+    # 원본 메시지에서 결정론으로 감지해 비어있을 때만 채운다(충돌 되묻기·실내외 랭킹 안정화).
+    if cond.indoor_outdoor is None:
+        io, strict = detect_indoor_outdoor(state.message)
+        if io:
+            cond.indoor_outdoor = io
+            cond.indoor_outdoor_strict = strict
+            trace.step("io_backfill", pref=io, strict=strict)
 
     # [충돌 되묻기] 실내/외 선호 ↔ 관심사 모순(예: indoor + 궁궐)이면 조용히 한쪽을 버리지
     # 않고 되묻는다(Request 우선 — 사용자 프롬프트가 최우선). 이미 물었으면 그대로 진행.
