@@ -250,6 +250,8 @@ TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py
 
 **신뢰 경계:** 반경은 검색 파라미터일 뿐 사실이 아니다 — 확대는 아무것도 지어내지 않는다. 확대는 항상 `notices`로 투명 고지. `_MIN_VIABLE`로 멈추므로 가까운 결과가 충분하면 먼 후보로 채우지 않는다(강제 채움 금지 불변).
 
+**거리 라벨링 (확대 후보 투명성):** 확대로 편입된 후보에만 `Candidate.from_widened_search=True` + `Candidate.distance_m`(출발점 직선거리, 공식 `dist` — 확인된 사실)를 실어, 프론트(`result-card.js`)가 "📍 2.3 km away" 칩(muted)으로 표시한다. 1단계(기본 반경) 후보엔 붙지 않아 **'조금 떨어진 결과'가 한눈에 구분**된다. 라이브: 서울숲 → Waterworks(0.7km, 라벨無)·Cheonggyecheon(3.0km)·Seongsu(1.6km)·Park Ryu Sook Gallery(2.3km, 라벨有).
+
 **결과 (라이브 확증):** **서울숲**(37.5444,127.0374) "any cultural" → 1500m 풀 **1개** → 3000m 확대 → 풀 7 → **후보 4개**(Waterworks/Cheonggyecheon/Seongsu Museum, Park Ryu Sook Gallery) + 안내 노출. 이전이면 ~1개로 끝날 외곽 요청이 실결과 4개로. 반면 도심(강동 6개/경복궁권)은 1500m에서 충족 → 확장 안 함. eval 12쿼리 **empty_rate 0%**(외곽 2쿼리 포함) 유지.
 
 **남은 한계:** 상한 5000m. 여전히 **공간(반경)이 1차 필터**이고, 완화는 반경에 한정(시간창·관심사 strictness 완화는 미구현 — 필요 시 ladder에 단계 추가). 진짜 적응은 LLM이 파라미터를 고르는 **P3**에서.

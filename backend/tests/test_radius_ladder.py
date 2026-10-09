@@ -31,9 +31,14 @@ def _ctx() -> RequestContext:
     )
 
 
-def _valid(cid: str):
+def _valid(cid: str, distance_m: int | None = None):
     cand = Candidate(
-        id=cid, title=f"P{cid}", status=ResultStatus.FITS, lat=37.57, lng=126.98
+        id=cid,
+        title=f"P{cid}",
+        status=ResultStatus.FITS,
+        lat=37.57,
+        lng=126.98,
+        distance_m=distance_m,
     )
     return (cand, TimingVerdict.OPEN, BudgetVerdict.UNKNOWN, f"P{cid}")
 
@@ -55,7 +60,8 @@ def test_expands_when_thin(monkeypatch):
         return [{"contentid": "b"}, {"contentid": "c"}]
 
     async def fake_enrich(item, ctx, cond, trace):
-        return _hard() if item["contentid"] == "a" else _valid(item["contentid"])
+        cid = item["contentid"]
+        return _hard() if cid == "a" else _valid(cid, distance_m=2300)
 
     monkeypatch.setattr(orch, "_fetch_pool", fake_fetch)
     monkeypatch.setattr(orch, "semantic_similarities", _zeros)
@@ -75,6 +81,31 @@ def test_expands_when_thin(monkeypatch):
     assert len(judged) == 2
     assert hard == 1  # item a
     assert used == 3000
+    # 확대로 편입된 후보는 거리 라벨 표시용으로 태깅되고 직선거리를 갖는다.
+    assert all(c.from_widened_search for (c, *_) in judged)
+    assert all(c.distance_m == 2300 for (c, *_) in judged)
+
+
+def test_first_tier_candidates_not_flagged_widened(monkeypatch):
+    # 1단계(1500m)에서 충족된 후보는 widened 아님(거리 라벨 미표시).
+    async def fake_enrich(item, ctx, cond, trace):
+        return _valid(item["contentid"], distance_m=400)
+
+    monkeypatch.setattr(orch, "semantic_similarities", _zeros)
+    monkeypatch.setattr(orch, "_enrich", fake_enrich)
+    judged, _h, used = asyncio.run(
+        orch.collect_judged(
+            37.57,
+            126.98,
+            _ctx(),
+            ParsedConditions(),
+            Trace(),
+            first_pool=[{"contentid": "b"}, {"contentid": "c"}],
+            enrich_pool=8,
+        )
+    )
+    assert used == 1500
+    assert not any(c.from_widened_search for (c, *_) in judged)
 
 
 def test_no_expand_when_enough(monkeypatch):

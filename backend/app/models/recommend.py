@@ -180,6 +180,10 @@ class Candidate(BaseModel):
     # 공식 권장 방문 소요시간(분) — TourAPI spendtime/spendtimefestival 있을 때만(B-T01).
     # 없으면 None(루트 계획에서 유형 기준 Planned 로 폴백).
     visit_minutes: int | None = None
+    # 출발점 직선거리(m) — 공식 조회 dist(확인된 사실). 지도·거리 라벨용(합성 아님).
+    distance_m: int | None = None
+    # P1 반경 확대로 편입된 후보 — 프론트가 '조금 떨어진 곳' 거리 라벨을 표시(투명).
+    from_widened_search: bool = False
 
 
 class StartLocation(BaseModel):

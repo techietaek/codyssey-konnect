@@ -220,6 +220,7 @@ async def _fetch_and_normalize(item: dict) -> SourceRecord | None:
         cand = normalize_seoul_event(item)
         if cand is None:
             return None
+        cand.distance_m = _item_distance_m(item)  # 출발점 직선거리(공식 dist)
         desc = _strip_html(item.get("PROGRAM") or item.get("ETC_DESC"))
         return SourceRecord(
             candidate=cand,
@@ -256,6 +257,7 @@ async def _fetch_and_normalize(item: dict) -> SourceRecord | None:
     cand = normalize_candidate(item, intro, common)
     if cand is None:
         return None
+    cand.distance_m = _item_distance_m(item)  # 출발점 직선거리(공식 dist)
 
     return SourceRecord(
         candidate=cand,
@@ -354,6 +356,15 @@ def _pool_dist(it: dict) -> float:
         return 1e12
 
 
+def _item_distance_m(item: dict) -> int | None:
+    """풀 아이템의 출발점 직선거리(m, 정수) — 공식 dist. 없으면 None(합성 금지)."""
+    d = item.get("dist")
+    try:
+        return round(float(d)) if d not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
 async def _rerank_and_judge(
     pool: list[dict],
     ctx: RequestContext,
@@ -419,6 +430,9 @@ async def collect_judged(
         pool = await _fetch_pool(lat, lng, trace, ctx.start_at.date(), radius)
         pool = [it for it in pool if _pool_item_key(it) not in seen]
         j2, h2, seen2 = await _rerank_and_judge(pool, ctx, cond, trace, enrich_pool)
+        for cand, *_ in j2:  # 확대로 편입된 후보 표시 → 프론트 거리 라벨(투명)
+            if cand is not None:
+                cand.from_widened_search = True
         judged += j2
         hard += h2
         seen |= seen2

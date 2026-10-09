@@ -190,6 +190,7 @@ body {
 .meta { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-10); }
 .meta-item { font-size: var(--fs-meta); font-weight: var(--fw-semibold); }
 .meta-item.is-estimate { font-weight: var(--fw-medium); color: var(--c-primary-ink); }
+.meta-item.is-widened { font-weight: var(--fw-medium); color: var(--c-text-muted); }
 
 .flags { display: flex; flex-wrap: wrap; gap: var(--space-6); }
 .flag {

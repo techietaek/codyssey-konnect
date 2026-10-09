@@ -72,6 +72,14 @@ export function renderResultCard(c, origin, index = 0) {
     if (c.movement.provenance === "estimate") m.classList.add("is-estimate");
     meta.append(m);
   }
+  // 반경 확대로 편입된 후보 — 출발점 직선거리 라벨(조금 떨어진 곳임을 투명하게).
+  if (c.from_widened_search && c.distance_m != null) {
+    const d =
+      c.distance_m >= 1000
+        ? `${(c.distance_m / 1000).toFixed(1)} km`
+        : `${c.distance_m} m`;
+    meta.append(el("span", "meta-item is-widened", `📍 ${d} away`));
+  }
   if (meta.childNodes.length) card.append(meta);
 
   // 4. 미확인 flags — 앰버 칩. 미확인을 무료/가능으로 바꾸지 않는다.
