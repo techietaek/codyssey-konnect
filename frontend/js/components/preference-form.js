@@ -139,13 +139,26 @@ export function createPreferenceForm({
     ta.addEventListener("blur", () => runParse());
   }
 
-  // 자유입력 해석 → 상태 병합(기존 유지 + 새 해석 추가). 실패·결과없음도 진행 막지 않음.
-  // 같은 텍스트는 재해석하지 않는다(모달 재오픈·blur 반복 시 중복 LLM 호출 방지).
+  // 자유입력 해석. 같은 텍스트는 재해석 안 함(중복 LLM 호출 방지). 노트가 바뀌면
+  // **이전 해석이 더한 것만** 되돌린 뒤 다시 해석한다(누적 방지) — base 선호(My Page
+  // prefill)와 수동 × 편집은 보존. 실패·결과없음도 진행 막지 않음.
   let lastParsedText = "";
+  let parseOpens = []; // 가장 최근 해석이 더한 개방형 선호
+  let parseSetWalks = false; // 가장 최근 해석이 새로 켠 걷기 선호
   async function runParse() {
     const text = ta.value.trim();
-    if (!text || text === lastParsedText) return false;
+    if (text === lastParsedText) return false; // 변화 없음(둘 다 빈 값 포함)
     lastParsedText = text;
+    // 직전 해석 기여분 되돌리기(노트 바뀌면 교체, 누적 X).
+    opens = opens.filter((p) => !parseOpens.includes(p));
+    if (parseSetWalks) walks = false;
+    parseOpens = [];
+    parseSetWalks = false;
+    if (!text) {
+      renderRemember();
+      setStatus(walks || opens.length ? "none" : "hint");
+      return false;
+    }
     setBusy(true);
     setStatus("reading");
     let added = false;
@@ -162,6 +175,7 @@ export function createPreferenceForm({
         }
         if (c.prefer_shorter_walks && !walks) {
           walks = true;
+          parseSetWalks = true;
           added = true;
         }
         const add = [...(c.open_preferences || [])];
@@ -170,6 +184,7 @@ export function createPreferenceForm({
         for (const p of add)
           if (p && !opens.some((x) => x.toLowerCase() === p.toLowerCase())) {
             opens.push(p);
+            parseOpens.push(p);
             added = true;
           }
         renderRemember();
