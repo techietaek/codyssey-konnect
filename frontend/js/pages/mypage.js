@@ -1,18 +1,17 @@
-// MP-1~3 · My Page (Phase 2 L3 · FR-L6). 최소범위:
-//  - 계정 정보(Google 이름·이메일)
-//  - 현재 선택 최소 진입점(선택 ≠ 방문)
-//  - 확인된 선호 확인·수정(MP-2)·초기화(MP-3) → 변경은 **이후 추천부터** 적용
-// 전체 이력·방문 통계·취향 분석·Stamp 는 MVP 제외. 선호 저장은 PUT /api/preferences.
-import { displayName, signOut, userEmail } from "../auth.js";
+// MP-1~3 · My Page (Phase 2 L3 · FR-L6). 10/8 MP-1b/2c 디자인 반영.
+//  - 계정(아바타 + 이름) · 현재 선택 진입(또는 빈 상태) · 선호 확인/수정/초기화
+//  - 하단 Sign out. 선호 변경은 **이후 추천부터** 적용. 저장은 PUT /api/preferences.
+import { displayName, signOut } from "../auth.js";
 import { getPreferences, putPreferences } from "../api.js";
-import {
-  createPreferenceForm,
-  INTERESTS,
-} from "../components/preference-form.js";
+import { createPreferenceForm, INTERESTS } from "../components/preference-form.js";
 import { openSheet, el as sheetEl } from "../components/sheet.js";
 import { loadChoice } from "../state.js";
 
 const LABEL = Object.fromEntries(INTERESTS); // code → 표시 라벨
+const CHEVRON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+const HOME =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>';
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -28,132 +27,128 @@ function fmtTime(iso) {
   });
 }
 
-// renderMyPageView({ onBack, onViewChoice }) — prefs 는 비동기 로드 후 채운다.
-export function renderMyPageView({ onBack, onViewChoice } = {}) {
+export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
   const root = el("section", "mypage");
 
-  // 헤더 — 뒤로 + 타이틀
-  const header = el("div", "mypage-head");
-  const back = el("button", "mypage-back", "← Back");
+  // Nav — chevron Back · My Page · Home(우상단).
+  const nav = el("div", "input-nav");
+  const back = el("button", "nav-back");
   back.type = "button";
+  back.setAttribute("aria-label", "Back");
+  back.innerHTML = CHEVRON;
   back.addEventListener("click", () => onBack?.());
-  header.append(back, el("h1", "mypage-title", "My Page"));
-  root.append(header);
+  const home = el("button", "nav-home");
+  home.type = "button";
+  home.setAttribute("aria-label", "Home");
+  home.innerHTML = HOME;
+  home.addEventListener("click", () => onHome?.());
+  nav.append(back, el("span", "nav-title", "My Page"), home);
+  root.append(nav);
 
   const body = el("div", "mypage-body");
   root.append(body);
 
-  let prefs = null; // { interests, prefer_shorter_walks, needs_onboarding }
+  let prefs = null; // { interests, prefer_shorter_walks, open_preferences }
   let mode = "view"; // view | edit
 
-  function section(title) {
-    const s = el("div", "mypage-section");
-    s.append(el("h2", "mypage-section-title", title));
-    return s;
-  }
-
+  // 계정 — 아바타(이니셜) + 이름 + "Signed in with Google".
   function renderAccount() {
-    const s = section("Account");
+    const s = el("div", "mypage-account");
     const name = displayName();
-    const email = userEmail();
-    s.append(el("p", "mypage-account-name", name || "Signed in"));
-    if (email) s.append(el("p", "mypage-account-email", email));
-    // 로그아웃 — 하단 Log in/out 이 상단 프로필 아이콘으로 이동(10/8)하며 로그아웃은 여기로.
-    const logout = el("button", "mypage-logout", "Log out");
-    logout.type = "button";
-    logout.addEventListener("click", async () => {
-      logout.disabled = true;
-      logout.textContent = "Logging out…";
-      try {
-        await signOut(); // 성공 시 리로드(로그인 전 상태로)
-      } catch (e) {
-        logout.disabled = false;
-        logout.textContent = "Log out";
-        console.warn("sign-out failed:", e?.message || e);
-      }
-    });
-    s.append(logout);
+    const avatar = el(
+      "div",
+      "mypage-avatar",
+      name ? name.trim()[0].toUpperCase() : "👤",
+    );
+    const text = el("div", "mypage-account-text");
+    text.append(
+      el("span", "mypage-account-name", name || "Signed in"),
+      el("span", "mypage-account-sub", "Signed in with Google"),
+    );
+    s.append(avatar, text);
     return s;
   }
 
+  // 현재 선택 — 있으면 teal 테두리 카드(→ 상세), 없으면 빈 상태(Explore → 홈).
   function renderCurrentChoice() {
     const saved = loadChoice();
     const cand = saved?.env?.data?.candidates?.find(
       (c) => c.id === saved.candidateId,
     );
-    if (!cand) return null;
-    const s = section("Current choice");
-    const card = el("button", "mypage-choice");
+    const card = el("button", "mypage-cc");
     card.type = "button";
-    const texts = el("div", "mypage-choice-texts");
-    texts.append(
-      el("span", "mypage-choice-title", cand.title),
-      el(
-        "span",
-        "mypage-choice-sub",
-        `${fmtTime(saved.request.start_at)} session · from ${saved.request.start_location.label}`,
-      ),
-    );
-    card.append(texts, el("span", "mypage-choice-view", "View →"));
-    card.addEventListener("click", () =>
-      onViewChoice?.({ request: saved.request, env: saved.env }),
-    );
-    s.append(card);
-    return s;
+    const texts = el("div", "mypage-cc-texts");
+    texts.append(el("span", "mypage-cc-label", "YOUR CURRENT CHOICE"));
+    if (cand) {
+      card.classList.add("has-choice");
+      texts.append(
+        el("span", "mypage-cc-title", cand.title),
+        el("span", "mypage-cc-sub", `Today · ${fmtTime(saved.request.start_at)} session`),
+      );
+      card.append(texts, el("span", "mypage-cc-arrow", "→"));
+      card.addEventListener("click", () => onViewChoice?.());
+    } else {
+      texts.append(
+        el("span", "mypage-cc-title", "Nothing chosen yet"),
+        el("span", "mypage-cc-sub", "Find something to do now or plan a day"),
+      );
+      card.append(texts, el("span", "mypage-cc-explore", "Explore →"));
+      card.addEventListener("click", () => onBack?.());
+    }
+    return card;
   }
 
-  // 선호 표시(읽기) — 저장된 관심사 라벨 + 걷기 선호. 없으면 안내.
+  // 선호 보기 — 관심사 칩 + "Also" 추가선호 + Edit/Add·Reset 링크(MP-1b).
   function renderPreferencesView() {
-    const s = section("Preferences");
+    const s = el("div", "mypage-prefs");
     const list = prefs?.interests ?? [];
-    if (list.length) {
-      const chips = el("div", "mypage-pref-chips");
-      for (const code of list)
-        chips.append(el("span", "parsed-chip", LABEL[code] || code));
-      s.append(chips);
-    } else {
-      s.append(el("p", "mypage-pref-empty", "No interests saved yet."));
-    }
-    // "Also" 줄 — 확인된 추가 선호(개방형 + 걷기)를 칩으로(MP-1b). 없으면 생략.
     const extras = [...(prefs?.open_preferences ?? [])];
     if (prefs?.prefer_shorter_walks) extras.push("Shorter walks");
-    if (extras.length) {
-      s.append(el("p", "mypage-pref-also", "Also"));
-      const alsoChips = el("div", "mypage-pref-chips");
-      for (const p of extras) alsoChips.append(el("span", "parsed-chip", p));
-      s.append(alsoChips);
-    }
+    const hasAny = list.length || extras.length;
 
-    const actions = el("div", "mypage-pref-actions");
-    const edit = el("button", "btn-cta", "Edit preferences");
+    const head = el("div", "mypage-prefs-head");
+    head.append(el("h2", "mypage-prefs-title", "Your preferences"));
+    const edit = el("button", "mypage-link", hasAny ? "Edit" : "Add");
     edit.type = "button";
     edit.addEventListener("click", () => {
       mode = "edit";
       render();
     });
-    actions.append(edit);
-
-    if (list.length || prefs?.prefer_shorter_walks || extras.length) {
-      const reset = el("button", "sheet-dismiss", "Reset preferences");
-      reset.type = "button";
-      reset.addEventListener("click", confirmReset);
-      actions.append(reset);
-    }
-    s.append(actions);
-    // 변경은 이후 추천부터 적용됨을 조용히 고지(현재 결과 소급 변경 없음).
+    head.append(edit);
+    s.append(head);
     s.append(
       el(
         "p",
-        "mypage-pref-note",
-        "Changes apply to your next recommendations.",
+        "mypage-prefs-sub",
+        "Used for future suggestions. Your current request always comes first.",
       ),
     );
+
+    if (list.length) {
+      const chips = el("div", "mypage-pref-chips");
+      for (const code of list)
+        chips.append(el("span", "parsed-chip", LABEL[code] || code));
+      s.append(chips);
+    }
+    if (extras.length) {
+      s.append(el("p", "mypage-pref-also", "Also"));
+      s.append(el("p", "mypage-pref-also-list", extras.join(" · ")));
+    }
+    if (!hasAny) s.append(el("p", "mypage-pref-empty", "Nothing saved yet"));
+
+    if (hasAny) {
+      const reset = el("button", "mypage-link mypage-link--danger", "Reset preferences");
+      reset.type = "button";
+      reset.addEventListener("click", confirmReset);
+      s.append(reset);
+    }
     return s;
   }
 
-  // MP-2 · 선호 수정 — 공용 preference-form prefill + Save/Cancel.
+  // 선호 수정 — 공용 preference-form(관심사 + 자유입력 + We'll remember) + Save/Cancel.
   function renderPreferencesEdit() {
-    const s = section("Edit preferences");
+    const s = el("div", "mypage-prefs");
+    s.append(el("h2", "mypage-prefs-title", "Your preferences"));
     const form = createPreferenceForm({
       interests: prefs?.interests ?? [],
       preferShorterWalks: !!prefs?.prefer_shorter_walks,
@@ -187,7 +182,7 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     return s;
   }
 
-  // MP-3 · 초기화 확인 시트 → 빈 PUT(관심사 [], 걷기 null).
+  // 초기화 확인 시트 → 빈 PUT(관심사 [] · 걷기 null · 개방형 []).
   function confirmReset() {
     openSheet((close) => {
       const c = sheetEl("div", "reset-confirm");
@@ -196,7 +191,7 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
         sheetEl(
           "p",
           "sheet-sub",
-          "This clears your saved interests and walking preference. It won't change your current recommendations.",
+          "This clears your saved interests and extra preferences. It won't change your current recommendations.",
         ),
       );
       const confirm = sheetEl("button", "btn-cta", "Reset");
@@ -222,22 +217,41 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     });
   }
 
+  function renderSignOut() {
+    const btn = el("button", "mypage-signout", "Sign out");
+    btn.type = "button";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Signing out…";
+      try {
+        await signOut();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Sign out";
+        console.warn("sign-out failed:", e?.message || e);
+      }
+    });
+    return btn;
+  }
+
   function render() {
     body.replaceChildren();
     body.append(renderAccount());
-    const choice = renderCurrentChoice();
-    if (choice) body.append(choice);
+    body.append(renderCurrentChoice());
     body.append(mode === "edit" ? renderPreferencesEdit() : renderPreferencesView());
+    body.append(renderSignOut());
   }
 
   // 초기: 스켈레톤 → 선호 로드 후 채움.
   body.append(renderAccount(), el("p", "mypage-loading", "Loading…"));
   getPreferences()
     .then((env) => {
-      prefs = env?.ok ? env.data : { interests: [], prefer_shorter_walks: null };
+      prefs = env?.ok
+        ? env.data
+        : { interests: [], prefer_shorter_walks: null, open_preferences: [] };
     })
     .catch(() => {
-      prefs = { interests: [], prefer_shorter_walks: null };
+      prefs = { interests: [], prefer_shorter_walks: null, open_preferences: [] };
     })
     .finally(render);
 

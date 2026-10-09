@@ -48,7 +48,13 @@ export function showChat() {
 
 // My Page (L3) — 로그인 사용자만 진입(홈 Account). 뒤로=홈, 선택 보기=결과.
 export function showMyPage() {
-  mount(renderMyPageView({ onBack: showHome, onViewChoice: showSavedChoice }));
+  mount(
+    renderMyPageView({
+      onBack: showHome,
+      onHome: showHome,
+      onViewChoice: showSavedChoice,
+    }),
+  );
 }
 
 // LF-09 선택 상세. saved=false(저장 전, Select 직후) / true(저장됨, 홈·마이페이지 진입).

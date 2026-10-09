@@ -78,7 +78,7 @@ export function renderChoiceView({
   onFindOther,
   onBackToResults,
 }) {
-  const root = el("section", "view choice-view");
+  const root = el("section", "view choice-page");
   const origin = env?.data?.origin;
   let isSaved = saved;
 

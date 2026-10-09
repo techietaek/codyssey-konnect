@@ -175,12 +175,27 @@ export function renderResultsView({ request, env, onBack, onHome, onEdit, onSele
     aiBadge.setAttribute("aria-label", "About these AI results");
     aiPanelEl = el("div", "ai-panel");
     aiPanelEl.hidden = true;
-    aiBadge.addEventListener("click", () => {
-      const open = aiPanelEl.hidden;
-      if (open) renderAiPanel();
-      aiPanelEl.hidden = !open;
-      aiBadge.setAttribute("aria-expanded", String(open));
-      aiBadge.classList.toggle("is-active", open);
+    function closeAi() {
+      aiPanelEl.hidden = true;
+      aiBadge.setAttribute("aria-expanded", "false");
+      aiBadge.classList.remove("is-active");
+      document.removeEventListener("click", onDocClick, true);
+    }
+    function onDocClick(e) {
+      // 팝오버 밖 클릭이면 닫기(말풍선 UX). 배지 자체 클릭은 토글이 처리.
+      if (!aiPanelEl.contains(e.target) && !aiBadge.contains(e.target)) closeAi();
+    }
+    aiBadge.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (aiPanelEl.hidden) {
+        renderAiPanel();
+        aiPanelEl.hidden = false;
+        aiBadge.setAttribute("aria-expanded", "true");
+        aiBadge.classList.add("is-active");
+        setTimeout(() => document.addEventListener("click", onDocClick, true), 0);
+      } else {
+        closeAi();
+      }
     });
     deckHead.append(aiBadge);
 
