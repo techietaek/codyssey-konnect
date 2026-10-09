@@ -175,7 +175,13 @@ export async function signInWithGoogle() {
   // 이관 미지원. 되살리려면 session.user.is_anonymous 시 linkIdentity 분기를 복원.)
   const { error } = await _client.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: window.location.origin + window.location.pathname },
+    options: {
+      redirectTo: window.location.origin + window.location.pathname,
+      // 항상 계정 선택 화면을 띄운다 — 로그아웃 후 '이전 Google 계정으로 자동 재로그인'
+      // 방지(Google 세션은 이 사이트 쿠키와 별개라 캐시 삭제로도 안 지워진다). 다른
+      // 계정으로 로그인하려면 필수.
+      queryParams: { prompt: "select_account" },
+    },
   });
   if (error) throw error;
 }
