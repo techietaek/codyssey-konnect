@@ -78,6 +78,22 @@ def test_io_interest_conflict_short_circuits_to_clarify(monkeypatch):
     assert r.route is None  # 충돌 → 루트 생성 안 함
 
 
+def test_short_window_surfaces_validation_message(monkeypatch):
+    # 30분 미만 창 → generic tool-error 로 삼켜지지 말고 사용자-facing 사유를 되묻는다.
+    _patch_llm(
+        monkeypatch,
+        [_call("PlanCultureRoute", {"preferences": "palaces"}), AIMessage(content="x")],
+    )
+    ctx = ChatContext(
+        start_location=StartLocation(label="Myeongdong", lat=37.5637, lng=126.985),
+        start_at=datetime(2026, 10, 15, 17, 40),
+        end_at=datetime(2026, 10, 15, 18, 0),  # 20분 < 30분 최소
+    )
+    r = asyncio.run(al.run_chat_loop("plan a walk", ctx, Trace()))
+    assert r.kind == ChatKind.CLARIFY
+    assert "30 minutes" in (r.message or "")
+
+
 def test_prompt_location_overrides_app_context(monkeypatch):
     _patch_llm(
         monkeypatch,

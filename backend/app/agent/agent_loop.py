@@ -44,6 +44,7 @@ from app.agent.tools.schemas import (
     RecommendExperiences,
 )
 from app.config import settings
+from app.core.exceptions import ValidationFailure
 from app.core.trace import Trace
 from app.domain.conflict import conflict_message, io_interest_conflict
 from app.domain.input_validation import validate_available_time
@@ -151,7 +152,16 @@ async def _run_recommend_or_route(
             "Need preferences first: ask the user what kind of experiences they want."
         )
 
-    validate_available_time(context.start_at, context.end_at)
+    # 시간 경계 위반(예: 30분 미만)은 사용자-facing 메시지를 그대로 되묻는다 —
+    # 루프의 generic tool-error 핸들러가 삼켜 모호한 문구로 바뀌지 않게 여기서 잡는다.
+    try:
+        validate_available_time(context.start_at, context.end_at)
+    except ValidationFailure as e:
+        trace.step("loop_clarify", reason="invalid_time", tool=name)
+        state.clarify = ChatResponse(
+            kind=ChatKind.CLARIFY, tool=name, message=e.user_message
+        )
+        return f"Invalid time window: {e.user_message}"
 
     # 조건을 여기서 한 번만 구조화(아래 recommend 에 conditions 로 넘겨 재파싱 방지).
     cond = await parse_note(preferences) if preferences else ParsedConditions()
