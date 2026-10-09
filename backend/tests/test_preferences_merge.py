@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
-from app.domain.preferences_merge import merge_saved_interests
+from app.domain.preferences_merge import (
+    merge_saved_interests,
+    merge_saved_open_preferences,
+)
 from app.domain.ranking import display_sort_key
 from app.models.recommend import (
     Candidate,
@@ -59,6 +62,28 @@ def test_original_not_mutated():
     cond = ParsedConditions()
     merge_saved_interests(cond, [TRAD])
     assert cond.interests == []  # 원본 불변
+
+
+# ── 저장 개방형 선호(P-09) 병합 ──
+def test_saved_open_prefs_fill_when_note_silent():
+    cond = ParsedConditions()
+    out = merge_saved_open_preferences(cond, ["quiet", "photogenic"])
+    assert out.open_preferences == ["quiet", "photogenic"]
+
+
+def test_note_open_prefs_win_over_saved():
+    # note 가 이미 개방형 선호를 말했으면 저장 선호는 적용 안 함(Request 우선).
+    cond = ParsedConditions(open_preferences=["romantic"])
+    out = merge_saved_open_preferences(cond, ["quiet"])
+    assert out.open_preferences == ["romantic"]
+
+
+def test_saved_open_prefs_noop_and_immutable():
+    cond = ParsedConditions()
+    assert merge_saved_open_preferences(cond, None).open_preferences == []
+    assert merge_saved_open_preferences(cond, []).open_preferences == []
+    merge_saved_open_preferences(cond, ["quiet"])
+    assert cond.open_preferences == []  # 원본 불변
 
 
 def _cand(etype, status=ResultStatus.FITS, title="x"):

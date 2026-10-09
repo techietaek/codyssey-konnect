@@ -23,6 +23,9 @@ class UserPreferences(BaseModel):
 
     interests: list[InterestCode] = Field(default_factory=list)
     prefer_shorter_walks: bool | None = None
+    # 자유입력에서 AI가 해석한 개방형 긍정 선호(예: 'quiet', 'photogenic') — P-09 추가 선호.
+    # Soft 신호만(사실/필수 조건 아님). 빈 리스트=없음(추정 금지).
+    open_preferences: list[str] = Field(default_factory=list)
     onboarded_at: str | None = None
     needs_onboarding: bool = True
 
@@ -37,3 +40,5 @@ class PreferencesUpdate(BaseModel):
 
     interests: list[InterestCode] = Field(default_factory=list)
     prefer_shorter_walks: bool | None = None
+    # P-09 자유입력 해석 결과(개방형 긍정 선호). 초기화 시 빈 리스트로 치환.
+    open_preferences: list[str] = Field(default_factory=list)

@@ -24,7 +24,9 @@ async def get_preferences(user_id: str) -> dict[str, Any] | None:
         res = (
             get_client()
             .table(_TABLE)
-            .select("interests,prefer_shorter_walks,onboarded_at,updated_at")
+            .select(
+                "interests,prefer_shorter_walks,open_preferences,onboarded_at,updated_at"
+            )
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -39,7 +41,10 @@ async def get_preferences(user_id: str) -> dict[str, Any] | None:
 
 
 async def upsert_preferences(
-    user_id: str, interests: list[str], prefer_shorter_walks: bool | None
+    user_id: str,
+    interests: list[str],
+    prefer_shorter_walks: bool | None,
+    open_preferences: list[str] | None = None,
 ) -> None:
     """선호 전체 치환(Save·Skip·초기화 공용). 저장 시 onboarded_at 을 찍어 재노출 방지.
 
@@ -51,6 +56,7 @@ async def upsert_preferences(
         "user_id": user_id,
         "interests": interests,
         "prefer_shorter_walks": prefer_shorter_walks,
+        "open_preferences": open_preferences or [],
         "onboarded_at": now,
         "updated_at": now,
     }

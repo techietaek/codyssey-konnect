@@ -71,13 +71,21 @@ async def recommend(
     # 파이프라인에서). 비로그인/익명·미온보딩은 행이 없어 None → 영향 없음(FR-L5).
     saved_interests: list[InterestCode] | None = None
     prefer_shorter_walks: bool | None = None
+    saved_open_preferences: list[str] | None = None
     if user is not None:
         pref = await get_preferences(user.id)
         if pref:
             saved_interests = [InterestCode(i) for i in (pref.get("interests") or [])]
             prefer_shorter_walks = pref.get("prefer_shorter_walks")
+            saved_open_preferences = pref.get("open_preferences") or []
 
     # [fetch → judge → route] 조회·정규화·판정·도보 이동. 시스템 예외
     # (ExternalSourceError)는 main.py 핸들러가 503으로 변환. 0건은 정상(빈 candidates).
-    data = await recommend_a(ctx, trace, saved_interests, prefer_shorter_walks)
+    data = await recommend_a(
+        ctx,
+        trace,
+        saved_interests,
+        prefer_shorter_walks,
+        saved_open_preferences,
+    )
     return Envelope.success(data=data, trace_id=trace.trace_id)

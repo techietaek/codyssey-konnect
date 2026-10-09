@@ -27,6 +27,7 @@ def _to_state(row: dict | None) -> UserPreferences:
     return UserPreferences(
         interests=row.get("interests") or [],
         prefer_shorter_walks=row.get("prefer_shorter_walks"),
+        open_preferences=row.get("open_preferences") or [],
         onboarded_at=row.get("onboarded_at"),
         needs_onboarding=row.get("onboarded_at") is None,
     )
@@ -52,6 +53,7 @@ async def write_preferences(
         user.id,
         interests=[i.value for i in body.interests],
         prefer_shorter_walks=body.prefer_shorter_walks,
+        open_preferences=body.open_preferences,
     )
     row = await get_preferences(user.id)
     return Envelope.success(data=_to_state(row), trace_id=trace.trace_id)

@@ -184,9 +184,9 @@ export function showOnboarding() {
       .finally(showHome);
   mount(
     renderOnboardingView({
-      name: displayName(),
       onSubmit: finish,
-      onSkip: () => finish({ interests: [], prefer_shorter_walks: null }),
+      onSkip: () =>
+        finish({ interests: [], prefer_shorter_walks: null, open_preferences: [] }),
     }),
   );
 }

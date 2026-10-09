@@ -114,15 +114,15 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     } else {
       s.append(el("p", "mypage-pref-empty", "No interests saved yet."));
     }
-    s.append(
-      el(
-        "p",
-        "mypage-pref-walk",
-        prefs?.prefer_shorter_walks
-          ? "Prefers shorter walks"
-          : "No walking preference set",
-      ),
-    );
+    // "Also" 줄 — 확인된 추가 선호(개방형 + 걷기)를 칩으로(MP-1b). 없으면 생략.
+    const extras = [...(prefs?.open_preferences ?? [])];
+    if (prefs?.prefer_shorter_walks) extras.push("Shorter walks");
+    if (extras.length) {
+      s.append(el("p", "mypage-pref-also", "Also"));
+      const alsoChips = el("div", "mypage-pref-chips");
+      for (const p of extras) alsoChips.append(el("span", "parsed-chip", p));
+      s.append(alsoChips);
+    }
 
     const actions = el("div", "mypage-pref-actions");
     const edit = el("button", "btn-cta", "Edit preferences");
@@ -133,7 +133,7 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     });
     actions.append(edit);
 
-    if (list.length || prefs?.prefer_shorter_walks) {
+    if (list.length || prefs?.prefer_shorter_walks || extras.length) {
       const reset = el("button", "sheet-dismiss", "Reset preferences");
       reset.type = "button";
       reset.addEventListener("click", confirmReset);
@@ -157,12 +157,17 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     const form = createPreferenceForm({
       interests: prefs?.interests ?? [],
       preferShorterWalks: !!prefs?.prefer_shorter_walks,
+      openPreferences: prefs?.open_preferences ?? [],
     });
     s.append(form.element);
 
     const actions = el("div", "mypage-pref-actions");
     const save = el("button", "btn-cta", "Save");
     save.type = "button";
+    form.onBusyChange((busy) => {
+      save.disabled = busy;
+      save.textContent = busy ? "Reading…" : "Save";
+    });
     save.addEventListener("click", async () => {
       save.disabled = true;
       save.textContent = "Saving…";
@@ -202,6 +207,7 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
         const env = await putPreferences({
           interests: [],
           prefer_shorter_walks: null,
+          open_preferences: [],
         }).catch(() => null);
         if (env?.ok && env.data) prefs = env.data;
         close();

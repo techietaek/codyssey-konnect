@@ -33,3 +33,20 @@ def merge_saved_interests(
     if not filled:
         return cond
     return cond.model_copy(update={"interests": filled})
+
+
+def merge_saved_open_preferences(
+    cond: ParsedConditions, saved_open_preferences: list[str] | None
+) -> ParsedConditions:
+    """note 가 개방형 선호를 말하지 않았을 때만 저장된 개방형 선호로 채운다(Request 우선).
+
+    open_preferences 는 Soft 신호(순서/적합도만, 후보 집합 불변). note 가 이미 개방형
+    선호를 말했으면 그대로 두어 과개인화를 막는다. 반환은 새 객체(원본 불변).
+    """
+    if cond.open_preferences:
+        return cond
+    if not saved_open_preferences:
+        return cond
+    return cond.model_copy(
+        update={"open_preferences": list(saved_open_preferences)}
+    )

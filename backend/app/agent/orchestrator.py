@@ -42,7 +42,10 @@ from app.domain.normalize import (
     type_from_contenttype,
 )
 from app.domain.operational import PresenceVerdict, judge_presence
-from app.domain.preferences_merge import merge_saved_interests
+from app.domain.preferences_merge import (
+    merge_saved_interests,
+    merge_saved_open_preferences,
+)
 from app.domain.ranking import display_sort_key, io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import haversine_m
@@ -548,6 +551,7 @@ async def recommend_a(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    saved_open_preferences: list[str] | None = None,
 ) -> RecommendData:
     # [위치 우선] 프롬프트(note)에 직접 밝힌 지명이 있으면 기본입력(앱 폼/컨텍스트)보다 우선.
     # 결정론 테이블 매칭 — 좌표 생성 아님. 모든 진입 경로(폼·챗)에서 일관 적용.
@@ -572,6 +576,8 @@ async def recommend_a(
     # 걷기 선호는 수치 변환 없이 trace 로만 기록(FR-L4, 순위 반영은 Soft 랭킹 B안).
     filled_from_saved = not cond.interests and bool(saved_interests)
     cond = merge_saved_interests(cond, saved_interests)
+    # 저장된 개방형 선호(P-09 자유입력 해석)도 note 침묵 시에만 Soft 로 채운다(Request 우선).
+    cond = merge_saved_open_preferences(cond, saved_open_preferences)
 
     # [시간 프롬프트 우선, §11] note 가 명시한 종료시각('until 5pm')·소요시간('3 hours')이 있으면
     # 가용창을 '더 좁게'만 조정(보수적 — 없는 시간을 벌지 않음). 판정·available_minutes 에 반영.
