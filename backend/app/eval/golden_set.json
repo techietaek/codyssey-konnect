@@ -75,6 +75,18 @@
       "comment": "명동 도심 — 선호 없음, 거리순. 밀집지라 0건이면 recall 문제 신호."
     },
     {
+      "id": "a-myeongdong-hanok-keyword",
+      "mode": "recommend",
+      "start": { "label": "Myeongdong", "lat": 37.5637, "lng": 126.985 },
+      "start_at": "2026-10-15T11:00:00",
+      "end_at": "2026-10-15T17:00:00",
+      "note": "show me a hanok village or traditional houses",
+      "expect_title_any": ["hanok"],
+      "forbid_title_any": [],
+      "forbid_empty": true,
+      "comment": "P4 키워드 검색 회귀 가드 — 'hanok village' 키워드로 Namsangol Hanok Village 가 발견·병합돼 상위 노출돼야."
+    },
+    {
       "id": "a-ddp-handson",
       "mode": "recommend",
       "start": { "label": "DDP", "lat": 37.5663, "lng": 127.009 },

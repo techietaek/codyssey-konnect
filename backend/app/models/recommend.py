@@ -54,6 +54,13 @@ class ParsedConditions(BaseModel):
         "exclusion) as short lowercase phrases — e.g. 'quiet', 'romantic', 'family-friendly', "
         "'photogenic', 'relaxing'. Soft ranking only. Empty if none stated.",
     )
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="Specific searchable things the user named — a concrete activity, craft, "
+        "landmark, or subject you would type into a search box, as short English nouns (e.g. "
+        "'calligraphy', 'hanbok', 'ceramics', 'Bukchon', 'lantern festival'). NOT vibe adjectives "
+        "(those go in open_preferences) and NOT just a bare interest enum. Empty if none stated.",
+    )
     exclude_places: list[str] = Field(
         default_factory=list,
         description="Specific named places the user asked to remove or skip (e.g. 'remove "

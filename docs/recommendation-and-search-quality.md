@@ -178,7 +178,7 @@
 ### L1. 고정 반경 1500m + 거리순 1차 컷이 recall 상한을 결정 ★최우선 — **P1로 완화(희소 시 반경 확대)**
 `_SEARCH_RADIUS_M=1500`, `pool[:8]`(A)/`pool[:12]`(B). **선호·관심사·정성 조건을 보기 전에** 공간(반경)과 거리로 후보를 잘라낸다. 관심사가 아무리 명확해도 1501m의 완벽한 후보는 **조회조차 되지 않는다.** 선호 재정렬은 "이미 잘린 풀 안에서 순서만" 바꾸므로 recall을 늘리지 못한다. 외국인 FIT가 "오늘 오후 전시 보고 싶다"처럼 **콘텐츠 중심**으로 생각할 때, 공간 우선 검색은 미스매치가 크다.
 
-### L2. 키워드/의미(semantic) 검색의 부재 — **P2로 부분 해소(selection 내 의미 재정렬)**
+### L2. 키워드/의미(semantic) 검색의 부재 — **P2(의미 재정렬) + P4(키워드 조회)로 해소**
 TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py:72-101`). 사용자 note의 관심사·개방형 선호("조용한", "캘리그래피 체험", "로맨틱한")는:
 - enum 6종으로 축약 → 유형 랭킹(coarse), 또는
 - `classify_places`/`fits_vibe`로 **조회 후 재랭킹**
@@ -194,7 +194,7 @@ TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py
 ### L5. latency/비용이 pool 크기를 억제 → recall과 직접 상충
 `_fetch_and_normalize`는 후보당 TourAPI 3콜 + Places 1콜(`orchestrator.py:219-229`). **응답 캐싱 금지**(ToS·신선도) 정책상 매 요청 라이브 조회다. pool을 8로 묶은 건 지연 때문이고, 품질을 위해 pool을 키우면 상세조회 폭증으로 지연이 선형 악화된다. **"넓게 조회"와 "빠르게 응답"이 현재 구조에선 정면 충돌**한다.
 
-### L6. 관심사 enum(6종)과 유형 맵이 거칠다
+### L6. 관심사 enum(6종)과 유형 맵이 거칠다 — **P4로 부분(특정 검색어 keyword 조회; 단 영문 데이터 커버리지 한정)**
 `TYPE_INTERESTS`(`ranking.py:25-35`)는 내부 5유형 ↔ 6관심사, 1:1도 아니다. 세밀한 요구("서예 특별전만", "야장시장")는 enum으로 표현 불가 → open_preferences→fits_vibe soft로만 흡수되는데, L3 때문에 recall엔 무력.
 
 ### L7. 소스 다양성·좌표 의존
@@ -282,8 +282,17 @@ search(1500) → check → "fits가 1개뿐" 관측 → search(3000) 재시도 �
 ```
 를 **스스로 조립**한다. LLM은 여전히 **파라미터(반경·완화 여부) 선택만**, 사실은 코드. 단 비용/지연 상한(스텝·반경 상한) 가드 필수. — P1을 코드로 먼저 넣고, 여유 될 때 P3로 승격하는 2단계 접근 권장.
 
-### P4. TourAPI keyword/areaBased 병용 (L2 보강)
-관심사 → `searchKeyword` 조회를 `location_based`와 **병합·dedup**해 recall↑. 기존 `_fetch_pool` 병합·dedup 경로 재사용(`dedup_cross_source`).
+### P4. TourAPI keyword 검색 병용 (L2·L6 보강) — **구현됨 (2026-10-09)**
+좌표검색(`location_based`, 타입·근접순 10건)이 놓치는 **특정 주제** 후보를 `searchKeyword2`로 보강해 recall↑. 기존 병합·dedup 경로 재사용.
+
+**구현:**
+- `note_parser`: `ParsedConditions.keywords` 신설 — 사용자가 말한 **구체적 검색어**(활동·공예·랜드마크·주제, 영어 명사. 예 'hanok', 'ceramics', 'Bukchon')를 vibe 형용사(open_preferences)·enum과 분리 추출.
+- `tourapi.search_keyword(keyword, content_type_id)` — searchKeyword2. 좌표 미입력이라 dist 없음 → 호출부가 mapx/mapy로 haversine·반경 후필터(임의 좌표 금지).
+- `orchestrator._fetch_keyword_pool`(용어 상위 3개 × 문화타입 병렬, 비문화 제외·반경 후필터·거리 태깅) + `_augment_with_keywords`(contentid 중복 제외 후 기존 풀에 병합 → `dedup_cross_source` → 거리순). **발견 범위만 확장 — 사실·판정 불변.** recommend_a·recommend_route 모두 cond 확정 후 1단계 풀에 적용. graceful. 테스트 `tests/test_keyword_search.py`(5개).
+
+**결과 (라이브):** 명동 "hanok village or traditional houses" → `keywords=['hanok village']` → 키워드 검색이 **Namsangol Hanok Village** 발견·병합(pool 17→18) → 최상단 fits 노출(coord+type 상위 8건이 놓칠 수 있던 특정 결과). 회귀 가드 골든쿼리 `a-myeongdong-hanok-keyword`(expect 'hanok') 적중, eval 13q recall 유지. `docs/eval-p4.json`.
+
+**한계(정직):** EngService2(영문)는 제목이 고유명사 위주라 **일반 개념어 커버리지가 고르지 않다** — 'hanok'/'museum'/'gallery'/'temple'은 매칭되나 'calligraphy'는 0건(영문 데이터에 해당 제목 없음). 즉 키워드가 **영문 TourAPI 제목에 존재할 때만** 효과. 한국어 소스(서울문화포털) 키워드 검색이나 유의어 확장은 추후 여지.
 
 ### P5. classify_places를 selection 신호로 승격 (L3, P2의 경량 대안)
 P2가 과하면, 최소한 pool을 키운 뒤 `fits_vibe`/실내외로 **top-K 선발**에 쓰도록 순서를 바꾼다(지금은 생존 후보 rerank에만). LLM 1콜로 정성 선호를 selection에 반영. 단 상세조회 비용(L5)과 함께 설계.

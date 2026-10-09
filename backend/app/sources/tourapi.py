@@ -86,6 +86,27 @@ async def location_based_list(
     return _items(data)
 
 
+async def search_keyword(
+    keyword: str, content_type_id: int, rows: int = 10
+) -> list[dict[str, Any]]:
+    """키워드 검색(searchKeyword2) — 좌표검색이 놓치는 '특정 주제' 후보 발견(P4, L2/L6).
+
+    좌표 입력이 없어 dist 를 주지 않는다 → 호출부가 mapx/mapy 로 반경 후필터(임의 좌표 생성 금지).
+    title·mapx(경도)·mapy(위도)·contenttypeid·cat·addr1 등 locationBasedList 와 동일 필드 반환.
+    """
+    data = await _call(
+        "searchKeyword2",
+        {
+            "numOfRows": rows,
+            "pageNo": 1,
+            "arrange": "O",  # 제목순(좌표순 불가 — 좌표 미입력)
+            "keyword": keyword,
+            "contentTypeId": content_type_id,
+        },
+    )
+    return _items(data)
+
+
 async def detail_intro(content_id: str, content_type_id: str) -> dict[str, Any]:
     """타입별 상세(운영시간·요금·휴무)."""
     data = await _call(

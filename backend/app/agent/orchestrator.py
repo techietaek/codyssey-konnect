@@ -365,6 +365,76 @@ def _item_distance_m(item: dict) -> int | None:
         return None
 
 
+_KEYWORD_LIMIT = 3  # 키워드 과다 시 호출 폭증 방지(용어당 3개 타입 조회)
+
+
+async def _fetch_keyword_pool(
+    lat: float, lng: float, radius: int, keywords: list[str], trace: Trace
+) -> list[dict]:
+    """[P4] 키워드 검색(searchKeyword2)로 '특정 주제' 후보 발견 → 좌표 반경 후필터·거리 태깅.
+
+    좌표검색(locationBasedList)이 타입·근접순 10건에 갇혀 놓치는 특정 요구(서예·한복 등)를
+    키워드로 보강(L2/L6). API 가 dist 를 안 주므로 mapx/mapy 로 haversine 계산(임의 좌표 금지),
+    반경 밖·좌표 없는 항목은 drop. 비문화 카테고리 제외는 기존 큐레이션 재사용. graceful.
+    """
+    terms = [k.strip() for k in keywords if k and k.strip()][:_KEYWORD_LIMIT]
+    if not terms:
+        return []
+    results = await asyncio.gather(
+        *(tourapi.search_keyword(term, t) for term in terms for t in _CULTURAL_TYPES),
+        return_exceptions=True,
+    )
+    merged: dict[str, dict] = {}
+    for r in results:
+        if isinstance(r, Exception):
+            continue
+        for it in r:
+            cid = it.get("contentid")
+            if not cid or cid in merged or not is_cultural_experience(it):
+                continue
+            try:
+                la, lo = float(it.get("mapy")), float(it.get("mapx"))
+            except (TypeError, ValueError):
+                continue  # 좌표 없는 항목 drop(임의 좌표 생성 금지)
+            d = haversine_m(lat, lng, la, lo)
+            if d > radius:
+                continue  # 반경 밖 — 먼 전국 결과를 끌어오지 않는다
+            it["_src"] = "tour"
+            it["_etype"] = type_from_contenttype(it.get("contenttypeid"))
+            it["_lat"], it["_lng"], it["dist"] = la, lo, d
+            merged[cid] = it
+    found = list(merged.values())
+    trace.step("fetch_keyword", terms=terms, found=len(found))
+    return found
+
+
+async def _augment_with_keywords(
+    pool: list[dict],
+    lat: float,
+    lng: float,
+    radius: int,
+    cond: ParsedConditions,
+    trace: Trace,
+) -> list[dict]:
+    """키워드 조회 결과를 기존 풀에 병합(contentid 중복 제외 + 교차소스 dedup). 키워드 없으면 무변경.
+
+    사실은 공식 데이터 그대로 — 병합은 '발견 범위'만 넓힌다(판정·가용성 불변). graceful.
+    """
+    if not cond.keywords:
+        return pool
+    kw = await _fetch_keyword_pool(lat, lng, radius, cond.keywords, trace)
+    if not kw:
+        return pool
+    existing = {it.get("contentid") for it in pool if it.get("_src") != "seoul"}
+    new = [it for it in kw if it.get("contentid") not in existing]
+    if not new:
+        return pool
+    merged, dup = dedup_cross_source([*pool, *new])
+    merged.sort(key=_pool_dist)
+    trace.step("keyword_merge", added=len(new), dup_removed=dup, pool=len(merged))
+    return merged
+
+
 async def _rerank_and_judge(
     pool: list[dict],
     ctx: RequestContext,
@@ -508,6 +578,10 @@ async def recommend_a(
         free_only=cond.free_only,
         budget_krw=cond.budget_krw,
     )
+
+    # [keyword] 사용자가 특정 주제(서예·한복 등)를 말했으면 키워드 검색 결과를 풀에 병합(P4).
+    # 좌표검색이 놓친 후보를 '발견 범위'에만 추가 — 사실·판정 불변(§6). 키워드 없으면 무변경.
+    pool = await _augment_with_keywords(pool, lat, lng, _SEARCH_RADIUS_M, cond, trace)
 
     # [select+judge] 의미 관련도 우선 선발(P2) + 적응형 반경(P1): 1단계 풀을 (관심사 enum →
     # 의미 유사도 → 실내외 → 거리)로 재정렬해 상위 K 를 판정하고, 유효가 부족하면 반경을 넓혀

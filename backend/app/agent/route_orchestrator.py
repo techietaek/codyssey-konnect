@@ -21,6 +21,8 @@ from app.agent.note_parser import parse_note
 from app.agent.orchestrator import (
     _RADIUS_EXPANDED_NOTICE,
     _RADIUS_LADDER,
+    _SEARCH_RADIUS_M,
+    _augment_with_keywords,
     _fetch_pool,
     collect_judged,
 )
@@ -190,6 +192,9 @@ async def recommend_route(
     # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
     cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
     route_notices: list[str] = []  # 반경 확대 등 투명 안내(RouteData.notices)
+
+    # [keyword] 특정 주제 키워드 검색 결과 병합(P4, A 와 동일) — 발견 범위만 확장, 사실 불변.
+    pool = await _augment_with_keywords(pool, lat, lng, _SEARCH_RADIUS_M, cond, trace)
 
     # [select+judge] 의미 관련도 선발(P2) + 적응형 반경(P1) — A 와 동일 정책을 공용 헬퍼로.
     # feasible 가 2개도 안 되면 반경을 넓혀 재조회(루트 'unmet' 감소, 강제 채움 아님).
