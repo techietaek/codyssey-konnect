@@ -76,8 +76,9 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
       });
     }
     // 개방형 명시 배제 — ✕로 되돌리면 그 조건 없이 다시 추천(사용자 교정 우선).
+    // 디자인 10/8: "역사 싫어요" → "Skip: …" 칩으로 표시(이번 요청만, ✕ 해제).
     for (const concept of edited.exclude_concepts.slice()) {
-      addChip(`Without: ${concept}`, () => {
+      addChip(`Skip: ${concept}`, () => {
         edited.exclude_concepts = edited.exclude_concepts.filter(
           (c) => c !== concept,
         );

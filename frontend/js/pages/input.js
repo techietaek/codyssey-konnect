@@ -6,15 +6,9 @@ import { openConfirmSheet } from "../components/confirm-sheet.js";
 import { openLocationSheet } from "../components/location-sheet.js";
 import { openTimeSheet } from "../components/time-sheet.js";
 
-// FR-A4 예시 칩 (Figma 문구)
-const EXAMPLE_CONDITIONS = [
-  "Indoor only",
-  "Free or cheap",
-  "Less walking",
-  "Traditional culture",
-  "Live performances",
-  "I have plans later",
-];
+// FR-A4 예시 칩 — 디자인 10/8: 한 줄에 다 보이게 3개만(가로 스크롤 없음).
+// "I have plans later"는 "+ Add plans you already have" 링크와 겹쳐서 제외.
+const EXAMPLE_CONDITIONS = ["Indoor only", "Free or cheap", "Less walking"];
 
 const ICONS = {
   pin: '<path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/>',
@@ -23,6 +17,7 @@ const ICONS = {
   sparkle: '<path d="M12 3l1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8L5.5 9.5l4.8-1.7z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/>',
   chevron: '<path d="M15 5l-7 7 7 7"/>',
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/>',
 };
 
 function el(tag, className, text) {
@@ -63,7 +58,7 @@ function durText(startIso, endIso) {
   return `You have ${[h ? `${h} hr` : "", m ? `${m} min` : ""].filter(Boolean).join(" ")}`;
 }
 
-export function renderInputView({ prefill, onBack, onRecommend }) {
+export function renderInputView({ prefill, onBack, onHome, onRecommend }) {
   const root = el("section", "view input-view");
 
   // 상태값
@@ -81,7 +76,13 @@ export function renderInputView({ prefill, onBack, onRecommend }) {
   back.setAttribute("aria-label", "Back");
   back.append(icon("chevron", "nav-back-icon"));
   if (onBack) back.addEventListener("click", onBack);
-  nav.append(back, el("span", "nav-title", "Immediate recommendation"));
+  // 상단 이동(10/8): 진행 화면 좌상단 Back · 우상단 Home(→ 메인). 하단 바 없음.
+  const home = el("button", "nav-home");
+  home.type = "button";
+  home.setAttribute("aria-label", "Home");
+  home.append(icon("home", "nav-home-icon"));
+  if (onHome) home.addEventListener("click", onHome);
+  nav.append(back, el("span", "nav-title", "Immediate recommendation"), home);
   root.append(nav);
 
   // ── 접힘 pill (note 편집 중 Where&when 대체) ──
@@ -224,7 +225,7 @@ export function renderInputView({ prefill, onBack, onRecommend }) {
   const nlFooter = el("div", "nl-footer");
   nlFooter.append(
     icon("sparkle", "nl-sparkle"),
-    el("span", null, "We'll turn this into conditions you can check"),
+    el("span", null, "We'll show what we understood before searching"),
   );
   nlCard.append(noteInput, nlFooter);
   elseSec.append(nlCard);
@@ -255,7 +256,7 @@ export function renderInputView({ prefill, onBack, onRecommend }) {
   }
   elseSec.append(examples);
 
-  const otherPlans = el("button", "other-plans-link", "+ Other plans today? (optional)");
+  const otherPlans = el("button", "other-plans-link", "+ Add plans you already have (optional)");
   otherPlans.type = "button";
   otherPlans.addEventListener("click", () => noteInput.focus());
   elseSec.append(otherPlans);
@@ -282,9 +283,7 @@ export function renderInputView({ prefill, onBack, onRecommend }) {
   const cta = el("button", "btn-cta", "Find experiences");
   cta.type = "submit";
   ctaWrap.append(cta);
-  const about = el("p", "about-info");
-  about.append(icon("info", "about-icon"), el("span", null, "About the information"));
-  ctaWrap.append(about);
+  // "About the information" 링크 제거(10/8) — 메인 한 줄 안내 + 결과 AI 배지로 충분, 중복.
   form.append(ctaWrap);
 
   function validate() {

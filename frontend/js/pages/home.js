@@ -1,7 +1,7 @@
 // LF-01 · 메인 홈 (M-1 첫 방문 / M-2 현재 선택 있음).
 // A 즉시추천 = 활성, B 문화루트·Log in = 디자인 구현하되 비활성(Phase 2).
 // 현재 선택이 있으면(A6 localStorage) 재접근 카드 + 미니맵을 상단에 노출.
-import { displayName, signInWithGoogle, signOut } from "../auth.js";
+import { displayName, signInWithGoogle } from "../auth.js";
 import { renderMiniMap } from "../map.js";
 import { clearChoice, isLoggedIn, loadChoice } from "../state.js";
 
@@ -76,17 +76,32 @@ export function renderHomeView({
   brand.append(el("span", "home-logo", "KONNECT"));
   const brandRight = el("div", "home-brand-right");
   brandRight.append(el("span", "home-lang", "EN"));
+  // 프로필 아이콘 — 상단 우측 상시 노출(디자인 10/8: 하단 Log in → 상단 프로필 아이콘).
+  // 로그인 시 이니셜 → My Page, 비로그인 시 사람 글리프 → Google 로그인.
+  const account = el("button", "home-account");
+  account.type = "button";
   if (isLoggedIn()) {
     const name = displayName();
-    const account = el("button", "home-account");
-    account.type = "button";
+    account.textContent = name ? name.trim()[0].toUpperCase() : "👤";
     account.title = "My Page";
     account.setAttribute("aria-label", "My Page");
-    // 아바타 — 이름 첫 글자(없으면 사람 글리프).
-    account.textContent = name ? name.trim()[0].toUpperCase() : "👤";
     account.addEventListener("click", () => onOpenMyPage?.());
-    brandRight.append(account);
+  } else {
+    account.textContent = "👤";
+    account.title = "Log in";
+    account.setAttribute("aria-label", "Log in");
+    account.addEventListener("click", async () => {
+      account.disabled = true;
+      try {
+        await signInWithGoogle(); // 성공 시 Google 로 리다이렉트
+      } catch (e) {
+        account.disabled = false;
+        account.title = "Sign-in is unavailable right now.";
+        console.warn("google sign-in failed:", e?.message || e);
+      }
+    });
   }
+  brandRight.append(account);
   brand.append(brandRight);
   content.append(brand);
 
@@ -162,73 +177,31 @@ export function renderHomeView({
   actions.append(
     coreAction({
       kicker: "IMMEDIATE RECOMMENDATION",
-      title: "Find something cultural to do now",
+      title: "Right now",
       sub: "Fits your location and the time you have.",
       cta: "Find experiences",
       disabled: false,
       onClick: onStartA,
     }),
     coreAction({
-      kicker: "ASK OR PLAN",
-      title: "Chat with KONNECT",
-      sub: "Ask travel questions, get ideas, or plan a culture route.",
-      cta: "Open chat",
+      kicker: "CHOOSE A DATE",
+      title: "Plan a route",
+      sub: "2–3 experiences for a date you choose.",
+      cta: "Create a route",
       disabled: false,
       onClick: onOpenChat,
     }),
   );
   content.append(actions);
 
-  // 신뢰 안내 (미확인 분리 고지) — M-1
+  // 신뢰 안내 — 한 줄 (디자인 10/8: 박스·제목 제거, "ⓘ We clearly mark any unconfirmed
+  // information." 한 줄). 의미(05 §159: 추정 않고 미확인은 구분 표시)는 그대로.
   const info = el("div", "home-info");
-  info.append(el("span", "home-info-icon", "i"));
-  const infoText = el("div", "home-info-text");
-  infoText.append(
-    el("strong", null, "Know what still needs checking"),
-    el(
-      "span",
-      null,
-      "We flag information that needs checking instead of filling in the gaps.",
-    ),
+  info.append(
+    el("span", "home-info-icon", "i"),
+    el("span", "home-info-text", "We clearly mark any unconfirmed information."),
   );
-  info.append(infoText);
   content.append(info);
-
-  // Log in / Log out (화면 최하단, Figma). 로그인(비익명) 상태에 따라 분기. L1d.
-  const login = el("div", "home-login");
-  if (isLoggedIn()) {
-    const logoutBtn = el("button", "home-login-btn", "Log out");
-    logoutBtn.type = "button";
-    logoutBtn.addEventListener("click", async () => {
-      logoutBtn.disabled = true;
-      logoutBtn.textContent = "Logging out…";
-      try {
-        await signOut(); // 성공 시 리로드(로그인 전 상태로)
-      } catch (e) {
-        logoutBtn.disabled = false;
-        logoutBtn.textContent = "Log out";
-        console.warn("sign-out failed:", e?.message || e);
-      }
-    });
-    login.append(logoutBtn);
-  } else {
-    const loginBtn = el("button", "home-login-btn", "Log in");
-    loginBtn.type = "button";
-    loginBtn.addEventListener("click", async () => {
-      loginBtn.disabled = true;
-      loginBtn.textContent = "Redirecting…";
-      try {
-        await signInWithGoogle(); // 성공 시 Google 로 리다이렉트
-      } catch (e) {
-        loginBtn.disabled = false;
-        loginBtn.textContent = "Log in";
-        loginBtn.title = "Sign-in is unavailable right now.";
-        console.warn("google sign-in failed:", e?.message || e);
-      }
-    });
-    login.append(loginBtn);
-  }
-  content.append(login);
 
   root.append(content);
   return root;

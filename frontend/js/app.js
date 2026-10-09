@@ -55,6 +55,7 @@ export function showInput(prefill) {
     renderInputView({
       prefill,
       onBack: showHome,
+      onHome: showHome,
       onRecommend: startRecommend,
     }),
   );

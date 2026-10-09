@@ -3,7 +3,7 @@
 //  - 현재 선택 최소 진입점(선택 ≠ 방문)
 //  - 확인된 선호 확인·수정(MP-2)·초기화(MP-3) → 변경은 **이후 추천부터** 적용
 // 전체 이력·방문 통계·취향 분석·Stamp 는 MVP 제외. 선호 저장은 PUT /api/preferences.
-import { displayName, userEmail } from "../auth.js";
+import { displayName, signOut, userEmail } from "../auth.js";
 import { getPreferences, putPreferences } from "../api.js";
 import {
   createPreferenceForm,
@@ -58,6 +58,21 @@ export function renderMyPageView({ onBack, onViewChoice } = {}) {
     const email = userEmail();
     s.append(el("p", "mypage-account-name", name || "Signed in"));
     if (email) s.append(el("p", "mypage-account-email", email));
+    // 로그아웃 — 하단 Log in/out 이 상단 프로필 아이콘으로 이동(10/8)하며 로그아웃은 여기로.
+    const logout = el("button", "mypage-logout", "Log out");
+    logout.type = "button";
+    logout.addEventListener("click", async () => {
+      logout.disabled = true;
+      logout.textContent = "Logging out…";
+      try {
+        await signOut(); // 성공 시 리로드(로그인 전 상태로)
+      } catch (e) {
+        logout.disabled = false;
+        logout.textContent = "Log out";
+        console.warn("sign-out failed:", e?.message || e);
+      }
+    });
+    s.append(logout);
     return s;
   }
 
