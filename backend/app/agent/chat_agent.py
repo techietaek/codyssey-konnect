@@ -127,6 +127,7 @@ async def dispatch_tool(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    saved_open_preferences: list[str] | None = None,
     history: list[ChatTurn] | None = None,
 ) -> ChatResponse:
     """LLM 이 고른 tool 을 코드로 실행 → 통합 응답. (라우팅과 분리되어 단독 테스트 가능)"""
@@ -163,14 +164,16 @@ async def dispatch_tool(
         if name == RecommendExperiences.__name__:
             from app.agent.orchestrator import recommend_a
 
-            data = await recommend_a(ctx, trace, saved_interests, prefer_shorter_walks)
+            data = await recommend_a(
+                ctx, trace, saved_interests, prefer_shorter_walks, saved_open_preferences
+            )
             return ChatResponse(
                 kind=ChatKind.RECOMMENDATION, tool=name, recommendation=data
             )
         from app.agent.route_orchestrator import recommend_route
 
         route_data = await recommend_route(
-            ctx, trace, saved_interests, prefer_shorter_walks
+            ctx, trace, saved_interests, prefer_shorter_walks, saved_open_preferences
         )
         return ChatResponse(kind=ChatKind.ROUTE, tool=name, route=route_data)
 
@@ -185,6 +188,7 @@ async def run_chat(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    saved_open_preferences: list[str] | None = None,
     history: list[ChatTurn] | None = None,
 ) -> ChatResponse:
     if not message or not message.strip():
@@ -221,5 +225,6 @@ async def run_chat(
         trace,
         saved_interests,
         prefer_shorter_walks,
+        saved_open_preferences,
         history,
     )

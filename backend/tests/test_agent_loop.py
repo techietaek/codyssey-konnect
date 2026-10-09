@@ -100,7 +100,7 @@ def test_recommend(monkeypatch):
         ],
     )
 
-    async def fake_rec(ctx, trace, saved=None, walks=None):
+    async def fake_rec(ctx, trace, saved=None, walks=None, open_prefs=None):
         return _recdata("Gyeongbokgung", "Bukchon")
 
     monkeypatch.setattr(orch, "recommend_a", fake_rec)
@@ -140,7 +140,7 @@ def test_multi_intent_recommendation_wins_and_both_tools(monkeypatch):
     async def fake_answer(q, trace):
         return RagAnswer(answer="T-money.", grounded=True)
 
-    async def fake_rec(ctx, trace, saved=None, walks=None):
+    async def fake_rec(ctx, trace, saved=None, walks=None, open_prefs=None):
         return _recdata("Leeum Museum")
 
     monkeypatch.setattr(al, "answer_knowledge", fake_answer)
@@ -187,7 +187,7 @@ def test_max_steps_graceful(monkeypatch):
         ],
     )
 
-    async def fake_rec(ctx, trace, saved=None, walks=None):
+    async def fake_rec(ctx, trace, saved=None, walks=None, open_prefs=None):
         return _recdata("Place")
 
     monkeypatch.setattr(orch, "recommend_a", fake_rec)

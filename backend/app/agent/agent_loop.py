@@ -104,6 +104,7 @@ class LoopState:
     )
     saved_interests: list[InterestCode] | None = None
     prefer_shorter_walks: bool | None = None
+    saved_open_preferences: list[str] | None = None
     history: list[ChatTurn] | None = None
     recommendation: RecommendData | None = None
     route: RouteData | None = None
@@ -204,7 +205,11 @@ async def _run_recommend_or_route(
         from app.agent.orchestrator import recommend_a
 
         data = await recommend_a(
-            ctx, trace, state.saved_interests, state.prefer_shorter_walks
+            ctx,
+            trace,
+            state.saved_interests,
+            state.prefer_shorter_walks,
+            state.saved_open_preferences,
         )
         state.recommendation = data
         titles = ", ".join(c.title for c in data.candidates) or "none"
@@ -213,7 +218,11 @@ async def _run_recommend_or_route(
     from app.agent.route_orchestrator import recommend_route
 
     route_data = await recommend_route(
-        ctx, trace, state.saved_interests, state.prefer_shorter_walks
+        ctx,
+        trace,
+        state.saved_interests,
+        state.prefer_shorter_walks,
+        state.saved_open_preferences,
     )
     state.route = route_data
     n = len(route_data.routes)
@@ -281,6 +290,7 @@ async def run_chat_loop(
     trace: Trace,
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
+    saved_open_preferences: list[str] | None = None,
     history: list[ChatTurn] | None = None,
 ) -> ChatResponse:
     """§6.1 while-loop: LLM tool 선택 → 코드 실행 → 결과 재투입 → 더 쓸 tool 없으면 종료."""
@@ -292,6 +302,7 @@ async def run_chat_loop(
         message=message.strip(),
         saved_interests=saved_interests,
         prefer_shorter_walks=prefer_shorter_walks,
+        saved_open_preferences=saved_open_preferences,
         history=history,
     )
     # 오케스트레이션(tool 선택)은 경량 모델 허용(§6.7, settings.orchestrator_model) — 지연↓.

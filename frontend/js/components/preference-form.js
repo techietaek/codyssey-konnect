@@ -71,6 +71,32 @@ export function createPreferenceForm({
   nlCard.append(ta, footer);
   root.append(nlCard);
 
+  // ── 상태 한 줄: 기본 힌트 / "Reading your note…"(해석 중) / 결과 없음 안내 ──
+  const status = el("p", "pref-status");
+  root.append(status);
+  function setStatus(kind) {
+    status.replaceChildren();
+    status.hidden = kind === "none";
+    if (kind === "reading") {
+      status.append(
+        el("span", "pref-spinner"),
+        el("span", null, "Reading your note…"),
+      );
+    } else if (kind === "empty") {
+      status.append(
+        el("span", null, "We couldn't pick anything out. You can edit it or skip."),
+      );
+    } else if (kind === "hint") {
+      status.append(
+        el(
+          "span",
+          null,
+          "Write it in your own words. We'll show you what we understood before saving.",
+        ),
+      );
+    }
+  }
+
   // ── We'll remember (해석 결과 칩, × 제거) ──
   const remember = el("div", "remember");
   const rememberChips = el("div", "remember-chips");
@@ -103,41 +129,54 @@ export function createPreferenceForm({
     remember.hidden = items.length === 0;
   }
   renderRemember();
+  setStatus(walks || opens.length ? "none" : "hint"); // 초기: 기존 선호 있으면 숨김
 
-  // 자유입력 → 디바운스 해석 → remember 병합. (기존 칩 유지 + 새 해석 추가)
-  let timer = 0;
+  // 자유입력 해석은 **포커스가 빠질 때(blur)** 수행(스펙 342:2652 §3) — 타이핑 중엔 안 함.
+  // 결과를 remember 에 병합(기존 칩 유지 + 새 해석 추가). 실패·결과없음도 진행 막지 않음.
+  let lastParsed = "";
   ta.addEventListener("input", () => {
     counter.textContent = `${ta.value.length}/300`;
-    clearTimeout(timer);
+  });
+  ta.addEventListener("blur", async () => {
     const text = ta.value.trim();
-    if (!text) return;
+    if (!text || text === lastParsed) return;
+    lastParsed = text;
     setBusy(true);
-    timer = window.setTimeout(async () => {
-      try {
-        const env = await postParse(text);
-        const c = env?.ok ? env.data : null;
-        if (c) {
-          for (const code of c.interests || []) {
-            if (!selected.has(code)) {
-              selected.add(code);
-              chipEls.get(code)?.setAttribute("aria-pressed", "true");
-            }
+    setStatus("reading");
+    let added = false;
+    try {
+      const env = await postParse(text);
+      const c = env?.ok ? env.data : null;
+      if (c) {
+        for (const code of c.interests || []) {
+          if (!selected.has(code)) {
+            selected.add(code);
+            chipEls.get(code)?.setAttribute("aria-pressed", "true");
+            added = true;
           }
-          if (c.prefer_shorter_walks) walks = true;
-          const add = [...(c.open_preferences || [])];
-          if (c.indoor_outdoor)
-            add.push(c.indoor_outdoor === "indoor" ? "Indoor" : "Outdoor");
-          for (const p of add)
-            if (p && !opens.some((x) => x.toLowerCase() === p.toLowerCase()))
-              opens.push(p);
-          renderRemember();
         }
-      } catch {
-        /* 해석 실패는 조용히 무시(기존 상태 유지) */
-      } finally {
-        setBusy(false);
+        if (c.prefer_shorter_walks && !walks) {
+          walks = true;
+          added = true;
+        }
+        const add = [...(c.open_preferences || [])];
+        if (c.indoor_outdoor)
+          add.push(c.indoor_outdoor === "indoor" ? "Indoor" : "Outdoor");
+        for (const p of add)
+          if (p && !opens.some((x) => x.toLowerCase() === p.toLowerCase())) {
+            opens.push(p);
+            added = true;
+          }
+        renderRemember();
       }
-    }, 650);
+    } catch {
+      /* 실패도 '결과 없음'으로 흘려보냄(진행 막지 않음) */
+    } finally {
+      setBusy(false);
+      // 남은 선호가 있으면 상태 숨김, 아무것도 못 뽑았으면 안내(스펙 §5).
+      setStatus(walks || opens.length ? "none" : "empty");
+      if (!added && !walks && !opens.length) setStatus("empty");
+    }
   });
 
   function getValues() {

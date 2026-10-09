@@ -161,7 +161,6 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     save.type = "button";
     form.onBusyChange((busy) => {
       save.disabled = busy;
-      save.textContent = busy ? "Reading…" : "Save";
     });
     save.addEventListener("click", async () => {
       save.disabled = true;

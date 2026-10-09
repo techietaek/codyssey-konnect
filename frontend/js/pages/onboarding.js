@@ -44,10 +44,9 @@ export function renderOnboardingView({ onSubmit, onSkip } = {}) {
   const skip = el("button", "sheet-dismiss", "Skip for now");
   skip.type = "button";
 
-  // 해석 중이면 저장 잠시 비활성(P9-2b) — 해석 끝나면 복구.
+  // 해석 중이면 저장 잠시 비활성(P9-2b). "Reading your note…"는 폼 상태줄이 표시.
   form.onBusyChange((busy) => {
     save.disabled = busy;
-    save.textContent = busy ? "Reading…" : "Save and continue";
   });
 
   save.addEventListener("click", () => {

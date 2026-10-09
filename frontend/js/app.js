@@ -240,8 +240,4 @@ onAuthChange(() => {
   // 익명→Google 승격 직후 첫 로그인이면 온보딩(1회). 결과/선택 화면 위에는 띄우지 않음.
   if (document.querySelector(".home") || document.querySelector(".welcome"))
     maybeShowOnboarding();
-  // 온보딩이 떠 있는데 이름이 뒤늦게(getUser 보강) 잡히면 greeting 갱신(레이스 보정).
-  const title = document.querySelector(".onboarding-title");
-  const name = displayName();
-  if (title && name) title.textContent = `Welcome, ${name.split(" ")[0]}`;
 });

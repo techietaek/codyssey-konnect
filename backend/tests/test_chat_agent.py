@@ -73,7 +73,7 @@ def test_recommend_tool_without_context_clarifies(monkeypatch):
 def test_recommend_tool_with_context_runs(monkeypatch):
     captured = {}
 
-    async def fake_recommend(ctx, trace, saved=None, walks=None):
+    async def fake_recommend(ctx, trace, saved=None, walks=None, open_prefs=None):
         captured["note"] = ctx.note
         captured["label"] = ctx.start_location.label
         from app.models.recommend import RecommendData
@@ -102,7 +102,7 @@ def test_recommend_without_prefs_asks_first():
 
 def test_recommend_proceeds_if_already_asked(monkeypatch):
     # 이미 물어봤으면(히스토리에 질문) 선호 비어도 진행 — 'anything' 응답 등.
-    async def fake_recommend(ctx, trace, saved=None, walks=None):
+    async def fake_recommend(ctx, trace, saved=None, walks=None, open_prefs=None):
         from app.models.recommend import RecommendData
 
         return RecommendData(candidates=[])

@@ -38,11 +38,13 @@ async def chat(
 
     saved_interests: list[InterestCode] | None = None
     prefer_shorter_walks: bool | None = None
+    saved_open_preferences: list[str] | None = None
     if user is not None:
         pref = await get_preferences(user.id)
         if pref:
             saved_interests = [InterestCode(i) for i in (pref.get("interests") or [])]
             prefer_shorter_walks = pref.get("prefer_shorter_walks")
+            saved_open_preferences = pref.get("open_preferences") or []
 
     # agentic while-loop(§6) on/off — off 면 기존 단일 라우팅(fallback).
     chat_fn = run_chat_loop if settings.agent_loop else run_chat
@@ -52,6 +54,7 @@ async def chat(
         trace,
         saved_interests,
         prefer_shorter_walks,
+        saved_open_preferences,
         req.history,
     )
     return Envelope.success(data=data, trace_id=trace.trace_id)
