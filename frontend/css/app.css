@@ -784,6 +784,14 @@ body {
 .onboarding-title { font-size: 22px; line-height: var(--lh-tight); } /* 디자인 큰 제목 */
 .onboarding-foot { margin: 0; font-size: var(--fs-badge); color: var(--c-text-muted); }
 
+/* 온보딩 Save 확인 모달(이름·이메일 + 해석 결과) */
+.onb-confirm { display: flex; flex-direction: column; gap: var(--space-12); }
+.onb-confirm-acct { display: flex; align-items: center; gap: var(--space-10); background: var(--c-bg); border-radius: var(--r-md); padding: var(--space-10) var(--space-12); }
+.onb-confirm-acct-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.onb-confirm-results { display: flex; flex-direction: column; gap: var(--space-6); min-height: 24px; }
+.onb-confirm-label { margin: var(--space-4) 0 0; font-size: var(--fs-badge); font-weight: var(--fw-bold); letter-spacing: 0.04em; color: var(--c-text-muted); text-transform: uppercase; }
+.onb-confirm .btn-cta { margin-top: var(--space-6); }
+
 /* P9-2 선호폼: 관심사 + 자유입력 + "We'll remember" (공용 — 온보딩·My Page) */
 .pref-form { display: flex; flex-direction: column; gap: var(--space-10); }
 .nl-footer2 { display: flex; justify-content: flex-end; }

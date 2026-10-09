@@ -1,7 +1,9 @@
 // 선호 입력 공용 컴포넌트 (L2 온보딩 P9-2 · L3 My Page MP-2 공용).
-// 관심사 6개 복수선택 + "Anything else?" 자유입력 → AI 해석(postParse) → "We'll remember"
-// 칩(× 제거). 10/8: 걷기 체크박스를 자유입력으로 대체(걷기는 해석 결과로 들어온다).
+// 관심사 6개 복수선택 + "Anything else?" 자유입력 → AI 해석(postParse, LLM 구조화).
 // 신뢰: 개방형 선호·걷기 선호는 Soft 신호만. 해석 실패는 graceful(기존 상태 유지).
+//
+// autoParse(기본 true, My Page): 입력창 blur 시 바로 해석 + "We'll remember" 인라인 칩.
+// autoParse=false(온보딩): 인라인 해석 안 함 — 호출부가 Save 시 runParse() 후 모달로 확인.
 import { postParse } from "../api.js";
 
 export const INTERESTS = [
@@ -20,17 +22,18 @@ function el(tag, className, text) {
   return n;
 }
 
-// createPreferenceForm({ interests?, preferShorterWalks?, openPreferences? })
-//   → { element, getValues, isBusy, onBusyChange }
+// createPreferenceForm({ interests?, preferShorterWalks?, openPreferences?, autoParse? })
+//   → { element, getValues, runParse, hasNote, isBusy, onBusyChange }
 //   getValues(): { interests, prefer_shorter_walks, open_preferences }
+//   runParse(): 자유입력을 해석해 상태에 병합(async, 반환 = 뭔가 추가됐는지).
 export function createPreferenceForm({
   interests = [],
   preferShorterWalks = false,
   openPreferences = [],
+  autoParse = true,
 } = {}) {
   const root = el("div", "pref-form");
   const selected = new Set(interests);
-  // "We'll remember" 의 원천(편집 가능). 걷기 선호 + 개방형 선호.
   let walks = !!preferShorterWalks;
   let opens = [...openPreferences];
   let busy = false;
@@ -70,23 +73,25 @@ export function createPreferenceForm({
   footer.append(counter);
   nlCard.append(ta, footer);
   root.append(nlCard);
+  ta.addEventListener("input", () => {
+    counter.textContent = `${ta.value.length}/300`;
+  });
 
-  // ── 상태 한 줄: 기본 힌트 / "Reading your note…"(해석 중) / 결과 없음 안내 ──
-  const status = el("p", "pref-status");
-  root.append(status);
+  // ── 인라인 "We'll remember"·상태(autoParse 모드에서만) ──
+  let remember = null;
+  let rememberChips = null;
+  let status = null;
   function setStatus(kind) {
+    if (!status) return;
     status.replaceChildren();
     status.hidden = kind === "none";
-    if (kind === "reading") {
-      status.append(
-        el("span", "pref-spinner"),
-        el("span", null, "Reading your note…"),
-      );
-    } else if (kind === "empty") {
+    if (kind === "reading")
+      status.append(el("span", "pref-spinner"), el("span", null, "Reading your note…"));
+    else if (kind === "empty")
       status.append(
         el("span", null, "We couldn't pick anything out. You can edit it or skip."),
       );
-    } else if (kind === "hint") {
+    else if (kind === "hint")
       status.append(
         el(
           "span",
@@ -94,20 +99,9 @@ export function createPreferenceForm({
           "Write it in your own words. We'll show you what we understood before saving.",
         ),
       );
-    }
   }
-
-  // ── We'll remember (해석 결과 칩, × 제거) ──
-  const remember = el("div", "remember");
-  const rememberChips = el("div", "remember-chips");
-  remember.append(
-    el("p", "remember-label", "We'll remember"),
-    rememberChips,
-    el("p", "remember-hint", "Remove anything that isn't right, or edit your note."),
-  );
-  root.append(remember);
-
   function renderRemember() {
+    if (!rememberChips) return;
     rememberChips.replaceChildren();
     const items = [];
     if (walks) items.push({ text: "Shorter walks", remove: () => (walks = false) });
@@ -128,19 +122,30 @@ export function createPreferenceForm({
     }
     remember.hidden = items.length === 0;
   }
-  renderRemember();
-  setStatus(walks || opens.length ? "none" : "hint"); // 초기: 기존 선호 있으면 숨김
 
-  // 자유입력 해석은 **포커스가 빠질 때(blur)** 수행(스펙 342:2652 §3) — 타이핑 중엔 안 함.
-  // 결과를 remember 에 병합(기존 칩 유지 + 새 해석 추가). 실패·결과없음도 진행 막지 않음.
-  let lastParsed = "";
-  ta.addEventListener("input", () => {
-    counter.textContent = `${ta.value.length}/300`;
-  });
-  ta.addEventListener("blur", async () => {
+  if (autoParse) {
+    status = el("p", "pref-status");
+    root.append(status);
+    remember = el("div", "remember");
+    rememberChips = el("div", "remember-chips");
+    remember.append(
+      el("p", "remember-label", "We'll remember"),
+      rememberChips,
+      el("p", "remember-hint", "Remove anything that isn't right, or edit your note."),
+    );
+    root.append(remember);
+    renderRemember();
+    setStatus(walks || opens.length ? "none" : "hint");
+    ta.addEventListener("blur", () => runParse());
+  }
+
+  // 자유입력 해석 → 상태 병합(기존 유지 + 새 해석 추가). 실패·결과없음도 진행 막지 않음.
+  // 같은 텍스트는 재해석하지 않는다(모달 재오픈·blur 반복 시 중복 LLM 호출 방지).
+  let lastParsedText = "";
+  async function runParse() {
     const text = ta.value.trim();
-    if (!text || text === lastParsed) return;
-    lastParsed = text;
+    if (!text || text === lastParsedText) return false;
+    lastParsedText = text;
     setBusy(true);
     setStatus("reading");
     let added = false;
@@ -170,14 +175,13 @@ export function createPreferenceForm({
         renderRemember();
       }
     } catch {
-      /* 실패도 '결과 없음'으로 흘려보냄(진행 막지 않음) */
+      /* 실패도 '결과 없음'으로(진행 막지 않음) */
     } finally {
       setBusy(false);
-      // 남은 선호가 있으면 상태 숨김, 아무것도 못 뽑았으면 안내(스펙 §5).
       setStatus(walks || opens.length ? "none" : "empty");
-      if (!added && !walks && !opens.length) setStatus("empty");
     }
-  });
+    return added;
+  }
 
   function getValues() {
     return {
@@ -190,6 +194,8 @@ export function createPreferenceForm({
   return {
     element: root,
     getValues,
+    runParse,
+    hasNote: () => !!ta.value.trim(),
     isBusy: () => busy,
     onBusyChange: (f) => busyListeners.push(f),
   };
