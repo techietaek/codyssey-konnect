@@ -9,6 +9,7 @@ PRD §5.2·FR-A4 신뢰 기준:
 from __future__ import annotations
 
 import logging
+import re
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -17,6 +18,13 @@ from app.config import settings
 from app.models.recommend import ParsedConditions
 
 logger = logging.getLogger("konnect.agent")
+
+# '한 체험당 ≤₩30,000' = 우리 서비스의 'cheap' 기준(Product 결정). "free or cheap"은
+# 무료만이 아니라 저렴함까지 포함 → budget_krw 로 매핑(free_only 아님). 결정론 안전망.
+CHEAP_KRW = 30000
+_CHEAP_RE = re.compile(
+    r"\b(free or cheap|cheap|affordable|budget[- ]friendly|inexpensive)\b", re.IGNORECASE
+)
 
 _SYSTEM = (
     "You extract ONLY the conditions a traveler explicitly stated in their free-text "
@@ -45,9 +53,16 @@ _SYSTEM = (
     "'duration_minutes'. Leave BOTH null for vague time words like 'afternoon', 'evening', "
     "'tonight', 'a while', 'some time' — do not convert vague words into a clock time or "
     "duration. Never invent a time. Budget is in "
-    "Korean won (KRW); only fill budget if the user gave a concrete amount. Never invent "
+    "Korean won (KRW); only fill budget if the user gave a concrete amount. "
+    "If the user wants cheap/affordable/budget options (e.g. 'free or cheap', 'cheap', "
+    "'affordable', 'budget-friendly') WITHOUT a specific amount, set budget_krw to 30000 "
+    "(we treat up to ₩30,000 per experience as cheap) and leave free_only false — do NOT "
+    "restrict to free only. Set free_only true ONLY for an explicit free-only request "
+    "('free only', 'must be free', 'no paid experiences'). Never invent "
     "prices, times, or availability.\n"
     "Examples:\n"
+    "- 'free or cheap' -> budget_krw:30000 (free_only stays false)\n"
+    "- 'only free experiences' -> free_only:true\n"
     "- 'something near Insadong until 5pm' -> keywords:['Insadong'], end_time:'17:00'\n"
     "- 'I only have about 2 hours' -> duration_minutes:120\n"
     "- 'free galleries this afternoon' -> interests:[art_exhibitions], free_only:true "
@@ -76,7 +91,16 @@ async def parse_note(note: str | None) -> ParsedConditions:
             timeout=20,
         )
         chain = _PROMPT | llm.with_structured_output(ParsedConditions)
-        return await chain.ainvoke({"note": note.strip()})
+        cond = await chain.ainvoke({"note": note.strip()})
     except Exception as e:  # noqa: BLE001 — LLM/네트워크 어떤 실패든 추천을 막지 않는다
         logger.warning("note parse failed: %s", type(e).__name__)
-        return ParsedConditions()
+        cond = ParsedConditions()
+    return _apply_cheap_rule(note, cond)
+
+
+def _apply_cheap_rule(note: str, cond: ParsedConditions) -> ParsedConditions:
+    """'free or cheap'/'cheap' = ≤₩30,000 선호(무료만 아님). 결정론 안전망 — LLM 이
+    놓치거나 free_only 로 과도하게 좁혀도 교정한다. 구체 금액이 이미 있으면 건드리지 않는다."""
+    if cond.budget_krw is None and _CHEAP_RE.search(note):
+        return cond.model_copy(update={"budget_krw": CHEAP_KRW, "free_only": False})
+    return cond

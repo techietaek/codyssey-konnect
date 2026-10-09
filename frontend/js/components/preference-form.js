@@ -206,10 +206,18 @@ export function createPreferenceForm({
     };
   }
 
+  // 확인 모달의 "Also" 칩 × 제거용(걷기 또는 개방형 선호 하나 제거).
+  function removeExtra(text) {
+    if (text === "Shorter walks") walks = false;
+    else opens = opens.filter((p) => p !== text);
+    renderRemember();
+  }
+
   return {
     element: root,
     getValues,
     runParse,
+    removeExtra,
     hasNote: () => !!ta.value.trim(),
     isBusy: () => busy,
     onBusyChange: (f) => busyListeners.push(f),

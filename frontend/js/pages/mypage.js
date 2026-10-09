@@ -4,6 +4,7 @@
 import { displayName, signOut } from "../auth.js";
 import { getPreferences, putPreferences } from "../api.js";
 import { createPreferenceForm, INTERESTS } from "../components/preference-form.js";
+import { openPrefConfirm } from "../components/pref-confirm.js";
 import { openSheet, el as sheetEl } from "../components/sheet.js";
 import { loadChoice } from "../state.js";
 
@@ -145,7 +146,8 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     return s;
   }
 
-  // 선호 수정 — 공용 preference-form(관심사 + 자유입력 + We'll remember) + Save/Cancel.
+  // 선호 수정 — 관심사 + 자유입력(인라인 해석 없음). Save 시 확인 모달에서 해석 결과를
+  // 보여주고(Also × 제거 가능) 저장한다(온보딩과 동일 UX, 화면에 인라인 박스를 띄우지 않음).
   function renderPreferencesEdit() {
     const s = el("div", "mypage-prefs");
     s.append(el("h2", "mypage-prefs-title", "Your preferences"));
@@ -153,23 +155,25 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
       interests: prefs?.interests ?? [],
       preferShorterWalks: !!prefs?.prefer_shorter_walks,
       openPreferences: prefs?.open_preferences ?? [],
+      autoParse: false,
     });
     s.append(form.element);
 
     const actions = el("div", "mypage-pref-actions");
     const save = el("button", "btn-cta", "Save");
     save.type = "button";
-    form.onBusyChange((busy) => {
-      save.disabled = busy;
-    });
-    save.addEventListener("click", async () => {
-      save.disabled = true;
-      save.textContent = "Saving…";
-      const env = await putPreferences(form.getValues()).catch(() => null);
-      if (env?.ok && env.data) prefs = env.data;
-      mode = "view";
-      render();
-    });
+    save.addEventListener("click", () =>
+      openPrefConfirm({
+        form,
+        confirmLabel: "Save",
+        onConfirm: async (values) => {
+          const env = await putPreferences(values).catch(() => null);
+          if (env?.ok && env.data) prefs = env.data;
+          mode = "view";
+          render();
+        },
+      }),
+    );
     const cancel = el("button", "sheet-dismiss", "Cancel");
     cancel.type = "button";
     cancel.addEventListener("click", () => {
