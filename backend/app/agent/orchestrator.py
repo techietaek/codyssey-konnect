@@ -26,10 +26,11 @@ from app.agent.semantic_rank import (
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
+from app.domain.conflict import conflict_notice, io_interest_conflict
 from app.domain.curation import is_cultural_experience
 from app.domain.dedup import dedup_cross_source
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
-from app.domain.locations import resolve_start_coords
+from app.domain.locations import detect_location_in_text, resolve_start_coords
 from app.domain.normalize import (
     _seoul_type,
     _strip_html,
@@ -546,7 +547,10 @@ async def recommend_a(
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
 ) -> RecommendData:
-    lat, lng = resolve_start_coords(ctx.start_location)
+    # [위치 우선] 프롬프트(note)에 직접 밝힌 지명이 있으면 기본입력(앱 폼/컨텍스트)보다 우선.
+    # 결정론 테이블 매칭 — 좌표 생성 아님. 모든 진입 경로(폼·챗)에서 일관 적용.
+    start_loc = detect_location_in_text(ctx.note) or ctx.start_location
+    lat, lng = resolve_start_coords(start_loc)
 
     # [structure] 좌표 해석 + note 자연어 구조화(LLM)를 조회와 병렬로.
     # 확인 시트에서 교정한 조건이 오면 재파싱하지 않고 그대로 사용(사용자 교정 우선).
@@ -592,6 +596,12 @@ async def recommend_a(
     valid = list(judged)
     radius_notices = (
         [_RADIUS_EXPANDED_NOTICE] if used_radius > _RADIUS_LADDER[0] else []
+    )
+    # [충돌 투명 안내] 실내/외 선호 ↔ 관심사 모순(예: indoor + 궁궐)이면 조용히 처리하지 않고
+    # 왜 이런 결과인지 알린다(Option 1 — 폼/즉시추천은 되묻지 않으므로 notice 로 투명성 확보).
+    conflicting = io_interest_conflict(cond)
+    conflict_notices = (
+        [conflict_notice(cond.indoor_outdoor or "", conflicting)] if conflicting else []
     )
 
     # [filter-places] 명시 장소 제외(B4, 결정론 title 매칭) — 사용자가 이름 댄 장소 hard 제거.
@@ -648,7 +658,7 @@ async def recommend_a(
     if notices:  # 0건-세이프 발동 — trace 로 증빙
         trace.step("exclude_safe_fallback", concepts=cond.exclude_concepts)
     # 반경 확대·실내외 strict 안내를 함께 전달(투명 — 왜 이 결과인지 사용자에게 고지).
-    notices = [*radius_notices, *io_notices, *notices]
+    notices = [*radius_notices, *conflict_notices, *io_notices, *notices]
     kept = [by_id[i] for i in kept_ids]
     candidates = [c for c, _, _ in kept]
     fits = sum(1 for c in candidates if c.status.value == "fits")
@@ -686,7 +696,7 @@ async def recommend_a(
     trace.step(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
-    origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
+    origin = StartLocation(label=start_loc.label, lat=lat, lng=lng)
     return RecommendData(
         candidates=candidates,
         origin=origin,

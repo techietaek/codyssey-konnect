@@ -49,3 +49,17 @@ def conflict_message(pref: str, conflicting: list[InterestCode]) -> str:
         f"You asked for {pref} spots, but {things} are mostly {other}. "
         f"Would you like {pref} options only, the {other} sights you mentioned, or a mix?"
     )
+
+
+def conflict_notice(pref: str, conflicting: list[InterestCode]) -> str:
+    """충돌 투명 안내(서술형) — 되묻지 않는 폼/즉시추천 경로용(Option 1).
+
+    되묻기(conflict_message)와 달리 '이렇게 처리했다'를 알린다 — 조용히 한쪽을 버리지 않고
+    왜 이런 결과인지 투명하게. 강등(A)·제외(B) 어느 쪽이든 맞는 중립 문구.
+    """
+    things = ", ".join(_INTEREST_LABEL.get(i, i.value) for i in conflicting)
+    other = "outdoor" if pref == "indoor" else "indoor"
+    return (
+        f"You asked for {pref}, but {things} are mostly {other} — "
+        f"results favor your {pref} preference."
+    )

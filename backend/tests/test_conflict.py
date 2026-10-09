@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from app.domain.conflict import conflict_message, io_interest_conflict
+from app.domain.conflict import (
+    conflict_message,
+    conflict_notice,
+    io_interest_conflict,
+)
 from app.models.recommend import InterestCode, ParsedConditions
 
 
@@ -55,3 +59,11 @@ def test_conflict_message_names_things_and_options():
     assert "palaces" in msg.lower()
     # 내부 enum 값이 그대로 노출되지 않는다.
     assert "palaces_historic" not in msg
+
+
+def test_conflict_notice_is_statement_not_question():
+    # 되묻기(message)와 달리 notice 는 '이렇게 처리했다' 서술형(물음표 없음).
+    note = conflict_notice("indoor", [InterestCode.PALACES_HISTORIC])
+    assert "?" not in note
+    assert "indoor" in note and "outdoor" in note
+    assert "palaces_historic" not in note

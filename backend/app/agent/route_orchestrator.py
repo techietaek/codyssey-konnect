@@ -28,8 +28,9 @@ from app.agent.orchestrator import (
 )
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict
+from app.domain.conflict import conflict_notice, io_interest_conflict
 from app.domain.exclusion import match_excluded_places, select_with_exclusion
-from app.domain.locations import resolve_start_coords
+from app.domain.locations import detect_location_in_text, resolve_start_coords
 from app.domain.ranking import io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import (
@@ -181,8 +182,10 @@ async def recommend_route(
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
 ) -> RouteData:
-    lat, lng = resolve_start_coords(ctx.start_location)
-    origin = StartLocation(label=ctx.start_location.label, lat=lat, lng=lng)
+    # [위치 우선] 프롬프트(note) 지명이 있으면 기본입력보다 우선(결정론, A 와 동일 정책).
+    start_loc = detect_location_in_text(ctx.note) or ctx.start_location
+    lat, lng = resolve_start_coords(start_loc)
+    origin = StartLocation(label=start_loc.label, lat=lat, lng=lng)
 
     pool, env = await asyncio.gather(
         _fetch_pool(lat, lng, trace, ctx.start_at.date()),
@@ -191,7 +194,12 @@ async def recommend_route(
     # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
     # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
     cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
-    route_notices: list[str] = []  # 반경 확대 등 투명 안내(RouteData.notices)
+    route_notices: list[str] = []  # 반경 확대·충돌 등 투명 안내(RouteData.notices)
+    # [충돌 투명 안내] 실내/외 ↔ 관심사 모순이면 알린다(Option 1, A 와 동일). 챗 루프가 먼저
+    # 되물으면 해소된 cond 로 들어와 충돌이 없다 — 그 외(직접 호출·누락) 경로의 안전망.
+    conflicting = io_interest_conflict(cond)
+    if conflicting:
+        route_notices.append(conflict_notice(cond.indoor_outdoor or "", conflicting))
 
     # [keyword] 특정 주제 키워드 검색 결과 병합(P4, A 와 동일) — 발견 범위만 확장, 사실 불변.
     pool = await _augment_with_keywords(pool, lat, lng, _SEARCH_RADIUS_M, cond, trace)

@@ -378,9 +378,19 @@ LLM/임베딩은 **순서·발견·설명만**; 가격·시간·가용성·좌�
 사용자 테스트에서 드러난 챗 UX 3건 수정(추천 로직이 아니라 **챗 라우팅/입력처리** 계층):
 
 1. **멀티 인텐트 — `AGENT_LOOP` 기본 True** (`config.py`). off(단일 라우팅 `run_chat`)는 tool 하나만 불러 "루트 짜줘 **+** 팁 필요해?"의 2번째 의도(FAQ)를 버렸다. 루프는 `_present`가 추천+루트+답변을 **모두** 싣는다(`fed55ee`). 비용: 멀티 인텐트 턴은 단발 대비 ~2배 지연(메모 참고).
-2. **프롬프트 위치 우선** — "I am at Myeongdong"처럼 메시지에 직접 밝힌 지명을 앱 default보다 우선. `domain/locations.detect_location_in_text`(결정론 — `_QUICK_COORDS` 테이블 매칭, 좌표 생성 아님; 미등록 지명은 None→앱 폴백). 루프 `_run_recommend_or_route`가 **원본 메시지**에서 감지(preferences는 선호만 담아 위치 누락 가능). 정밀 지오코딩은 미구현(테이블 밖은 폴백).
-3. **입력 충돌 되묻기** — "indoor" + 궁궐/축제(실외) 같은 모순이면 조용히 한쪽을 버리지 않고 `CLARIFY`로 되묻는다(`domain/conflict.io_interest_conflict`/`conflict_message`). 이미 물었으면(히스토리 마커) 재질문 안 함. 단 orchestrator LLM이 `preferences`에서 "indoor"를 누락하면 충돌 신호가 안 잡혀 되묻기가 생략될 수 있음(2-LLM 추출 편차). **알려진 제약:** 충돌 clarify는 같은 턴의 tip 답변을 함께 싣지 않고 clarify만 반환(다음 턴에 해소).
+2. **프롬프트 위치 우선 (A·B 모두)** — "I am at Myeongdong"처럼 프롬프트에 직접 밝힌 지명을 기본입력(앱 폼/컨텍스트)보다 우선. `domain/locations.detect_location_in_text`(결정론 — `_QUICK_COORDS` 테이블 매칭, 좌표 생성 아님; 미등록 지명은 None→기본입력 폴백). **두 지점에서 적용**: (a) 챗 루프 `_run_recommend_or_route`는 **원본 메시지**에서 감지, (b) `recommend_a`·`recommend_route`는 **`ctx.note`**에서 감지 → **폼 경로의 A/B도** 프롬프트 위치가 우선된다. 정밀 지오코딩은 미구현(테이블 밖은 폴백). **시간(time) 프롬프트 우선은 미구현** — 자유텍스트 시간 파싱은 신뢰경계(§6.3 임의 시간 생성 금지)상 별도 설계 필요(아래 §11).
+3. **입력 충돌 처리** — "indoor" + 궁궐/축제(실외) 모순을 조용히 해소하지 않는다.
+   - **챗(루프)**: `CLARIFY`로 **되묻기**(`conflict_message`). 이미 물었으면(히스토리 마커) 재질문 안 함. 2-LLM 추출 편차로 orchestrator가 `preferences`에서 "indoor"를 누락하면 그 턴엔 생략될 수 있음. 클래리파이는 같은 턴 tip 답변을 함께 싣지 않음(다음 턴 해소).
+   - **폼/즉시추천(`recommend_a`·`recommend_route`)**: 되묻지 않는 경로이므로 **투명 notice**(`conflict_notice`, Option 1)로 "왜 이런 결과인지" 알림. 양쪽 모두 `domain/conflict.io_interest_conflict` 재사용 — 신뢰/투명 기준을 경로 간 일치.
 
 대화 기억(5턴): **DB 불필요** — 프론트가 `history`를 매 턴 전송(서버 stateless), 백엔드 `to_lc_messages`가 최근 10메시지(≈5턴) 사용. 장기 선호만 Supabase. 테스트: `test_conflict.py`·`test_locations.py`·`test_loop_conflict_location.py`.
 
 > fallback `chat_agent.run_chat`(AGENT_LOOP off)에는 위 2·3이 미적용 — 루프가 기본이라 방치. off로 돌리면 degraded.
+
+## 11. 미구현 — 시간(time) 프롬프트 우선 (다음 작업)
+
+위치처럼 **시간도 프롬프트가 기본입력보다 우선**해야 한다는 요구(2026-10-09). 위치는 완료(§10.2)지만 시간은 미착수 — 자유텍스트 시간은 위험·난이도가 더 크다:
+- **신뢰경계(§6.3):** 근거 없는 시간값 생성 금지. 시간은 가용성 판정의 핵심 사실이라 LLM이 함부로 설정하면 안 됨.
+- **모호성:** "this afternoon"은 구체 시각이 아님(오후=몇 시?). 상대·구어 표현 해석은 판단이 개입.
+- **안전한 범위(제안):** 사용자가 **명시적 시각/구간**을 말한 경우만 override — 예 "from 2pm to 6pm", "until 5pm", "I have 3 hours". `note_parser`에 선택적 `start_time`/`end_time`/`duration_minutes` 추출 필드 추가 → **기본입력 날짜 + tz** 로 구체 datetime 합성(결정론), 모호 표현("afternoon")은 무시(override 안 함). 적용 지점: 챗 루프/`recommend_*`의 ctx 구성 전. `validate_available_time`로 경계 검증.
+- 착수점: `agent/note_parser.py`(필드), `agent/agent_loop.py` `_run_recommend_or_route`(ctx.start_at/end_at override), `domain/input_validation.py`.
