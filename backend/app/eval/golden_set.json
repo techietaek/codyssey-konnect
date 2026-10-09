@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "about": "검색 품질 Eval 골든 쿼리셋. 라이브 데이터는 바뀌므로 기대값은 '정확한 후보 id'가 아니라 제목 부분문자열(드리프트 내성)·구조 불변식으로 둔다. expect_title_any=하나라도 잡히면 recall 성공. forbid_title_any=나오면 위반. forbid_empty=비면 위반. 시간은 naive 로컬(앱 입력과 동일). 날짜는 평가 시 가까운 미래로 조정해도 됨.",
+  "queries": [
+    {
+      "id": "a-gbg-history",
+      "mode": "recommend",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "I love palaces and traditional Korean history",
+      "expect_title_any": ["palace", "gung", "hanok", "museum"],
+      "forbid_title_any": [],
+      "forbid_empty": true,
+      "comment": "경복궁 인근 + 역사 관심 → 궁/한옥/박물관 중 하나는 나와야 함."
+    },
+    {
+      "id": "a-gbg-art-indoor",
+      "mode": "recommend",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T17:00:00",
+      "note": "art exhibitions and galleries, prefer indoor",
+      "expect_title_any": ["museum", "gallery", "art", "exhibit"],
+      "forbid_title_any": [],
+      "forbid_empty": true,
+      "comment": "미술/실내 선호 → 박물관·갤러리 기대. (L3: 정성/실내선호가 selection 아닌 rerank만 — before 기준치용.)"
+    },
+    {
+      "id": "a-insadong-free",
+      "mode": "recommend",
+      "start": { "label": "Insadong", "lat": 37.574, "lng": 126.985 },
+      "start_at": "2026-10-15T10:00:00",
+      "end_at": "2026-10-15T14:00:00",
+      "note": "only free experiences please",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "free_only 필터. 0건 허용(무료만이면 적을 수 있음) — 구조 불변식·위반만 본다."
+    },
+    {
+      "id": "a-gbg-exclude-place",
+      "mode": "recommend",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "palaces and history, but skip Gyeongbokgung Palace itself",
+      "expect_title_any": ["palace", "gung", "hanok", "museum"],
+      "forbid_title_any": ["gyeongbokgung"],
+      "forbid_empty": true,
+      "comment": "명시 장소 제외(exclude_places) 준수 — 경복궁 제목이 결과에 있으면 위반."
+    },
+    {
+      "id": "a-myeongdong-anything",
+      "mode": "recommend",
+      "start": { "label": "Myeongdong", "lat": 37.5637, "lng": 126.985 },
+      "start_at": "2026-10-15T15:00:00",
+      "end_at": "2026-10-15T19:00:00",
+      "note": "anything cultural nearby",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": true,
+      "comment": "명동 도심 — 선호 없음, 거리순. 밀집지라 0건이면 recall 문제 신호."
+    },
+    {
+      "id": "a-ddp-handson",
+      "mode": "recommend",
+      "start": { "label": "DDP", "lat": 37.5663, "lng": 127.009 },
+      "start_at": "2026-10-15T11:00:00",
+      "end_at": "2026-10-15T16:00:00",
+      "note": "hands-on crafts or traditional experiences I can try myself",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "체험형 요구 — 데이터 희소(L6). 0건 허용, before 기준치로 recall 공백을 측정."
+    },
+    {
+      "id": "a-gbg-outdoor-strict",
+      "mode": "recommend",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "strictly outdoor only, no indoor museums",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "indoor_outdoor_strict → 반대(실내) 확신분류만 Hard 제외. notices 투명고지 확인용."
+    },
+    {
+      "id": "b-gbg-route-afternoon",
+      "mode": "route",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "plan me a culture walk this afternoon",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "루트(B). 2~3 스톱 구조 불변식·도보시간창 준수. 0건이면 unmet(허용)."
+    },
+    {
+      "id": "b-insadong-route-history",
+      "mode": "route",
+      "start": { "label": "Insadong", "lat": 37.574, "lng": 126.985 },
+      "start_at": "2026-10-15T10:00:00",
+      "end_at": "2026-10-15T15:00:00",
+      "note": "a half-day route focused on palaces and traditional culture",
+      "expect_title_any": [],
+      "forbid_title_any": [],
+      "forbid_empty": false,
+      "comment": "관심사 우선 루트(FR-B4) — 인사동 역사권. 구조 불변식 위주."
+    }
+  ]
+}
