@@ -3,7 +3,7 @@
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
-  check_needed: "Check needed",
+  check_needed: "Partly confirmed", // 10/8: 화면 라벨만 변경(상태키 check_needed 유지)
   alternative: "Alternative",
 };
 
@@ -56,7 +56,7 @@ export function aiSignalsToggle(signals, { inline = false } = {}) {
 
 // Google Maps 길찾기 딥링크 (외부 상세 길찾기, DESIGN §3.4).
 // 대중교통 모드 — 구글맵은 한국에서 도보 경로를 제공하지 않는다(도보는 내부 Tmap).
-function directionsUrl(origin, c) {
+export function directionsUrl(origin, c) {
   if (!origin?.lat || !origin?.lng || c.lat == null || c.lng == null) return null;
   return (
     "https://www.google.com/maps/dir/?api=1" +
@@ -79,15 +79,8 @@ export function renderResultCard(c, origin, index = 0) {
   badge.dataset.status = c.status;
   headText.append(badge, el("h2", "card-title", c.title));
   head.append(thumb, headText);
-
-  // AI 분류 근거 토글 — 카드 우측 상단(absolute). 누르면 키워드 칩 행이 토글된다.
-  if (c.signals?.length) {
-    const { button, row } = aiSignalsToggle(c.signals);
-    head.append(button);
-    card.append(head, row);
-  } else {
-    card.append(head);
-  }
+  // 분류 근거(signals)는 결과 상단 "✦ AI" 배지로 통합(10/8) — per-card ✨ 버튼 제거.
+  card.append(head);
 
   // 2. Reasons (0~2) — teal check. 0개면 영역 생략.
   if (c.reasons?.length) {
@@ -137,15 +130,7 @@ export function renderResultCard(c, origin, index = 0) {
     a.rel = "noopener";
     links.append(a);
   }
-  // 외부 지도 길찾기 (경로 provenance와 무관하게 항상 제공 — Fallback의 공통 출구)
-  const dir = directionsUrl(origin, c);
-  if (dir) {
-    const a = el("a", "official-link", "Google Map ↗");
-    a.href = dir;
-    a.target = "_blank";
-    a.rel = "noopener";
-    links.append(a);
-  }
+  // 외부 지도 길찾기는 결과 상단 "Directions ↗" 칩으로 이동(10/8) — 카드 per-item 링크 제거.
   const select = el("button", "btn-select", "Select experience");
   select.dataset.status = c.status;
   select.dataset.id = c.id;

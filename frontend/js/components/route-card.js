@@ -6,12 +6,12 @@ import { TYPE_GLYPH, aiSignalsToggle } from "./result-card.js";
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
-  check_needed: "Check needed",
+  check_needed: "Partly confirmed", // 10/8: 화면 라벨만(상태키 check_needed 유지)
   alternative: "Alternative",
 };
 const ROUTE_STATUS = {
   fits: "Ready to go (route)",
-  check_needed: "Still to check (route)",
+  check_needed: "Partly confirmed (route)",
   alternative: "Alternative route",
 };
 
@@ -43,9 +43,11 @@ function segmentRow(seg) {
   return row;
 }
 
-// 계획 방문시간 배지 — 공식(confirmed)=Official / 유형기준(planned)=Planned.
+// 계획 방문시간 배지 — 10/8: "Official" 태그 제거(확인된 건 그대로 보이면 됨).
+// 계획값(유형기준)만 "Planned"로 구분 유지. confirmed(공식 spendtime)면 배지 없음.
 function visitBadge(prov) {
-  const b = el("span", "route-visit-badge", prov === "confirmed" ? "Official" : "Planned");
+  if (prov === "confirmed") return null;
+  const b = el("span", "route-visit-badge", "Planned");
   b.dataset.prov = prov;
   return b;
 }
@@ -94,10 +96,9 @@ function stopRow(stop, onRemove) {
       stop.arrival_at && stop.depart_at
         ? `${fmtTime(stop.arrival_at)} – ${fmtTime(stop.depart_at)}`
         : `≈${stop.visit_minutes} min visit`;
-    when.append(
-      el("span", "route-stop-time", label),
-      visitBadge(stop.visit_provenance),
-    );
+    when.append(el("span", "route-stop-time", label));
+    const vb = visitBadge(stop.visit_provenance);
+    if (vb) when.append(vb);
     body.append(when);
   }
 
@@ -186,7 +187,6 @@ export function renderRouteCard(route, origin, opts = {}) {
   // ── 범례 ──
   const legend = el("div", "route-legend");
   for (const [cls, label] of [
-    ["lg-official", "Official"],
     ["lg-estimate", "≈ Estimated"],
     ["lg-planned", "Planned"],
     ["lg-check", "needs checking"],

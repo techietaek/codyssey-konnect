@@ -1,7 +1,7 @@
 // LF-03 — 즉시 추천(A) 결과. 지도 풀스크린 배경 + 상단 플로팅 조건 + 하단 카드 캐러셀.
 // 핀/카드 포커스는 지도 카메라·핀·경로선이 부드럽게 이어지도록 애니메이션(map.js).
 // Find new options → 비로그인이면 로그인 유도 시트(디자인 구현, OAuth는 Phase 2).
-import { renderResultCard } from "../components/result-card.js";
+import { directionsUrl, renderResultCard } from "../components/result-card.js";
 import { showLoginSheet } from "../components/login-sheet.js";
 import { renderMap } from "../map.js";
 import { isLoggedIn, loadChoice, saveChoice, state } from "../state.js";
@@ -36,7 +36,7 @@ function conditionChips(cond) {
   const labels = (cond.interests ?? []).map((i) => INTEREST_LABEL[i] ?? i);
   for (const i of cond.avoid_interests ?? [])
     labels.push(`Not: ${INTEREST_LABEL[i] ?? i}`);
-  for (const c of cond.exclude_concepts ?? []) labels.push(`Without: ${c}`);
+  for (const c of cond.exclude_concepts ?? []) labels.push(`Skip: ${c}`);
   if (cond.free_only) labels.push("Free only");
   if (cond.budget_krw) labels.push(`≤ ₩${cond.budget_krw.toLocaleString()}`);
   if (cond.indoor_outdoor)
@@ -57,10 +57,33 @@ const reduceMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
 
-export function renderResultsView({ request, env, onBack, onEdit }) {
+export function renderResultsView({ request, env, onBack, onHome, onEdit }) {
   const root = el("section", "results-view");
   const data = env.data;
   const cands = data.candidates;
+
+  // "✦ AI" 배지 펼침 패널 — AI 관여 고지 한 줄 + 현재 포커스 카드의 분류 근거 칩(10/8 통합).
+  // 분류 신호(signals)는 per-card ✨ 대신 여기로 접근(AI 아이콘 하나, 밀도↓). 캐러셀은
+  // 한 번에 한 카드 포커스라 포커스 카드 기준으로 보여준다(스와이프 시 갱신).
+  let aiPanelEl = null;
+  function renderAiPanel() {
+    if (!aiPanelEl) return;
+    aiPanelEl.replaceChildren();
+    aiPanelEl.append(
+      el("p", "ai-panel-note", "AI-assisted · details may change as info updates"),
+    );
+    const f = cands.find((c) => c.id === state.focusedId) || cands[0];
+    if (f?.signals?.length) {
+      aiPanelEl.append(el("p", "ai-panel-sub", `How we read “${f.title}”`));
+      const chips = el("div", "signals");
+      for (const s of f.signals) {
+        const chip = el("span", "signal", s.label);
+        if (s.matched) chip.classList.add("is-matched"); // 요청 매칭=녹색, 기본=흰색
+        chips.append(chip);
+      }
+      aiPanelEl.append(chips);
+    }
+  }
 
   // ── 상단 바: 뒤로 + 조건 pill (+ 이해한 조건) ──
   const top = el("div", "results-top");
@@ -81,8 +104,15 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
   editInline.type = "button";
   editInline.addEventListener("click", onEdit);
   condPill.append(editInline);
+  // 상단 이동(10/8): 좌상단 Back · 우상단 Home(→ 메인).
+  const home = el("button", "icon-home");
+  home.type = "button";
+  home.setAttribute("aria-label", "Home");
+  home.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>';
+  if (onHome) home.addEventListener("click", onHome);
   const topRow = el("div", "results-top-row");
-  topRow.append(back, condPill);
+  topRow.append(back, condPill, home);
   top.append(topRow);
 
   const chipLabels = conditionChips(data.conditions);
@@ -136,16 +166,39 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
     );
     deck.append(warn);
   } else {
-    const deckPills = el("div", "deck-pills");
-    deckPills.append(el("span", "ai-notice", data.ai_notice));
-    deckPills.append(
-      el(
-        "span",
-        "near-pill",
-        `${cands.length} experience${cands.length > 1 ? "s" : ""} near your starting point`,
-      ),
-    );
-    deck.append(deckPills);
+    // ✦ AI 배지(탭 → 고지 + 분류 칩 펼침) · 개수 · Directions 칩 (10/8).
+    const deckHead = el("div", "deck-head");
+    const aiBadge = el("button", "ai-badge");
+    aiBadge.type = "button";
+    aiBadge.innerHTML = '<span class="ai-badge-spark" aria-hidden="true">✦</span> AI';
+    aiBadge.setAttribute("aria-expanded", "false");
+    aiBadge.setAttribute("aria-label", "About these AI results");
+    aiPanelEl = el("div", "ai-panel");
+    aiPanelEl.hidden = true;
+    aiBadge.addEventListener("click", () => {
+      const open = aiPanelEl.hidden;
+      if (open) renderAiPanel();
+      aiPanelEl.hidden = !open;
+      aiBadge.setAttribute("aria-expanded", String(open));
+      aiBadge.classList.toggle("is-active", open);
+    });
+    deckHead.append(aiBadge);
+
+    const countRow = el("div", "deck-countrow");
+    const n = cands.length;
+    countRow.append(el("span", "count-pill", `${n} experience${n > 1 ? "s" : ""}`));
+    const dirChip = el("button", "directions-chip");
+    dirChip.type = "button";
+    dirChip.innerHTML = 'Directions <span aria-hidden="true">↗</span>';
+    dirChip.addEventListener("click", () => {
+      const f = cands.find((c) => c.id === state.focusedId) || cands[0];
+      const url = directionsUrl(data.origin, f);
+      if (url) window.open(url, "_blank", "noopener");
+      else showToast("Directions unavailable for this spot");
+    });
+    countRow.append(dirChip);
+
+    deck.append(deckHead, aiPanelEl, countRow);
 
     cands.forEach((c, i) => {
       const card = renderResultCard(c, data.origin, i);
@@ -192,6 +245,7 @@ export function renderResultsView({ request, env, onBack, onEdit }) {
     for (const card of carousel.querySelectorAll(".card"))
       card.classList.toggle("is-focused", card.dataset.id === id);
     setDots(id);
+    if (aiPanelEl && !aiPanelEl.hidden) renderAiPanel(); // 열려 있으면 포커스 카드로 갱신
     mapCtrl?.focus(id);
     if (scroll) {
       const card = carousel.querySelector(`.card[data-id="${CSS.escape(id)}"]`);

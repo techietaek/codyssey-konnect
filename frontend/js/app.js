@@ -120,6 +120,7 @@ export function showResults({ request, env }) {
       request,
       env,
       onBack: showHome,
+      onHome: showHome,
       onEdit: () => showInput(request),
     }),
     { fullBleed: true },
