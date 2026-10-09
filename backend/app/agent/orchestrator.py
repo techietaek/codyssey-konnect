@@ -50,6 +50,7 @@ from app.domain.status import resolve_status
 from app.domain.timing import (
     EventPeriod,
     TimingVerdict,
+    effective_end_at,
     judge_event_period,
     judge_extracted_hours,
     judge_timing,
@@ -570,6 +571,22 @@ async def recommend_a(
     # 걷기 선호는 수치 변환 없이 trace 로만 기록(FR-L4, 순위 반영은 Soft 랭킹 B안).
     filled_from_saved = not cond.interests and bool(saved_interests)
     cond = merge_saved_interests(cond, saved_interests)
+
+    # [시간 프롬프트 우선, §11] note 가 명시한 종료시각('until 5pm')·소요시간('3 hours')이 있으면
+    # 가용창을 '더 좁게'만 조정(보수적 — 없는 시간을 벌지 않음). 판정·available_minutes 에 반영.
+    # 모호한 'afternoon' 등은 note_parser 가 비워 두므로 여기 닿지 않는다. 무효는 폼 값 유지.
+    eff_end, applied_time = effective_end_at(
+        ctx.start_at, ctx.end_at, cond.end_time, cond.duration_minutes
+    )
+    if applied_time is not None:
+        ctx = ctx.model_copy(update={"end_at": eff_end})
+        trace.step(
+            "time_prompt",
+            source=applied_time,
+            end_at=eff_end.isoformat(),
+            available_minutes=ctx.available_minutes,
+        )
+
     trace.step(
         "structure",
         start=ctx.start_location.label,

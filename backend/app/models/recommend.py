@@ -76,6 +76,20 @@ class ParsedConditions(BaseModel):
         default=None,
         description="Max budget per experience in Korean won, if the user stated an amount. Null otherwise.",
     )
+    end_time: str | None = Field(
+        default=None,
+        description="An explicit clock time the user wants to FINISH by, as 'HH:MM' in 24h "
+        "(e.g. 'until 5pm' -> '17:00', 'by 6' -> '18:00', 'before 16:30' -> '16:30'). Set ONLY "
+        "when the user named a concrete clock time. Null for vague words like 'afternoon', "
+        "'evening', 'by tonight', or if not mentioned. Never invent a time.",
+    )
+    duration_minutes: int | None = Field(
+        default=None,
+        description="An explicit amount of time the user said they have, in minutes (e.g. "
+        "'I have 3 hours' -> 180, '90 minutes' -> 90, 'about an hour' -> 60, 'half an hour' -> 30). "
+        "Set ONLY for a concrete stated duration. Null for vague amounts ('a while', 'some time', "
+        "'not long') or if not mentioned. Never invent a duration.",
+    )
     indoor_outdoor: Literal["indoor", "outdoor"] | None = Field(
         default=None,
         description="Set only if the user explicitly preferred indoor or outdoor. Null otherwise.",

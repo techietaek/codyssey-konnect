@@ -348,10 +348,10 @@ P0는 선행 필수, P2는 보유 인프라로 가장 빠르게 recall을 올리
 - 방향: P2 의미점수(`semantic_similarities`)로 **상위 K개만 상세조회**하도록 `_rerank_and_judge`에서 enrich 대상을 줄이거나, 목록 단계에서 1차 컷 후 상세조회. 지연↔recall 트레이드오프를 eval로 튜닝.
 - 착수점: `orchestrator._rerank_and_judge`(상세조회 batch 결정 지점), `_fetch_and_normalize`(후보당 4콜).
 
-**② 한국어 소스·유의어 (L7 + P4 영문 한계) ** (임팩트 中 / 작업량 中)
-- 문제: P4가 영문 EngService2라 'calligraphy' 등 0건(§7 P4 한계). 외국인 영어 요구가 한국어 데이터에 안 닿음.
-- 방향(택1/병행): (a) 서울문화포털 키워드 검색 추가(한국어 제목 매칭), (b) `keywords`를 유의어/한국어로 확장(예 calligraphy→서예) 후 검색.
-- 착수점: `sources/seoulculture.py`, `agent/note_parser.py`(keywords), `orchestrator._fetch_keyword_pool`.
+**② 한국어 소스·유의어 (L7 + P4 영문 한계) — Product 보류 (2026-10-09)**
+- 실측(라이브 probe): EngService2 `searchKeyword2`에서 'calligraphy'·'brush/ink painting'·'tea ceremony'는 **영문·한국어(서예/다도) 모두 0건** — 영문 유의어 확장은 **효과 없음**(해당 데이터셋에 서예 콘텐츠 자체가 없음). 서울문화포털(한국어·날짜필터)도 FIT 영어 사용자엔 부적합.
+- 유일하게 효과 있는 경로 = **KorService2**(`서울서예박물관` 등 실존, contentid 3058180). 단 **같은 contentid를 EngService2 detail로 조회하면 빈 응답** → KorService2 후보는 상세조회도 KorService2(서비스별 라우팅 필요)이고 **콘텐츠가 한국어**.
+- **Product 결정(2026-10-09): 보류·영문 유지.** FIT에게 한국어 venue명/설명을 노출하지 않기로 함. 재개 시 설계 = EN→KO 결정론 용어맵(calligraphy→서예) + EngService2 0건 키워드에만 KorService2 fallback + `_service` 태그로 detail 라우팅. 착수점: `sources/tourapi.py`(KorService2 base/함수), `orchestrator._fetch_keyword_pool`·`_fetch_and_normalize`(서비스 라우팅).
 
 **③ P1 완화 ladder 확장** (임팩트 中 / 작업량 小)
 - 지금은 '반경'만 확대. 반경 상한(5000m)에도 결과 부족하면 **시간창·관심사 strictness 완화** 단계 추가(각 단계 `notices` 투명 고지 — 기존 패턴 재사용).
@@ -378,7 +378,7 @@ LLM/임베딩은 **순서·발견·설명만**; 가격·시간·가용성·좌�
 사용자 테스트에서 드러난 챗 UX 3건 수정(추천 로직이 아니라 **챗 라우팅/입력처리** 계층):
 
 1. **멀티 인텐트 — `AGENT_LOOP` 기본 True** (`config.py`). off(단일 라우팅 `run_chat`)는 tool 하나만 불러 "루트 짜줘 **+** 팁 필요해?"의 2번째 의도(FAQ)를 버렸다. 루프는 `_present`가 추천+루트+답변을 **모두** 싣는다(`fed55ee`). 비용: 멀티 인텐트 턴은 단발 대비 ~2배 지연(메모 참고).
-2. **프롬프트 위치 우선 (A·B 모두)** — "I am at Myeongdong"처럼 프롬프트에 직접 밝힌 지명을 기본입력(앱 폼/컨텍스트)보다 우선. `domain/locations.detect_location_in_text`(결정론 — `_QUICK_COORDS` 테이블 매칭, 좌표 생성 아님; 미등록 지명은 None→기본입력 폴백). **두 지점에서 적용**: (a) 챗 루프 `_run_recommend_or_route`는 **원본 메시지**에서 감지, (b) `recommend_a`·`recommend_route`는 **`ctx.note`**에서 감지 → **폼 경로의 A/B도** 프롬프트 위치가 우선된다. 정밀 지오코딩은 미구현(테이블 밖은 폴백). **시간(time) 프롬프트 우선은 미구현** — 자유텍스트 시간 파싱은 신뢰경계(§6.3 임의 시간 생성 금지)상 별도 설계 필요(아래 §11).
+2. **프롬프트 위치 우선 (A·B 모두)** — "I am at Myeongdong"처럼 프롬프트에 직접 밝힌 지명을 기본입력(앱 폼/컨텍스트)보다 우선. `domain/locations.detect_location_in_text`(결정론 — `_QUICK_COORDS` 테이블 매칭, 좌표 생성 아님; 미등록 지명은 None→기본입력 폴백). **두 지점에서 적용**: (a) 챗 루프 `_run_recommend_or_route`는 **원본 메시지**에서 감지, (b) `recommend_a`·`recommend_route`는 **`ctx.note`**에서 감지 → **폼 경로의 A/B도** 프롬프트 위치가 우선된다. 정밀 지오코딩은 미구현(테이블 밖은 폴백). **시간(time) 프롬프트 우선은 구현됨** — 명시 종료시각/소요시간을 보수적 narrow로 반영(아래 §11).
 3. **입력 충돌 처리** — "indoor" + 궁궐/축제(실외) 모순을 조용히 해소하지 않는다.
    - **챗(루프)**: `CLARIFY`로 **되묻기**(`conflict_message`). 이미 물었으면(히스토리 마커) 재질문 안 함. 2-LLM 추출 편차로 orchestrator가 `preferences`에서 "indoor"를 누락하면 그 턴엔 생략될 수 있음. 클래리파이는 같은 턴 tip 답변을 함께 싣지 않음(다음 턴 해소).
    - **폼/즉시추천(`recommend_a`·`recommend_route`)**: 되묻지 않는 경로이므로 **투명 notice**(`conflict_notice`, Option 1)로 "왜 이런 결과인지" 알림. 양쪽 모두 `domain/conflict.io_interest_conflict` 재사용 — 신뢰/투명 기준을 경로 간 일치.
@@ -387,10 +387,12 @@ LLM/임베딩은 **순서·발견·설명만**; 가격·시간·가용성·좌�
 
 > fallback `chat_agent.run_chat`(AGENT_LOOP off)에는 위 2·3이 미적용 — 루프가 기본이라 방치. off로 돌리면 degraded.
 
-## 11. 미구현 — 시간(time) 프롬프트 우선 (다음 작업)
+## 11. 시간(time) 프롬프트 우선 — **구현됨 (2026-10-09)**
 
-위치처럼 **시간도 프롬프트가 기본입력보다 우선**해야 한다는 요구(2026-10-09). 위치는 완료(§10.2)지만 시간은 미착수 — 자유텍스트 시간은 위험·난이도가 더 크다:
-- **신뢰경계(§6.3):** 근거 없는 시간값 생성 금지. 시간은 가용성 판정의 핵심 사실이라 LLM이 함부로 설정하면 안 됨.
-- **모호성:** "this afternoon"은 구체 시각이 아님(오후=몇 시?). 상대·구어 표현 해석은 판단이 개입.
-- **안전한 범위(제안):** 사용자가 **명시적 시각/구간**을 말한 경우만 override — 예 "from 2pm to 6pm", "until 5pm", "I have 3 hours". `note_parser`에 선택적 `start_time`/`end_time`/`duration_minutes` 추출 필드 추가 → **기본입력 날짜 + tz** 로 구체 datetime 합성(결정론), 모호 표현("afternoon")은 무시(override 안 함). 적용 지점: 챗 루프/`recommend_*`의 ctx 구성 전. `validate_available_time`로 경계 검증.
-- 착수점: `agent/note_parser.py`(필드), `agent/agent_loop.py` `_run_recommend_or_route`(ctx.start_at/end_at override), `domain/input_validation.py`.
+위치처럼 **시간도 프롬프트가 기본입력보다 우선**해야 한다는 요구(2026-10-09). 위치는 §10.2, 시간은 이 절로 구현. 자유텍스트 시간은 신뢰·난이도가 커 **보수적(narrow-only)** 으로 좁혔다:
+- **신뢰경계(§6.3):** 근거 없는 시간값 생성 금지. 모호 표현("afternoon"·"evening"·"tonight")은 `note_parser`가 **비워 둔다**(override 안 함) — 구체 시각/구간만 추출.
+- **추출 필드:** `ParsedConditions.end_time`('HH:MM' 24h, "until 5pm"→'17:00')·`duration_minutes`("3 hours"→180). LLM은 **명시된 것만** 구조화(사실 생성 아님).
+- **적용(보수적 narrow):** `domain/timing.effective_end_at(start_at, form_end, end_time, duration_minutes)` — 명시값과 폼 종료 중 **더 이른 쪽(min)** 을 택해 가용창을 **좁히기만** 한다(없는 시간을 벌어 장소를 OPEN으로 오판하지 않게). 폼보다 **넓히지는 않음**(의도적 보수 — 둘이 충돌하면 '덜 가진' 쪽). 결과가 30분 미만/역전이면 폼 값 유지(무시, raise 안 함 — 루프 generic 핸들러가 모호 오류로 삼키지 않게).
+- **적용 지점(단일):** `orchestrator.recommend_a`에서 cond 확정 직후 `ctx.end_at`을 clamp(`model_copy`) → `judge_timing`·`available_minutes`에 자동 반영. 폼(`/recommend`)·챗(`run_chat`)·루프(`agent_loop`) **세 경로 모두** recommend_a를 거치므로 단일 지점으로 커버. trace `time_prompt`.
+- 파일: `models/recommend.py`(필드), `agent/note_parser.py`(프롬프트 규칙+예시), `domain/timing.py`(`effective_end_at`), `agent/orchestrator.py`(배선). 테스트: `tests/test_timing.py`(narrow/넓힘금지/30분미만/무효).
+- **남은 여지:** `start_time`(시작 시각 지정)은 미구현 — 현재는 종료만 좁힌다(시작 늦추기는 가용창 narrow와 방향이 같아 보수성 유지 위해 보류). 넓히는 override(폼보다 늦은 종료 허용)는 신뢰/검증 복잡도 때문에 의도적 제외.

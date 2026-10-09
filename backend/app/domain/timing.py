@@ -12,7 +12,7 @@ TourAPI 상세(detailIntro2)의 자유기술 운영시간/휴무를 파싱해 �
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import Any
 
@@ -282,6 +282,42 @@ def should_retry_hours_with_llm(verdict: TimingVerdict, reason: str) -> bool:
 def _hhmm(s: str | None) -> time | None:
     m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", s or "")
     return _to_time(int(m.group(1)), int(m.group(2))) if m else None
+
+
+_MIN_WINDOW = timedelta(minutes=30)
+
+
+def effective_end_at(
+    start_at: datetime,
+    form_end_at: datetime,
+    end_time: str | None,
+    duration_minutes: int | None,
+) -> tuple[datetime, str | None]:
+    """note 가 명시한 종료시각/소요시간으로 가용창을 '더 좁게'만 조정(보수적 narrow, §11).
+
+    가용시간을 과대평가하지 않도록 명시값과 폼 종료 중 **더 이른 쪽(min)** 을 택한다
+    (없는 시간을 벌어 장소를 OPEN 으로 오판하지 않게). 창을 넓히지는 않는다 — Request 우선
+    이되 '덜 가진' 쪽으로만 간다. note 값이 무효이거나 결과가 30분 미만/역전이면 폼 값을
+    유지(무시 — 사용자가 말하지 않은 시간을 지어내지 않고 추천도 막지 않는다. raise 하지 않음:
+    루프의 generic 핸들러가 모호한 오류로 삼키지 않게). 반환: (effective_end, applied|None).
+    applied 는 실제 적용된 근거('end_time'|'duration'), 미적용 시 None(trace 용).
+    """
+    candidates: list[tuple[datetime, str]] = []
+    t = _hhmm(end_time)
+    if t is not None:
+        candidates.append(
+            (datetime.combine(start_at.date(), t, tzinfo=start_at.tzinfo), "end_time")
+        )
+    if duration_minutes is not None and duration_minutes > 0:
+        candidates.append((start_at + timedelta(minutes=duration_minutes), "duration"))
+    if not candidates:
+        return form_end_at, None
+    end, source = min(candidates, key=lambda c: c[0])
+    if end >= form_end_at:  # 폼보다 넓히지 않음(보수적)
+        return form_end_at, None
+    if end - start_at < _MIN_WINDOW:  # 30분 미만/역전 → 무시(지어내지 않음, raise 안 함)
+        return form_end_at, None
+    return end, source
 
 
 def judge_extracted_hours(
