@@ -2,12 +2,20 @@
 // 선택은 '어디서 출발'만 정함 — 추천을 그 지역으로 한정하지 않는다(footer 고지).
 import { el, openSheet } from "./sheet.js";
 
+// 종로구·중구 대표 시작점 — 테스트·데모용 고정 좌표(공개 랜드마크). 좌표를 함께 넘겨
+// 선택 즉시 정확한 출발점이 전송된다(라벨 해석에 의존하지 않음).
 const POPULAR = [
-  "Gyeongbokgung Palace",
-  "Anguk · Insadong",
-  "City Hall · Deoksugung",
-  "Myeongdong",
-  "DDP",
+  { label: "Gyeongbokgung Palace", lat: 37.5796, lng: 126.977 },
+  { label: "Gwanghwamun Square", lat: 37.5724, lng: 126.9769 },
+  { label: "Anguk · Insadong", lat: 37.5742, lng: 126.9858 },
+  { label: "Bukchon Hanok Village", lat: 37.5826, lng: 126.985 },
+  { label: "Jonggak", lat: 37.5703, lng: 126.983 },
+  { label: "Jongmyo Shrine", lat: 37.5745, lng: 126.9941 },
+  { label: "City Hall", lat: 37.5663, lng: 126.9779 },
+  { label: "Deoksugung", lat: 37.5658, lng: 126.9751 },
+  { label: "Myeongdong", lat: 37.5637, lng: 126.985 },
+  { label: "Namsangol Hanok Village", lat: 37.5593, lng: 126.9942 },
+  { label: "Dongdaemun · DDP", lat: 37.5663, lng: 127.009 },
 ];
 
 const SEARCH_SVG =
@@ -71,15 +79,15 @@ export function openLocationSheet({ currentLabel, onPick }) {
     root.append(el("p", "loc-section-label", "POPULAR STARTING POINTS"));
     const chips = el("div", "loc-chips");
     const chipEls = [];
-    for (const name of POPULAR) {
-      const chip = el("button", "chip", name);
+    for (const place of POPULAR) {
+      const chip = el("button", "chip", place.label);
       chip.type = "button";
       chip.addEventListener("click", () => {
-        onPick(name, null);
+        onPick(place.label, { lat: place.lat, lng: place.lng });
         close();
       });
       chips.append(chip);
-      chipEls.push({ chip, name });
+      chipEls.push({ chip, name: place.label });
     }
     root.append(chips);
 
