@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from app.domain.normalize import (
-    _clean_title,
+    english_display,
     enrich_intro,
     normalize_candidate,
     normalize_hours,
@@ -95,20 +95,42 @@ def test_enrich_ignores_non_fee_rows():
     assert not out.get("usefee")
 
 
-# ── 제목 정리 ──
-def test_clean_title_strips_korean_parens():
-    assert _clean_title("Gyeongbokgung Palace (경복궁)") == "Gyeongbokgung Palace"
+# ── 제목 정리 (한글 제거, english_display) ──
+def test_english_display_strips_korean_parens():
+    assert english_display("Gyeongbokgung Palace (경복궁)") == "Gyeongbokgung Palace"
 
 
-def test_clean_title_nested_parens():
+def test_english_display_nested_parens():
     assert (
-        _clean_title("Dongdaemun Design Plaza (동대문디자인플라자 (DDP))")
+        english_display("Dongdaemun Design Plaza (동대문디자인플라자 (DDP))")
         == "Dongdaemun Design Plaza"
     )
 
 
-def test_clean_title_keeps_english_parens():
-    assert _clean_title("Museum (Main Hall)") == "Museum (Main Hall)"
+def test_english_display_keeps_english_parens():
+    assert english_display("Museum (Main Hall)") == "Museum (Main Hall)"
+
+
+def test_english_display_strips_square_bracket_korean():
+    # 사용자 보고 케이스 — 대괄호 안 한글(+중첩 소괄호) 제거.
+    assert (
+        english_display("Alive Museum (Insa-dong Branch) [박물관은 살아있다(인사동점)]")
+        == "Alive Museum (Insa-dong Branch)"
+    )
+
+
+def test_english_display_strips_leading_korean_run():
+    assert english_display("경복궁 Gyeongbokgung") == "Gyeongbokgung"
+
+
+def test_english_display_all_korean_keeps_original():
+    # 전부 한글(서울 행사 등)은 번역 없이 영문화 불가 → 원문 유지(빈 제목 방지).
+    assert english_display("서울서예박물관") == "서울서예박물관"
+
+
+def test_english_display_empty():
+    assert english_display(None) == ""
+    assert english_display("") == ""
 
 
 # ── 시간 ──

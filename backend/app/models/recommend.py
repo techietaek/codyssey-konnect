@@ -205,6 +205,9 @@ class Candidate(BaseModel):
     distance_m: int | None = None
     # P1 반경 확대로 편입된 후보 — 프론트가 '조금 떨어진 곳' 거리 라벨을 표시(투명).
     from_widened_search: bool = False
+    # AI 분류 근거 키워드(영문, 표시 전용) — 파이프라인이 실제로 산정한 분류 신호를 그대로
+    # 노출(유형·실내외·관심사·가격). 사실/가용성 판정에 쓰지 않는다(§6 — 순서·설명만).
+    signals: list[str] = Field(default_factory=list)
 
 
 class StartLocation(BaseModel):

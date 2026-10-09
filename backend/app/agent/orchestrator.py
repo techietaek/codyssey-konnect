@@ -46,6 +46,7 @@ from app.domain.preferences_merge import merge_saved_interests
 from app.domain.ranking import display_sort_key, io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import haversine_m
+from app.domain.signals import classification_signals
 from app.domain.status import resolve_status
 from app.domain.timing import (
     EventPeriod,
@@ -713,6 +714,13 @@ async def recommend_a(
     trace.step(
         "compose", kept=len(candidates), order=[c.status.value for c in candidates]
     )
+
+    # [signals] AI 분류 근거 키워드(표시 전용) — 파이프라인이 산정한 유형·실내외(LLM verdict
+    # 우선)·관심사·가격을 그대로 영문 키워드로 노출(§6 — 새 사실 생성 아님·판정에 되먹이지 않음).
+    for c in candidates:
+        c.signals = classification_signals(c, io_verdicts.get(c.id))
+    trace.step("signals", with_signals=sum(1 for c in candidates if c.signals))
+
     origin = StartLocation(label=start_loc.label, lat=lat, lng=lng)
     return RecommendData(
         candidates=candidates,

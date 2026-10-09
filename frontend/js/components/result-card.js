@@ -49,7 +49,31 @@ export function renderResultCard(c, origin, index = 0) {
   badge.dataset.status = c.status;
   headText.append(badge, el("h2", "card-title", c.title));
   head.append(thumb, headText);
-  card.append(head);
+
+  // AI 분류 근거 토글 — 우측 상단. 누르면 키워드 칩 행 on/off(다시 누르면 닫힘).
+  // 파이프라인이 산정한 분류 신호를 그대로 노출(개발자 검증 + 사용자 이해, 투명 UX).
+  if (c.signals?.length) {
+    const aiBtn = el("button", "ai-signals-btn", "✨");
+    aiBtn.type = "button";
+    aiBtn.title = "Why this is recommended — AI classification keywords";
+    aiBtn.setAttribute("aria-label", "Show AI classification keywords");
+    aiBtn.setAttribute("aria-expanded", "false");
+    head.append(aiBtn);
+
+    const signals = el("div", "signals");
+    signals.hidden = true;
+    for (const s of c.signals) signals.append(el("span", "signal", s));
+
+    aiBtn.addEventListener("click", () => {
+      const open = signals.hidden;
+      signals.hidden = !open;
+      aiBtn.setAttribute("aria-expanded", String(open));
+      aiBtn.classList.toggle("is-active", open);
+    });
+    card.append(head, signals);
+  } else {
+    card.append(head);
+  }
 
   // 2. Reasons (0~2) — teal check. 0개면 영역 생략.
   if (c.reasons?.length) {

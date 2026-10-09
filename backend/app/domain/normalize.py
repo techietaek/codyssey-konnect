@@ -98,10 +98,47 @@ def enrich_intro(
     return out
 
 
-def _clean_title(title: str | None) -> str:
-    """'English (한글…)' 끝의 한글 괄호 설명 제거 → 영문 우선(중첩 괄호 포함)."""
-    t = title or ""
-    return re.sub(r"\s*\(.*[가-힣].*\)\s*$", "", t).strip()
+# 한글(완성형·자모·호환자모) 문자 클래스. 표시 문자열에서 한글을 정확히 제거한다.
+_HANGUL = r"가-힣ᄀ-ᇿ㄰-㆏ꥠ-꥿ힰ-퟿"
+_HANGUL_RE = re.compile(f"[{_HANGUL}]")
+# 한글이 든 괄호 묶음(소/대/중/꺾쇠/모서리). 소괄호는 1단계 중첩까지 균형 매칭
+# ('동대문디자인플라자 (DDP)' 같은 내부 영문 괄호 포함 통째 제거), 나머지는 비탐욕 매칭.
+_BRACKET_PATS = (
+    re.compile(r"\s*\[[^\[\]]*\]"),
+    re.compile(r"\s*\((?:[^()]|\([^()]*\))*\)"),
+    re.compile(r"\s*\{[^{}]*\}"),
+    re.compile(r"\s*<[^<>]*>"),
+    re.compile(r"\s*「[^」]*」"),
+    re.compile(r"\s*『[^』]*』"),
+)
+_HANGUL_RUN_RE = re.compile(f"[{_HANGUL}]+(?:[\\s·]+[{_HANGUL}]+)*")
+_LATIN_RE = re.compile(r"[A-Za-z0-9]")
+
+
+def english_display(text: str | None) -> str:
+    """표시 문자열에서 한글을 정확히 제거해 영문 우선 표기로 만든다(정규식, 생성 아님).
+
+    예: 'Alive Museum (Insa-dong Branch) [박물관은 살아있다(인사동점)]'
+        → 'Alive Museum (Insa-dong Branch)'.
+    1) 한글이 든 괄호 묶음 제거(영문만 든 괄호는 보존), 2) 남은 한글 런 제거,
+    3) 빈 괄호·중복 공백·양끝 구분자 정리. 결과에 영문/숫자가 하나도 없으면(전부 한글 제목 등)
+    원문을 유지한다(빈 카드 방지 — 번역은 별개 문제).
+    """
+    t = text or ""
+    # 1) 한글 포함 괄호 묶음 제거(2회 반복 — 중첩 잔여 대응). 영문만 든 괄호는 유지.
+    for _ in range(2):
+        for pat in _BRACKET_PATS:
+            t = pat.sub(lambda m: "" if _HANGUL_RE.search(m.group()) else m.group(), t)
+    # 2) 괄호 밖에 남은 한글 런 제거.
+    t = _HANGUL_RUN_RE.sub(" ", t)
+    # 3) 정리: 빈 괄호·중복 공백·괄호 안쪽 공백·양끝 구분자.
+    t = re.sub(r"[\(\[\{<「『]\s*[\)\]\}>」』]", "", t)
+    t = re.sub(r"\s+([)\]\}>」』])", r"\1", t)
+    t = re.sub(r"([(\[\{<「『])\s+", r"\1", t)
+    t = re.sub(r"\s{2,}", " ", t).strip(" \t-·,/|")
+    t = t.strip()
+    # 전부 한글이라 남은 영문/숫자가 없으면 원문 유지(빈 제목 방지).
+    return t if _LATIN_RE.search(t) else (text or "").strip()
 
 
 def _strip_html(s: str | None) -> str:
@@ -296,13 +333,14 @@ def _seoul_price_text(row: dict[str, Any]) -> str:
 def normalize_seoul_event(row: dict[str, Any]) -> Candidate | None:
     """서울문화포털 행사 row → Candidate. 좌표 이상치는 None(drop).
 
-    제목은 국문 그대로 노출(E1 — 영문화는 agentic 롤아웃 4단계). 출처 배지 source='seoul'.
+    제목은 english_display 로 한글 제거(표시 영문화). 단 전부-한글 제목은 번역이 없어
+    원문 유지로 폴백한다(빈 제목 방지 — 영문화는 별도 과제). 출처 배지 source='seoul'.
     """
     coords = _valid_seoul_coords(row)
     if coords is None:
         return None
     lat, lng = coords
-    title = str(row.get("TITLE") or "").strip()
+    title = english_display(row.get("TITLE"))
     if not title:
         return None
 
@@ -351,7 +389,7 @@ def normalize_candidate(
     if coords is None:
         return None
     lat, lng = coords
-    title = _clean_title(item.get("title"))
+    title = english_display(item.get("title"))
     if not title:
         return None
 
