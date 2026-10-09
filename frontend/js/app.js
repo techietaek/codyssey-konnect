@@ -12,7 +12,8 @@ import { renderResultsView } from "./pages/results.js";
 import { renderChatView } from "./pages/chat.js";
 import { renderOnboardingView } from "./pages/onboarding.js";
 import { renderMyPageView } from "./pages/mypage.js";
-import { setResults } from "./state.js";
+import { renderChoiceView } from "./pages/choice.js";
+import { loadChoice, setResults } from "./state.js";
 
 const viewEl = document.getElementById("view");
 const WELCOME_KEY = "konnect.seenWelcome";
@@ -33,7 +34,7 @@ export function showHome() {
     renderHomeView({
       onStartA: () => showInput(),
       onOpenChat: showChat,
-      onViewChoice: showResults,
+      onViewChoice: showSavedChoice,
       onOpenMyPage: showMyPage,
     }),
     { fullBleed: true },
@@ -47,7 +48,40 @@ export function showChat() {
 
 // My Page (L3) — 로그인 사용자만 진입(홈 Account). 뒤로=홈, 선택 보기=결과.
 export function showMyPage() {
-  mount(renderMyPageView({ onBack: showHome, onViewChoice: showResults }));
+  mount(renderMyPageView({ onBack: showHome, onViewChoice: showSavedChoice }));
+}
+
+// LF-09 선택 상세. saved=false(저장 전, Select 직후) / true(저장됨, 홈·마이페이지 진입).
+export function showChoice({ candidate, request, env, saved, onBack }) {
+  mount(
+    renderChoiceView({
+      candidate,
+      request,
+      env,
+      saved,
+      onBack: onBack || (() => showResults({ request, env })),
+      onHome: showHome,
+      onSeeMap: () => showResults({ request, env }),
+      onFindOther: () => showInput(request),
+      onBackToResults: () => showResults({ request, env }),
+    }),
+  );
+}
+
+// 저장된 현재 선택 보기(홈·마이페이지 카드 → "Your current choice"). loadChoice 자립.
+export function showSavedChoice() {
+  const saved = loadChoice();
+  const candidate = saved?.env?.data?.candidates?.find(
+    (c) => c.id === saved.candidateId,
+  );
+  if (!candidate) return showHome();
+  showChoice({
+    candidate,
+    request: saved.request,
+    env: saved.env,
+    saved: true,
+    onBack: showHome,
+  });
 }
 
 export function showInput(prefill) {
@@ -122,6 +156,18 @@ export function showResults({ request, env }) {
       onBack: showHome,
       onHome: showHome,
       onEdit: () => showInput(request),
+      // Select experience → 저장 전 상세(LF-09). 저장은 거기 "Save choice"에서.
+      onSelect: (id) => {
+        const candidate = env.data.candidates.find((c) => c.id === id);
+        if (candidate)
+          showChoice({
+            candidate,
+            request,
+            env,
+            saved: false,
+            onBack: () => showResults({ request, env }),
+          });
+      },
     }),
     { fullBleed: true },
   );

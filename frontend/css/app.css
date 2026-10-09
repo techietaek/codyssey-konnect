@@ -246,6 +246,30 @@ body {
   font-size: var(--fs-body); font-weight: var(--fw-semibold); box-shadow: var(--shadow-card-focus);
   z-index: 10;
 }
+/* 저장 toast (LF-09 9-1s) — 상단 리치 토스트: 체크 + 제목 + 보조. */
+.toast--rich { bottom: auto; top: calc(var(--space-14) + env(safe-area-inset-top, 0px)); left: var(--space-14); right: var(--space-14); transform: none; display: flex; align-items: flex-start; gap: var(--space-10); border-radius: var(--r-md); padding: var(--space-12) var(--space-14); }
+.toast--rich .toast-check { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--r-full); background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: var(--fw-bold); }
+.toast--rich .toast-text { display: flex; flex-direction: column; gap: 2px; }
+.toast--rich .toast-text strong { font-size: var(--fs-meta); font-weight: var(--fw-bold); }
+.toast--rich .toast-text span { font-size: var(--fs-body); color: rgba(255, 255, 255, 0.8); font-weight: var(--fw-medium); }
+
+/* LF-09 · 선택 상세 (저장 전 "Your pick" / 저장 후 "Your current choice") */
+.choice-view { flex: 1; display: flex; flex-direction: column; }
+.choice-body { display: flex; flex-direction: column; gap: var(--space-10); margin-top: var(--space-10); }
+.choice-stamp { margin: 0; font-size: var(--fs-badge); font-weight: var(--fw-semibold); letter-spacing: 0.06em; color: var(--c-text-muted); }
+.choice-title { margin: 0; font-size: 22px; line-height: var(--lh-tight); font-weight: var(--fw-bold); }
+.choice-view .badge { align-self: flex-start; }
+.choice-facts { display: flex; flex-direction: column; gap: var(--space-8); background: var(--c-bg); border-radius: var(--r-md); padding: var(--space-12) var(--space-14); margin-top: var(--space-4); }
+.choice-fact { display: flex; gap: var(--space-12); align-items: baseline; }
+.choice-fact-k { flex: 0 0 92px; font-size: var(--fs-meta); color: var(--c-text-muted); }
+.choice-fact-v { flex: 1; min-width: 0; font-size: var(--fs-meta); font-weight: var(--fw-bold); color: var(--c-text); }
+.choice-fact-chip { display: inline-block; background: var(--c-check-bg); color: var(--c-check-text); border-radius: var(--r-flag); padding: var(--space-2) var(--space-8); font-size: var(--fs-badge); font-weight: var(--fw-semibold); }
+.choice-note { margin: var(--space-4) 0 0; background: var(--c-bg); border-radius: var(--r-md); padding: var(--space-12) var(--space-14); font-size: var(--fs-body); color: var(--c-text-muted); line-height: 1.4; }
+.choice-actions { display: flex; flex-direction: column; gap: var(--space-8); margin-top: var(--space-6); }
+.choice-actions > button { width: 100%; }
+.btn-outline-pill { min-height: 44px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-pill); color: var(--c-text); font-size: var(--fs-body); font-weight: var(--fw-bold); cursor: pointer; padding: var(--space-10) var(--space-14); }
+.btn-outline-pill:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-outline-pill:disabled { opacity: 0.5; cursor: default; }
 
 /* ── 인터랙션 (hover / press 색 반전·전환 피드백) ───────────── */
 .btn-cta, .btn-geo, .btn-select, .chip, .conditions button {

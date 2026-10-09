@@ -4,7 +4,7 @@
 import { directionsUrl, renderResultCard } from "../components/result-card.js";
 import { showLoginSheet } from "../components/login-sheet.js";
 import { renderMap } from "../map.js";
-import { isLoggedIn, loadChoice, saveChoice, state } from "../state.js";
+import { isLoggedIn, loadChoice, state } from "../state.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -57,7 +57,7 @@ const reduceMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
 
-export function renderResultsView({ request, env, onBack, onHome, onEdit }) {
+export function renderResultsView({ request, env, onBack, onHome, onEdit, onSelect }) {
   const root = el("section", "results-view");
   const data = env.data;
   const cands = data.candidates;
@@ -317,9 +317,7 @@ export function renderResultsView({ request, env, onBack, onHome, onEdit }) {
   carousel.addEventListener("click", (e) => {
     const btn = e.target.closest(".btn-select");
     if (btn) {
-      saveChoice(request, env, btn.dataset.id); // 비로그인 영속
-      markConfirmed(btn.dataset.id);
-      showToast("Current choice set");
+      onSelect?.(btn.dataset.id); // 저장 전 상세(LF-09)로 — 저장은 거기 "Save choice".
       return;
     }
     if (e.target.closest("a")) return;
