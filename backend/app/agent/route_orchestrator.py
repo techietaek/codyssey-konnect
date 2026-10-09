@@ -262,7 +262,7 @@ async def recommend_route(
     for s in stops:
         t, b = verdicts.get(s.id, (TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN))
         s.reasons = select_reasons(s, cond, t, b, is_nearest=False)
-        s.signals = classification_signals(s)
+        s.signals = classification_signals(s, cond)
     if len(stops) < 2:
         trace.step("route_unmet", reason="under_2_stops", feasible=len(feasible))
         return RouteData(

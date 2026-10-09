@@ -150,6 +150,17 @@ class Reason(BaseModel):
     text: str
 
 
+class ClassificationSignal(BaseModel):
+    """AI 분류 근거 키워드 1개(표시 전용). matched=사용자 요청과 일치한 분류(녹색 강조).
+
+    label 은 영문 키워드(예: 'exhibition','indoor'). matched 는 이 분류가 사용자가 명시한
+    조건(관심사·실내외·무료)과 맞는지 — 기본 분류(흰색)와 요청 매칭(녹색)을 UI 가 구분한다.
+    """
+
+    label: str
+    matched: bool = False
+
+
 class TimeInfo(BaseModel):
     display: str
     provenance: Provenance
@@ -207,7 +218,8 @@ class Candidate(BaseModel):
     from_widened_search: bool = False
     # AI 분류 근거 키워드(영문, 표시 전용) — 파이프라인이 실제로 산정한 분류 신호를 그대로
     # 노출(유형·실내외·관심사·가격). 사실/가용성 판정에 쓰지 않는다(§6 — 순서·설명만).
-    signals: list[str] = Field(default_factory=list)
+    # 각 신호는 label + matched(사용자 요청 일치 여부 — UI 가 흰색/녹색으로 구분).
+    signals: list[ClassificationSignal] = Field(default_factory=list)
 
 
 class StartLocation(BaseModel):

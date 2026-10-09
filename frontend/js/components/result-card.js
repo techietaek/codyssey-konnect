@@ -36,9 +36,16 @@ export function aiSignalsToggle(signals, { inline = false } = {}) {
 
   const row = el("div", "signals");
   row.hidden = true;
-  for (const s of signals) row.append(el("span", "signal", s));
+  for (const s of signals) {
+    // 매칭된 분류(사용자 요청 일치)는 녹색, 기본 분류는 흰색.
+    const chip = el("span", "signal", s.label);
+    if (s.matched) chip.classList.add("is-matched");
+    row.append(chip);
+  }
 
-  button.addEventListener("click", () => {
+  button.addEventListener("click", (e) => {
+    // 상위 카드 클릭 핸들러(포커스·스크롤·재요청)로 버블링되지 않게 — 토글만 수행.
+    e.stopPropagation();
     const open = row.hidden;
     row.hidden = !open;
     button.setAttribute("aria-expanded", String(open));

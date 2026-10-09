@@ -124,8 +124,14 @@ def test_english_display_strips_leading_korean_run():
 
 
 def test_english_display_all_korean_keeps_original():
-    # 전부 한글(서울 행사 등)은 번역 없이 영문화 불가 → 원문 유지(빈 제목 방지).
+    # 전부 한글(서울 행사 등)은 영문 이름이 없어 영문화 불가 → 원문 유지(지우지 않음).
     assert english_display("서울서예박물관") == "서울서예박물관"
+
+
+def test_english_display_korean_name_with_year_keeps_original():
+    # 축제명이 한글 + 연도 숫자뿐이면 '2026'으로 지우지 않고 원문(한글) 유지.
+    assert english_display("서울빛초롱축제 2026") == "서울빛초롱축제 2026"
+    assert english_display("2026 서울거리공연") == "2026 서울거리공연"
 
 
 def test_english_display_empty():

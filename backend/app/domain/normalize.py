@@ -112,7 +112,8 @@ _BRACKET_PATS = (
     re.compile(r"\s*『[^』]*』"),
 )
 _HANGUL_RUN_RE = re.compile(f"[{_HANGUL}]+(?:[\\s·]+[{_HANGUL}]+)*")
-_LATIN_RE = re.compile(r"[A-Za-z0-9]")
+# 영문 '이름'이 남았는지 — 숫자·기호만으론 이름이 못 되므로 ASCII 글자 기준으로 본다.
+_LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
 
 
 def english_display(text: str | None) -> str:
@@ -121,8 +122,9 @@ def english_display(text: str | None) -> str:
     예: 'Alive Museum (Insa-dong Branch) [박물관은 살아있다(인사동점)]'
         → 'Alive Museum (Insa-dong Branch)'.
     1) 한글이 든 괄호 묶음 제거(영문만 든 괄호는 보존), 2) 남은 한글 런 제거,
-    3) 빈 괄호·중복 공백·양끝 구분자 정리. 결과에 영문/숫자가 하나도 없으면(전부 한글 제목 등)
-    원문을 유지한다(빈 카드 방지 — 번역은 별개 문제).
+    3) 빈 괄호·중복 공백·양끝 구분자 정리. 결과에 **영문 글자(A-Z)** 가 남지 않으면
+    (한글 이름 + 연도 숫자만 남는 '2026' 같은 경우 포함) 원문을 그대로 유지한다 — 이름을
+    숫자·빈칸으로 지워버리지 않는다(사용자 요청: 적절히 지울 수 없으면 한글 그대로).
     """
     t = text or ""
     # 1) 한글 포함 괄호 묶음 제거(2회 반복 — 중첩 잔여 대응). 영문만 든 괄호는 유지.
@@ -137,8 +139,8 @@ def english_display(text: str | None) -> str:
     t = re.sub(r"([(\[\{<「『])\s+", r"\1", t)
     t = re.sub(r"\s{2,}", " ", t).strip(" \t-·,/|")
     t = t.strip()
-    # 전부 한글이라 남은 영문/숫자가 없으면 원문 유지(빈 제목 방지).
-    return t if _LATIN_RE.search(t) else (text or "").strip()
+    # 영문 이름이 남지 않으면(한글 제목·숫자만 남는 경우 포함) 원문 유지(이름을 지우지 않음).
+    return t if _LATIN_LETTER_RE.search(t) else (text or "").strip()
 
 
 def _strip_html(s: str | None) -> str:
@@ -333,8 +335,8 @@ def _seoul_price_text(row: dict[str, Any]) -> str:
 def normalize_seoul_event(row: dict[str, Any]) -> Candidate | None:
     """서울문화포털 행사 row → Candidate. 좌표 이상치는 None(drop).
 
-    제목은 english_display 로 한글 제거(표시 영문화). 단 전부-한글 제목은 번역이 없어
-    원문 유지로 폴백한다(빈 제목 방지 — 영문화는 별도 과제). 출처 배지 source='seoul'.
+    제목은 english_display 로 한글 제거(표시 영문화). 단 영문 이름이 남지 않으면(한글
+    축제명 등) 원문 한글을 그대로 유지한다(이름을 지우지 않음). 출처 배지 source='seoul'.
     """
     coords = _valid_seoul_coords(row)
     if coords is None:

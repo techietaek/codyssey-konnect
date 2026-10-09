@@ -718,7 +718,7 @@ async def recommend_a(
     # [signals] AI 분류 근거 키워드(표시 전용) — 파이프라인이 산정한 유형·실내외(LLM verdict
     # 우선)·관심사·가격을 그대로 영문 키워드로 노출(§6 — 새 사실 생성 아님·판정에 되먹이지 않음).
     for c in candidates:
-        c.signals = classification_signals(c, io_verdicts.get(c.id))
+        c.signals = classification_signals(c, cond, io_verdicts.get(c.id))
     trace.step("signals", with_signals=sum(1 for c in candidates if c.signals))
 
     origin = StartLocation(label=start_loc.label, lat=lat, lng=lng)

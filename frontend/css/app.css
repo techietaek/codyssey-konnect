@@ -213,12 +213,17 @@ body {
 .card-head:has(.ai-signals-btn) { padding-right: 30px; }
 /* 루트 스톱 제목줄 안에서는 absolute 대신 인라인으로 우측 배치. */
 .ai-signals-btn--inline { position: static; margin-left: auto; width: 24px; height: 24px; font-size: 12px; }
-/* 분류 근거 키워드 칩 — 사실(meta) 과 구분되는 연한 teal 칩. */
+/* 분류 근거 키워드 칩 — 기본 분류는 흰색(테두리), 사용자 요청과 매칭된 분류는 녹색(Fits 계열). */
 .signals { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+/* hidden 속성이 display:flex 에 눌리지 않게 — 토글 전엔 숨김(AI 버튼 눌러야 표시). */
+.signals[hidden] { display: none; }
 .signal {
   padding: var(--space-3) var(--space-8); border-radius: var(--r-flag);
-  background: var(--c-primary-tint); color: var(--c-primary-ink);
+  background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border);
   font-size: var(--fs-badge); font-weight: var(--fw-semibold);
+}
+.signal.is-matched {
+  background: var(--c-fits-bg); color: var(--c-fits-text); border-color: transparent;
 }
 
 .actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); }

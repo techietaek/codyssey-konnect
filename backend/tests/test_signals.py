@@ -1,4 +1,4 @@
-"""AI 분류 근거 키워드 테스트 (표시 전용, 신뢰: 산정된 분류만 노출)."""
+"""AI 분류 근거 키워드 테스트 (표시 전용, 신뢰: 산정된 분류만 노출 + 요청 매칭 플래그)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from app.domain.signals import classification_signals
 from app.models.recommend import (
     Candidate,
     ExperienceType,
+    InterestCode,
+    ParsedConditions,
     PriceInfo,
     PriceStatus,
     Provenance,
@@ -25,58 +27,94 @@ def _cand(etype, price_status=PriceStatus.UNKNOWN):
     )
 
 
+def _labels(signals):
+    return [s.label for s in signals]
+
+
+def _matched(signals):
+    return {s.label for s in signals if s.matched}
+
+
 def test_exhibition_indoor_heuristic():
     # 전시 유형 → exhibition·art + 유형 휴리스틱 indoor(verdict 없음).
-    sig = classification_signals(_cand(ExperienceType.EXHIBITION))
-    assert sig[0] == "exhibition"
-    assert "art" in sig
-    assert "indoor" in sig
+    labels = _labels(classification_signals(_cand(ExperienceType.EXHIBITION)))
+    assert labels[0] == "exhibition"
+    assert "art" in labels
+    assert "indoor" in labels
 
 
 def test_llm_verdict_overrides_heuristic():
-    # LLM verdict(outdoor)가 유형 휴리스틱(indoor)보다 우선.
-    sig = classification_signals(
-        _cand(ExperienceType.EXHIBITION), io_verdict="outdoor"
+    labels = _labels(
+        classification_signals(_cand(ExperienceType.EXHIBITION), io_verdict="outdoor")
     )
-    assert "outdoor" in sig
-    assert "indoor" not in sig
+    assert "outdoor" in labels
+    assert "indoor" not in labels
 
 
 def test_historic_visit_signals():
-    sig = classification_signals(_cand(ExperienceType.HISTORIC_VISIT))
-    assert "historic site" in sig
-    assert "palace & historic" in sig
-    assert "traditional" in sig
-    assert "outdoor" in sig  # 유형 휴리스틱
+    labels = _labels(classification_signals(_cand(ExperienceType.HISTORIC_VISIT)))
+    assert "historic site" in labels
+    assert "palace & historic" in labels
+    assert "traditional" in labels
+    assert "outdoor" in labels  # 유형 휴리스틱
 
 
 def test_price_free_paid():
-    assert "free" in classification_signals(
-        _cand(ExperienceType.EXHIBITION, PriceStatus.FREE)
+    assert "free" in _labels(
+        classification_signals(_cand(ExperienceType.EXHIBITION, PriceStatus.FREE))
     )
-    assert "paid" in classification_signals(
-        _cand(ExperienceType.EXHIBITION, PriceStatus.PAID)
+    assert "paid" in _labels(
+        classification_signals(_cand(ExperienceType.EXHIBITION, PriceStatus.PAID))
     )
-    # unknown 가격은 키워드 없음(지어내지 않음).
-    assert "free" not in classification_signals(
-        _cand(ExperienceType.EXHIBITION, PriceStatus.UNKNOWN)
+    assert "free" not in _labels(
+        classification_signals(_cand(ExperienceType.EXHIBITION, PriceStatus.UNKNOWN))
     )
 
 
 def test_dedup_and_cap():
-    # performance 유형 + live_performances 관심사 → 'performance' 한 번만.
     sig = classification_signals(_cand(ExperienceType.PERFORMANCE))
-    assert sig.count("performance") == 1
+    assert _labels(sig).count("performance") == 1
     assert len(sig) <= 5
 
 
 def test_default_type_no_fabricated_type_keyword():
-    sig = classification_signals(_cand(ExperienceType.DEFAULT))
-    # default 는 유형 키워드·휴리스틱 실내외 없음 — 가격만(여기선 unknown → 빈 리스트).
-    assert sig == []
+    assert classification_signals(_cand(ExperienceType.DEFAULT)) == []
 
 
 def test_signals_are_english_only():
     for etype in ExperienceType:
-        for kw in classification_signals(_cand(etype, PriceStatus.FREE)):
-            assert all(ord(ch) < 128 for ch in kw), kw
+        for s in classification_signals(_cand(etype, PriceStatus.FREE)):
+            assert all(ord(ch) < 128 for ch in s.label), s.label
+
+
+# ── matched 플래그 (사용자 요청 일치 → 녹색) ──
+def test_no_cond_nothing_matched():
+    sig = classification_signals(_cand(ExperienceType.EXHIBITION, PriceStatus.FREE))
+    assert _matched(sig) == set()  # 요청 없음 → 전부 기본(흰색)
+
+
+def test_interest_match_marks_type_and_interest():
+    cond = ParsedConditions(interests=[InterestCode.ART_EXHIBITIONS])
+    sig = classification_signals(_cand(ExperienceType.EXHIBITION), cond)
+    m = _matched(sig)
+    assert "exhibition" in m  # 유형이 요청 관심사를 충족
+    assert "art" in m  # 관심사 카테고리 직접 일치
+    assert "indoor" not in m  # 실내외는 요청 안 함
+
+
+def test_indoor_request_marks_indoor():
+    cond = ParsedConditions(indoor_outdoor="indoor")
+    sig = classification_signals(_cand(ExperienceType.EXHIBITION), cond)
+    assert "indoor" in _matched(sig)
+
+
+def test_outdoor_request_does_not_match_indoor_place():
+    cond = ParsedConditions(indoor_outdoor="outdoor")
+    sig = classification_signals(_cand(ExperienceType.EXHIBITION), cond)
+    assert "indoor" not in _matched(sig)  # 장소는 indoor, 요청은 outdoor → 불일치
+
+
+def test_free_only_marks_free():
+    cond = ParsedConditions(free_only=True)
+    sig = classification_signals(_cand(ExperienceType.EXHIBITION, PriceStatus.FREE), cond)
+    assert "free" in _matched(sig)
