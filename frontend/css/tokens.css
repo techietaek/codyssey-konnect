@@ -40,6 +40,7 @@
   --fw-semibold: 600;
   --fw-medium: 500;
 
+  --fs-input: 16px;    /* 텍스트 입력(자연어·챗·검색) — 모바일 16px(iOS 포커스 확대 방지, 07 가이드) */
   --fs-title: 16px;    /* 카드 제목·결과 타이틀 */
   --fs-meta: 13px;     /* 시간·가격·이동 Fact */
   --fs-body: 12px;     /* 추천 이유·링크·버튼 */

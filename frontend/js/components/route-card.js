@@ -2,7 +2,7 @@
 // 헤드라인·날짜/시간 → WHY THIS ROUTE(루트 상태) → 확인필요 요약 → 범례 →
 // 타임라인(Start→구간→스톱, 스톱별 이유·사실·Remove) → 종료 → 총계.
 // 체류시간은 주장하지 않는다(B-T01) — 각 스톱 '예정 분'은 표기 안 함.
-import { TYPE_GLYPH, aiSignalsToggle } from "./result-card.js";
+import { TYPE_GLYPH } from "./result-card.js";
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
@@ -69,13 +69,7 @@ function stopRow(stop, onRemove) {
     badge,
   );
   body.append(titleLine);
-
-  // AI 분류 근거 토글 — 제목줄 우측(inline). 누르면 키워드 칩 행이 토글된다(추천 카드와 동일).
-  if (c.signals?.length) {
-    const { button, row } = aiSignalsToggle(c.signals, { inline: true });
-    titleLine.append(button);
-    body.append(row);
-  }
+  // 분류 근거(signals)는 루트 요약 아래 "✦ AI" 배지로 통합(10/8) — per-stop ✨ 제거.
 
   // 스톱별 이유(코스 "왜 이 장소") — teal check, 0개면 생략
   if (c.reasons?.length) {
@@ -153,6 +147,40 @@ export function renderRouteCard(route, origin, opts = {}) {
   const stopNames = route.stops.map((s) => s.candidate.title).join(" · ");
   head.append(el("p", "route-stop-summary", stopNames));
   card.append(head);
+
+  // ✦ AI 배지(요약 아래, 10/8 §3) — 탭하면 AI 고지 + 스톱별 분류 칩 펼침(통합, 밀도↓).
+  const sigStops = route.stops.filter((s) => s.candidate?.signals?.length);
+  if (sigStops.length) {
+    const aiWrap = el("div", "route-ai");
+    const aiBtn = el("button", "ai-badge");
+    aiBtn.type = "button";
+    aiBtn.innerHTML = '<span class="ai-badge-spark" aria-hidden="true">✦</span> AI';
+    aiBtn.setAttribute("aria-expanded", "false");
+    aiBtn.setAttribute("aria-label", "About this AI route");
+    const panel = el("div", "ai-panel");
+    panel.hidden = true;
+    panel.append(
+      el("p", "ai-panel-note", "AI-assisted · details may change as info updates"),
+    );
+    for (const s of sigStops) {
+      panel.append(el("p", "ai-panel-sub", `${s.order}. ${s.candidate.title}`));
+      const chips = el("div", "signals");
+      for (const sig of s.candidate.signals) {
+        const chip = el("span", "signal", sig.label);
+        if (sig.matched) chip.classList.add("is-matched");
+        chips.append(chip);
+      }
+      panel.append(chips);
+    }
+    aiBtn.addEventListener("click", () => {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      aiBtn.setAttribute("aria-expanded", String(open));
+      aiBtn.classList.toggle("is-active", open);
+    });
+    aiWrap.append(aiBtn, panel);
+    card.append(aiWrap);
+  }
 
   // ── WHY THIS ROUTE + 루트 상태 ──
   const why = el("div", "route-why");

@@ -123,7 +123,8 @@ body {
 
 /* 하단 CTA */
 .cta {
-  position: sticky; bottom: 0; margin-top: auto; padding-top: var(--space-12);
+  position: sticky; bottom: 0; margin-top: auto;
+  padding-top: var(--space-12); padding-bottom: env(safe-area-inset-bottom, 0px);
   background: linear-gradient(to top, var(--c-bg) 70%, transparent);
 }
 .btn-cta {
@@ -472,7 +473,7 @@ body {
 /* 자연어 입력 카드 + sparkle 푸터 */
 .nl-input { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-md); padding: var(--space-14); display: flex; flex-direction: column; gap: var(--space-10); }
 .nl-input:focus-within { border-color: var(--c-primary); box-shadow: 0 0 0 1px var(--c-primary); }
-.nl-textarea { font-family: inherit; font-size: var(--fs-meta); color: var(--c-text); border: 0; outline: none; resize: none; min-height: 96px; width: 100%; background: none; }
+.nl-textarea { font-family: inherit; font-size: var(--fs-input); color: var(--c-text); border: 0; outline: none; resize: none; min-height: 96px; width: 100%; background: none; }
 .nl-footer { display: flex; align-items: center; gap: var(--space-6); font-size: var(--fs-badge); color: var(--c-text-muted); }
 .nl-sparkle { display: flex; color: var(--c-primary); }
 .nl-sparkle svg { width: 14px; height: 14px; }
@@ -543,6 +544,9 @@ body {
 .count-pill { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-6) var(--space-12); font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-text); }
 .directions-chip { min-height: 28px; display: inline-flex; align-items: center; gap: 3px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-6) var(--space-12); font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--c-primary); cursor: pointer; }
 .directions-chip:hover { border-color: var(--c-primary); }
+/* 루트 카드 안의 ✦ AI(요약 아래) — 패널은 카드 폭에 맞춰 margin 0. */
+.route-ai { display: flex; flex-direction: column; gap: var(--space-6); margin-top: var(--space-6); }
+.route-ai .ai-panel { margin: 0; }
 
 .carousel { display: flex; gap: var(--space-12); overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 28px; padding: var(--space-4) var(--space-14) var(--space-2); scrollbar-width: none; }
 .carousel::-webkit-scrollbar { display: none; }
@@ -702,7 +706,7 @@ body {
 .loc-search { display: flex; align-items: center; gap: var(--space-8); background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-flag); padding: var(--space-10) var(--space-12); }
 .loc-search:focus-within { border-color: var(--c-primary); }
 .loc-search-icon { display: flex; color: var(--c-text-muted); }
-.loc-search-input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-family: inherit; font-size: var(--fs-meta); color: var(--c-text); }
+.loc-search-input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-family: inherit; font-size: var(--fs-input); color: var(--c-text); }
 .loc-current { display: flex; align-items: center; gap: var(--space-12); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-md); padding: var(--space-12) var(--space-14); cursor: pointer; text-align: left; font-family: inherit; }
 .loc-current.is-selected { border-color: var(--c-primary); box-shadow: 0 0 0 1px var(--c-primary); }
 .loc-radio { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--c-primary); position: relative; }
@@ -842,7 +846,7 @@ body {
 .chat-suggest-chip:hover { border-color: var(--c-primary); color: var(--c-primary); }
 
 .chat-input-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: var(--space-8); padding: var(--space-8) var(--space-14) calc(var(--space-12) + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--c-border); background: var(--c-bg); }
-.chat-textarea { flex: 1 1 auto; font-family: inherit; font-size: var(--fs-body); color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-8) var(--space-12); resize: none; outline: none; max-height: 120px; }
+.chat-textarea { flex: 1 1 auto; font-family: inherit; font-size: var(--fs-input); color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-card); padding: var(--space-8) var(--space-12); resize: none; outline: none; max-height: 120px; }
 .chat-textarea:focus { border-color: var(--c-primary); }
 .chat-send { flex: 0 0 auto; width: 40px; height: 40px; border-radius: var(--r-full); border: 0; background: var(--c-primary); color: var(--c-on-primary); font-size: 18px; font-weight: var(--fw-bold); cursor: pointer; }
 .chat-send:hover { opacity: 0.92; }
