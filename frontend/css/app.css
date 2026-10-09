@@ -211,6 +211,8 @@ body {
 .ai-signals-btn.is-active { background: var(--c-primary); color: var(--c-on-primary); border-color: var(--c-primary); }
 /* 버튼이 있는 카드 헤더는 우측에 공간을 둬 긴 제목이 버튼 아래로 겹치지 않게. */
 .card-head:has(.ai-signals-btn) { padding-right: 30px; }
+/* 루트 스톱 제목줄 안에서는 absolute 대신 인라인으로 우측 배치. */
+.ai-signals-btn--inline { position: static; margin-left: auto; width: 24px; height: 24px; font-size: 12px; }
 /* 분류 근거 키워드 칩 — 사실(meta) 과 구분되는 연한 teal 칩. */
 .signals { display: flex; flex-wrap: wrap; gap: var(--space-6); }
 .signal {

@@ -24,6 +24,29 @@ function el(tag, className, text) {
   return node;
 }
 
+// AI 분류 근거 토글 — ✨ 버튼 + 키워드 칩 행(표시 전용). 추천 카드·루트 스톱 공용.
+// 파이프라인이 산정한 분류 신호(signals)를 그대로 노출(개발자 검증 + 사용자 이해, 투명 UX).
+// inline=true 면 absolute 대신 인라인(루트 스톱 제목줄 우측)으로 배치한다.
+export function aiSignalsToggle(signals, { inline = false } = {}) {
+  const button = el("button", "ai-signals-btn" + (inline ? " ai-signals-btn--inline" : ""), "✨");
+  button.type = "button";
+  button.title = "Why this is recommended — AI classification keywords";
+  button.setAttribute("aria-label", "Show AI classification keywords");
+  button.setAttribute("aria-expanded", "false");
+
+  const row = el("div", "signals");
+  row.hidden = true;
+  for (const s of signals) row.append(el("span", "signal", s));
+
+  button.addEventListener("click", () => {
+    const open = row.hidden;
+    row.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+    button.classList.toggle("is-active", open);
+  });
+  return { button, row };
+}
+
 // Google Maps 길찾기 딥링크 (외부 상세 길찾기, DESIGN §3.4).
 // 대중교통 모드 — 구글맵은 한국에서 도보 경로를 제공하지 않는다(도보는 내부 Tmap).
 function directionsUrl(origin, c) {
@@ -50,27 +73,11 @@ export function renderResultCard(c, origin, index = 0) {
   headText.append(badge, el("h2", "card-title", c.title));
   head.append(thumb, headText);
 
-  // AI 분류 근거 토글 — 우측 상단. 누르면 키워드 칩 행 on/off(다시 누르면 닫힘).
-  // 파이프라인이 산정한 분류 신호를 그대로 노출(개발자 검증 + 사용자 이해, 투명 UX).
+  // AI 분류 근거 토글 — 카드 우측 상단(absolute). 누르면 키워드 칩 행이 토글된다.
   if (c.signals?.length) {
-    const aiBtn = el("button", "ai-signals-btn", "✨");
-    aiBtn.type = "button";
-    aiBtn.title = "Why this is recommended — AI classification keywords";
-    aiBtn.setAttribute("aria-label", "Show AI classification keywords");
-    aiBtn.setAttribute("aria-expanded", "false");
-    head.append(aiBtn);
-
-    const signals = el("div", "signals");
-    signals.hidden = true;
-    for (const s of c.signals) signals.append(el("span", "signal", s));
-
-    aiBtn.addEventListener("click", () => {
-      const open = signals.hidden;
-      signals.hidden = !open;
-      aiBtn.setAttribute("aria-expanded", String(open));
-      aiBtn.classList.toggle("is-active", open);
-    });
-    card.append(head, signals);
+    const { button, row } = aiSignalsToggle(c.signals);
+    head.append(button);
+    card.append(head, row);
   } else {
     card.append(head);
   }

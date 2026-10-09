@@ -2,7 +2,7 @@
 // 헤드라인·날짜/시간 → WHY THIS ROUTE(루트 상태) → 확인필요 요약 → 범례 →
 // 타임라인(Start→구간→스톱, 스톱별 이유·사실·Remove) → 종료 → 총계.
 // 체류시간은 주장하지 않는다(B-T01) — 각 스톱 '예정 분'은 표기 안 함.
-import { TYPE_GLYPH } from "./result-card.js";
+import { TYPE_GLYPH, aiSignalsToggle } from "./result-card.js";
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
@@ -67,6 +67,13 @@ function stopRow(stop, onRemove) {
     badge,
   );
   body.append(titleLine);
+
+  // AI 분류 근거 토글 — 제목줄 우측(inline). 누르면 키워드 칩 행이 토글된다(추천 카드와 동일).
+  if (c.signals?.length) {
+    const { button, row } = aiSignalsToggle(c.signals, { inline: true });
+    titleLine.append(button);
+    body.append(row);
+  }
 
   // 스톱별 이유(코스 "왜 이 장소") — teal check, 0개면 생략
   if (c.reasons?.length) {

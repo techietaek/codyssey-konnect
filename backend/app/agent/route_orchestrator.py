@@ -43,6 +43,7 @@ from app.domain.route import (
     route_name,
     route_status,
 )
+from app.domain.signals import classification_signals
 from app.domain.timing import TimingVerdict
 from app.models.recommend import (
     Candidate,
@@ -256,9 +257,12 @@ async def recommend_route(
     if len(stops) < 2:
         stops = assemble_route(origin, feasible)
     # 스톱별 Reason(코스 "왜 이 장소" — 관심사/시간/예산 근거). 근거 없으면 0개(강제 금지).
+    # + AI 분류 근거 키워드(표시 전용, A 와 동일). 루트는 classify_places 미호출 →
+    #   실내외는 유형 휴리스틱 fallback(io_verdict 없음). 사실 생성 아님·판정 불변(§6).
     for s in stops:
         t, b = verdicts.get(s.id, (TimingVerdict.UNCERTAIN, BudgetVerdict.UNKNOWN))
         s.reasons = select_reasons(s, cond, t, b, is_nearest=False)
+        s.signals = classification_signals(s)
     if len(stops) < 2:
         trace.step("route_unmet", reason="under_2_stops", feasible=len(feasible))
         return RouteData(
