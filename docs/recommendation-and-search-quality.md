@@ -324,3 +324,49 @@ P0는 선행 필수, P2는 보유 인프라로 가장 빠르게 recall을 올리
 | 모델/토글 | `config.py` (`agent_loop`, `orchestrator_model=gpt-4o-mini`, `openai_model=gpt-4o`) |
 
 > 메모: 코드 주석이 참조하는 `docs/agent-architecture.md`(§6.x)는 현재 저장소에 실재하지 않는다(planning 저장소 또는 미작성). 본 문서가 그 공백의 일부(추천/검색 관점)를 대신한다.
+
+---
+
+## 9. 남은 작업 — 다음 세션 백로그 (핸드오프)
+
+> **이 섹션만 읽으면 이어서 작업 가능.** 전체 맥락은 §6(한계 L1~L7)·§7(P0~P6)을 필요한 항목만 Grep.
+> **모든 before/after 측정은** `cd backend && python -m app.eval.run_eval --json ../docs/eval-<name>.json` (키 필요·라이브·무캐싱). 순수 지표 로직은 `app/eval/metrics.py`(유닛테스트됨).
+
+### 완료 상태 (2026-10-09, 브랜치 머지됨 → main)
+| 작업 | 상태 | 해소한 한계 |
+|---|---|---|
+| P0 eval 하네스 | ✅ `app/eval/` | 측정 기반 |
+| P2 의미 재정렬(selection 전) | ✅ `agent/semantic_rank.py` | L2·L3 |
+| P1 적응형 반경 ladder | ✅ `orchestrator.collect_judged`/`_RADIUS_LADDER` | L1·L4(부분) |
+| 거리 라벨(확대 후보) | ✅ `Candidate.distance_m/from_widened_search`, `result-card.js` | 투명성 |
+| P4 키워드 검색 | ✅ `tourapi.search_keyword`, `orchestrator._fetch_keyword_pool/_augment_with_keywords` | L2·L6(부분) |
+
+### 남은 작업 (우선순위순 — 임팩트/작업량)
+
+**① 응답 속도 (L5) — 미해결·체감 최대·★최우선** (임팩트 高 / 작업량 中)
+- 문제: eval p95 **~10–26s**. 원인 = `pool[:_ENRICH_POOL=8]` **전부** 상세조회(후보당 TourAPI 3콜+Places 1콜) + per-candidate LLM. 캐싱은 ToS로 금지([[no-response-caching]]).
+- 방향: P2 의미점수(`semantic_similarities`)로 **상위 K개만 상세조회**하도록 `_rerank_and_judge`에서 enrich 대상을 줄이거나, 목록 단계에서 1차 컷 후 상세조회. 지연↔recall 트레이드오프를 eval로 튜닝.
+- 착수점: `orchestrator._rerank_and_judge`(상세조회 batch 결정 지점), `_fetch_and_normalize`(후보당 4콜).
+
+**② 한국어 소스·유의어 (L7 + P4 영문 한계) ** (임팩트 中 / 작업량 中)
+- 문제: P4가 영문 EngService2라 'calligraphy' 등 0건(§7 P4 한계). 외국인 영어 요구가 한국어 데이터에 안 닿음.
+- 방향(택1/병행): (a) 서울문화포털 키워드 검색 추가(한국어 제목 매칭), (b) `keywords`를 유의어/한국어로 확장(예 calligraphy→서예) 후 검색.
+- 착수점: `sources/seoulculture.py`, `agent/note_parser.py`(keywords), `orchestrator._fetch_keyword_pool`.
+
+**③ P1 완화 ladder 확장** (임팩트 中 / 작업량 小)
+- 지금은 '반경'만 확대. 반경 상한(5000m)에도 결과 부족하면 **시간창·관심사 strictness 완화** 단계 추가(각 단계 `notices` 투명 고지 — 기존 패턴 재사용).
+- 착수점: `orchestrator.collect_judged`(ladder 루프), `_RADIUS_LADDER` 근처에 완화 단계 정의.
+
+**④ P2 유사도 신호 강화** (임팩트 中 / 작업량 小)
+- 목록 단계 텍스트가 얇아 top cosine ~0.3–0.44(§7 P2 한계). 1차 목록 필드(cat 라벨·요약) 보강 또는 경량 overview로 `pool_item_text` 강화 → selection 정확도↑.
+- 착수점: `agent/semantic_rank.py` `pool_item_text`.
+
+**⑤ 골든셋 확충 (P0 후속)** (임팩트 低·측정용 / 작업량 小)
+- recall 모수 작음(13쿼리 중 기대값 5). 외곽·희소·까다로운 기대값 쿼리 추가로 개선 민감도↑.
+- 착수점: `app/eval/golden_set.json`(Product도 편집 가능).
+
+**⑥ P3 LLM 주도 재검색 — 보류 권장** (임팩트 低(지금) / 작업량 大)
+- 미배선 세분 tool(`agent/tools/experiences.py`·`route.py`)을 LLM 루프에 연결. 단 핵심(결과 부족→확대)은 **P1이 이미 코드로** 처리 → 현 시점 한계이득. 시간창/관심사까지 LLM이 고르게 할 가치가 생기면 재검토.
+
+### 공통 불변(모든 작업에서 유지 — [[working-style]] §6)
+LLM/임베딩은 **순서·발견·설명만**; 가격·시간·가용성·좌표는 코드·공식데이터 소유. 완화·확대는 항상 `notices` 투명 고지. 강제 채움 금지(유효 후보만). 변경은 eval before/after로 검증 + 테스트.
