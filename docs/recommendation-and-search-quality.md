@@ -178,14 +178,14 @@
 ### L1. 고정 반경 1500m + 거리순 1차 컷이 recall 상한을 결정 ★최우선
 `_SEARCH_RADIUS_M=1500`, `pool[:8]`(A)/`pool[:12]`(B). **선호·관심사·정성 조건을 보기 전에** 공간(반경)과 거리로 후보를 잘라낸다. 관심사가 아무리 명확해도 1501m의 완벽한 후보는 **조회조차 되지 않는다.** 선호 재정렬은 "이미 잘린 풀 안에서 순서만" 바꾸므로 recall을 늘리지 못한다. 외국인 FIT가 "오늘 오후 전시 보고 싶다"처럼 **콘텐츠 중심**으로 생각할 때, 공간 우선 검색은 미스매치가 크다.
 
-### L2. 키워드/의미(semantic) 검색의 부재
+### L2. 키워드/의미(semantic) 검색의 부재 — **P2로 부분 해소(selection 내 의미 재정렬)**
 TourAPI는 `location_based_list`(좌표+타입)만 사용한다(`orchestrator.py:72-101`). 사용자 note의 관심사·개방형 선호("조용한", "캘리그래피 체험", "로맨틱한")는:
 - enum 6종으로 축약 → 유형 랭킹(coarse), 또는
 - `classify_places`/`fits_vibe`로 **조회 후 재랭킹**
 
 둘 다 **검색 쿼리에는 반영되지 않는다.** TourAPI `searchKeyword`/`areaBasedList`도, 임베딩 기반 매칭도 쓰지 않는다. 결과적으로 "내용 적합도"는 **반경 안에 우연히 들어온 것 중에서만** 평가된다.
 
-### L3. 정성 선호(fits_vibe)가 selection이 아니라 rerank에만 작용
+### L3. 정성 선호(fits_vibe)가 selection이 아니라 rerank에만 작용 — **P2로 해소(의미 유사도가 selection 반영)**
 `classify_places`는 judge를 통과한 생존 후보(최대 8개 중)에만 돈다(`orchestrator.py:415-422`). "로맨틱한 곳" 요청인데 반경 안 로맨틱 후보가 2개뿐이면 **그 2개가 최대치**다. 정성 선호는 recall에 기여 0.
 
 ### L4. "agentic retry/refinement"가 없다 — 적응 없는 단발 검색
@@ -245,13 +245,24 @@ radius=1500 → valid<K? → radius=3000 재조회 → 여전히 부족? → 시
 ```
 각 단계는 `notices`로 고지("주변에 적어 반경을 넓혔어요"). 이미 `io_strict_exclude`·`exclude_safe_fallback`에 "완화+투명 고지" 패턴이 있으니 동일 톤으로. 코드 루프로 구현해도 되고(간단·결정론), LLM 루프에 노출해도 된다(P3).
 
-### P2. Semantic rerank를 **selection 전으로** 이동 (L2·L3·L5 동시 완화) ★가성비 최고
-이미 **pgvector + OpenAI Embeddings**를 보유(RAG 스택). 이를 추천에도 재사용:
-1. 넓은 반경으로 **목록 레벨 필드(title + 목록 요약)** 를 저렴하게 다수 조회(상세조회 전).
-2. note/open_preferences 임베딩과 후보 임베딩의 cosine 유사도로 **semantic top-K** 선발.
-3. 비싼 상세조회(TourAPI×3+Places)는 **top-K에만** 수행.
+### P2. Semantic rerank를 **selection 전으로** 이동 (L2·L3 해소) — **구현됨 (2026-10-09)**
+이미 보유한 **OpenAI Embeddings**(RAG 스택, `rag/embed.py`)를 추천에도 재사용. 상세조회 컷(`pool[:K]`) **전에**, 조회 풀을 사용자 의도와의 의미 유사도로 재정렬해 **어떤 후보를 판정할지**를 거리·enum만이 아니라 관련도로 정한다.
 
-→ "넓게 조회하되 상세조회는 적게"로 **L5의 recall↔latency 상충을 깬다.** 정성 선호가 selection에 반영되어 L3 해소, 키워드 매칭 공백(L2)도 메운다. 신뢰 경계 유지(임베딩은 **순위**에만, 사실·가용성 판정은 그대로 코드).
+**구현:** `agent/semantic_rank.py`
+- `build_intent_text(cond, note)` — note 원문 + 관심사(enum→구절) + open_preferences를 한 의도 문자열로 합성(비선호/배제는 제외 — '원하는 것'만). 신호 없으면 None → 의미랭킹 생략.
+- `pool_item_text(it)` — **목록 단계 텍스트**(tour: title+addr1 / seoul: TITLE+CODENAME+PLACE+GUNAME). 상세 overview 전이라 얇지만 선발 관련도엔 유효.
+- `semantic_similarities(texts, intent, trace)` — 의도·후보 임베딩 cosine(쿼리·문서 임베딩 병렬 1콜씩). **실패/빈 의도는 전부 0.0 → 기존 거리·enum 순서 보존(graceful).**
+- 통합: `orchestrator.recommend_a`·`route_orchestrator.recommend_route`의 `[select]` 블록에서 정렬 키 = **(관심사 enum rank → −의미유사도 → 실내외 → 거리)**. 관심사 enum이 1차(Product: 관심사 우선), 의미 유사도가 enum이 못 잡는 뉘앙스를 2차로.
+
+**신뢰 경계:** 임베딩은 **순서만** 바꾼다 — 사실·가용성·가격·시간 불변. 테스트 `tests/test_semantic_rank.py`(9개, embed 모킹).
+
+**결과 (동일 골든셋 9쿼리, before=`eval-baseline.json` / after=`eval-p2.json`):**
+- recall@k·constraint 위반·empty: **변화 없음**(중심부 '쉬운' 쿼리는 before에도 적중 — 느슨한 기대값의 한계).
+- **정성 증거(강함):** "quiet art exhibitions, indoor" → 반환 4개가 **전부 미술관/갤러리**(Daelim Museum·Seoul Museum of Craft Art·K.O.N.G·PKM Gallery). "lively festivals and performances" → 국악축제·광화문·세종로공원 등 공연/축제 계열. 거리순이면 섞이던 궁·공원이 **의도에 맞게 선발**됨. trace `semantic_rank`로 18개 재정렬 확인.
+- **트레이드오프(정직):** mean fits_ratio **47%→36%**. 갤러리·축제가 궁보다 **운영시간 공식데이터가 불확실**해 check_needed 비중↑. 검색 품질 저하가 아니라 '관련도 우선이 미확인-운영시간 장소를 더 올린' 결과이며, 상태 배지로 투명 표기(신뢰 경계 유지).
+- 회귀 가드로 의미 민감 쿼리 `a-gbg-quiet-galleries`(expect gallery/museum/art) 추가 → P2 적용 상태에서 적중(recall n=4).
+
+**남은 한계:** P2는 **반경 1500m 안에서만** 재정렬한다(L1·L5 미해소). "넓게 조회→의미 top-K만 상세조회"의 전반부(반경 확대)는 **P1**에, 반경 밖 recall은 P1+P3에 달림. 또 목록 단계 텍스트가 얇아(overview 없음) 유사도 상한이 낮다(top cosine ~0.3–0.44) — 추후 1차 목록 필드 보강 여지.
 
 ### P3. 세분 tool을 실제 배선 — "진짜 agentic retrieval" (L4 구조 해소)
 §3.3의 `search_experiences(radius)` / `check_availability` / `plan_day_route`를 LLM 루프에 **실제 노출**하고, 관측에 개수뿐 아니라 "반경·관심사 매칭 수"를 포함시킨다. 그러면 루프가:

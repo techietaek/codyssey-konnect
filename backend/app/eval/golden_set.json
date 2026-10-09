@@ -27,6 +27,18 @@
       "comment": "미술/실내 선호 → 박물관·갤러리 기대. (L3: 정성/실내선호가 selection 아닌 rerank만 — before 기준치용.)"
     },
     {
+      "id": "a-gbg-quiet-galleries",
+      "mode": "recommend",
+      "start": { "label": "Gyeongbokgung", "lat": 37.5796, "lng": 126.977 },
+      "start_at": "2026-10-15T13:00:00",
+      "end_at": "2026-10-15T18:00:00",
+      "note": "quiet contemporary art galleries, indoor",
+      "expect_title_any": ["gallery", "museum", "art"],
+      "forbid_title_any": [],
+      "forbid_empty": true,
+      "comment": "의미 민감 쿼리(P2 회귀 가드). 거리순이면 궁·공원이 섞이지만, semantic rerank 는 갤러리/미술관을 선발 상위로 끌어올려야 함."
+    },
+    {
       "id": "a-insadong-free",
       "mode": "recommend",
       "start": { "label": "Insadong", "lat": 37.574, "lng": 126.985 },

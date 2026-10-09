@@ -18,6 +18,11 @@ from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
 from app.agent.hours_parser import parse_hours
 from app.agent.note_parser import parse_note
+from app.agent.semantic_rank import (
+    build_intent_text,
+    pool_item_text,
+    semantic_similarities,
+)
 from app.core.exceptions import ExternalSourceError
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict, judge_budget
@@ -379,17 +384,37 @@ async def recommend_a(
         budget_krw=cond.budget_krw,
     )
 
-    # [select] 명시 선호 우선 선발(FR-B4): 조회 풀(반경 1500m 내, 거리순)을 관심사→실내외
-    # 선호로 '안정 정렬' → 선호 맞는 후보가 조금 멀어도 판정·선발에 들어온다(거리는 같은
-    # 선호 등급 안에서 보존). 선호 미언급이면 모두 중립이라 거리순 그대로.
-    if cond.interests or cond.avoid_interests or cond.indoor_outdoor:
+    # [select] 명시 선호 + 의미 관련도 우선 선발(FR-B4 · P2): 조회 풀(반경 1500m 내, 거리순)을
+    # (관심사 enum → 의미 유사도 → 실내외 → 거리) 로 재정렬해 '상세조회·판정할 상위 K'를 고른다.
+    # 관심사 enum 은 명시 신호라 1차(Product: 관심사 우선), 의미 유사도(note/open_preferences)는
+    # enum 이 못 잡는 뉘앙스를 2차로 반영해 선발을 관련도 기반으로 끌어올린다(거리는 최후 키).
+    # 의미 랭킹은 순서만 — 사실·가용성 불변(신뢰 경계). 신호 없으면 유사도 0 → 거리순 그대로.
+    intent = build_intent_text(cond, ctx.note)
+    sims = await semantic_similarities(
+        [pool_item_text(it) for it in pool], intent, trace
+    )
+    if cond.interests or cond.avoid_interests or cond.indoor_outdoor or intent:
 
-        def _soft_key(it: dict) -> tuple[int, int]:
+        def _etype_of(it: dict) -> Any:
             # _etype 는 fetch 단계에서 소스별로 산정(tour=contenttypeid, seoul=CODENAME).
-            etype = it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
-            return (type_preference_rank(etype, cond), io_rank(etype, cond))
+            return it.get("_etype") or type_from_contenttype(it.get("contenttypeid"))
 
-        pool.sort(key=_soft_key)
+        def _dist_of(it: dict) -> float:
+            try:
+                return float(it.get("dist") or 1e12)
+            except (TypeError, ValueError):
+                return 1e12
+
+        order = sorted(
+            range(len(pool)),
+            key=lambda i: (
+                type_preference_rank(_etype_of(pool[i]), cond),
+                -sims[i],
+                io_rank(_etype_of(pool[i]), cond),
+                _dist_of(pool[i]),
+            ),
+        )
+        pool = [pool[i] for i in order]
 
     # 관심사 우선 순으로 넉넉히 보강·판정 후 '유효한' 소수만 유지(제외분을 다음 후보로
     # 대체. 부적합 후보로 숫자 채우는 것 아님 — 유효 후보 중 최대 4개).

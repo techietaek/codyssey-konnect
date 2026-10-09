@@ -1,0 +1,124 @@
+{
+  "total": 10,
+  "errors": 0,
+  "empty_rate": 0.0,
+  "recall_at_k": 1.0,
+  "recall_denominator": 4,
+  "constraint_violation_rate": 0.0,
+  "mean_fits_ratio": 0.365,
+  "mean_hard_exclude_rate": 0.0625,
+  "latency_p50_ms": 4751.1,
+  "latency_p95_ms": 22623.2,
+  "queries": [
+    {
+      "id": "a-gbg-history",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 9449.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-art-indoor",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 4751.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-quiet-galleries",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 22623.2,
+      "error": null
+    },
+    {
+      "id": "a-insadong-free",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.25,
+      "latency_ms": 2843.2,
+      "error": null
+    },
+    {
+      "id": "a-gbg-exclude-place",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": true,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 8409.6,
+      "error": null
+    },
+    {
+      "id": "a-myeongdong-anything",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.25,
+      "hard_exclude_rate": 0.125,
+      "latency_ms": 2810.6,
+      "error": null
+    },
+    {
+      "id": "a-ddp-handson",
+      "mode": "recommend",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": 0.125,
+      "latency_ms": 8352.1,
+      "error": null
+    },
+    {
+      "id": "a-gbg-outdoor-strict",
+      "mode": "recommend",
+      "returned": 2,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.0,
+      "hard_exclude_rate": 0.0,
+      "latency_ms": 5933.8,
+      "error": null
+    },
+    {
+      "id": "b-gbg-route-afternoon",
+      "mode": "route",
+      "returned": 5,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.4,
+      "hard_exclude_rate": null,
+      "latency_ms": 3333.9,
+      "error": null
+    },
+    {
+      "id": "b-insadong-route-history",
+      "mode": "route",
+      "returned": 4,
+      "recall_hit": null,
+      "violations": [],
+      "fits_ratio": 0.5,
+      "hard_exclude_rate": null,
+      "latency_ms": 3960.6,
+      "error": null
+    }
+  ]
+}
