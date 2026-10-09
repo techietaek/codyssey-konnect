@@ -50,3 +50,18 @@ def merge_saved_open_preferences(
     return cond.model_copy(
         update={"open_preferences": list(saved_open_preferences)}
     )
+
+
+def merge_saved_walks(
+    cond: ParsedConditions, saved_prefer_shorter_walks: bool | None
+) -> ParsedConditions:
+    """걷기 선호도 Request 우선 — note 가 이번 요청에서 걷기를 **언급**(True/False)했으면
+    그대로 두고(프롬프트 최우선), 언급 안 했을 때(None)만 저장 선호로 채운다. 저장도 없으면
+    None. 걷기는 Soft 신호(수치/km 상한 변환 금지, FR-L4) — 여기선 '어느 값을 쓸지'만 정한다."""
+    if cond.prefer_shorter_walks is not None:
+        return cond
+    if saved_prefer_shorter_walks is None:
+        return cond
+    return cond.model_copy(
+        update={"prefer_shorter_walks": bool(saved_prefer_shorter_walks)}
+    )

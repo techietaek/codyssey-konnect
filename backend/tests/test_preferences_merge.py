@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.domain.preferences_merge import (
     merge_saved_interests,
     merge_saved_open_preferences,
+    merge_saved_walks,
 )
 from app.domain.ranking import display_sort_key
 from app.models.recommend import (
@@ -84,6 +85,31 @@ def test_saved_open_prefs_noop_and_immutable():
     assert merge_saved_open_preferences(cond, []).open_preferences == []
     merge_saved_open_preferences(cond, ["quiet"])
     assert cond.open_preferences == []  # 원본 불변
+
+
+# ── 걷기 선호 병합 (Request 우선, 3-state) ──
+def test_prompt_long_walk_overrides_saved_shorter():
+    # 저장=shorter(true)인데 프롬프트가 'long walk OK'(false) → 프롬프트 최우선.
+    cond = ParsedConditions(prefer_shorter_walks=False)
+    out = merge_saved_walks(cond, True)
+    assert out.prefer_shorter_walks is False
+
+
+def test_prompt_shorter_kept():
+    cond = ParsedConditions(prefer_shorter_walks=True)
+    assert merge_saved_walks(cond, None).prefer_shorter_walks is True
+
+
+def test_saved_fills_when_note_silent_walks():
+    cond = ParsedConditions()  # None = 언급 안 함
+    assert merge_saved_walks(cond, True).prefer_shorter_walks is True
+    assert merge_saved_walks(ParsedConditions(), None).prefer_shorter_walks is None
+
+
+def test_walks_original_not_mutated():
+    cond = ParsedConditions()
+    merge_saved_walks(cond, True)
+    assert cond.prefer_shorter_walks is None
 
 
 def _cand(etype, status=ResultStatus.FITS, title="x"):

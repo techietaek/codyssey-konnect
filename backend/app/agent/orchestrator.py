@@ -45,6 +45,7 @@ from app.domain.operational import PresenceVerdict, judge_presence
 from app.domain.preferences_merge import (
     merge_saved_interests,
     merge_saved_open_preferences,
+    merge_saved_walks,
 )
 from app.domain.ranking import display_sort_key, io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
@@ -578,6 +579,9 @@ async def recommend_a(
     cond = merge_saved_interests(cond, saved_interests)
     # 저장된 개방형 선호(P-09 자유입력 해석)도 note 침묵 시에만 Soft 로 채운다(Request 우선).
     cond = merge_saved_open_preferences(cond, saved_open_preferences)
+    # 걷기 선호도 동일 원칙 — note 가 걷기를 말했으면(예: '긴 산책 OK') 그게 최우선,
+    # 안 말했을 때만 저장값으로 채운다. 이후 cond.prefer_shorter_walks 가 '유효값'.
+    cond = merge_saved_walks(cond, prefer_shorter_walks)
 
     # [시간 프롬프트 우선, §11] note 가 명시한 종료시각('until 5pm')·소요시간('3 hours')이 있으면
     # 가용창을 '더 좁게'만 조정(보수적 — 없는 시간을 벌지 않음). 판정·available_minutes 에 반영.
@@ -602,7 +606,7 @@ async def recommend_a(
         interests=[i.value for i in cond.interests],
         interests_from_saved=filled_from_saved,
         indoor_outdoor=cond.indoor_outdoor,
-        prefer_shorter_walks=prefer_shorter_walks,
+        prefer_shorter_walks=cond.prefer_shorter_walks,  # Request 우선 병합 후 유효값
         free_only=cond.free_only,
         budget_krw=cond.budget_krw,
     )

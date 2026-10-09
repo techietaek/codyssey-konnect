@@ -100,9 +100,11 @@ class ParsedConditions(BaseModel):
         "'indoor only', 'nothing outdoors', 'strictly indoor'. False for a mild preference like "
         "'I'd prefer indoor'. Requires indoor_outdoor to be set.",
     )
-    prefer_shorter_walks: bool = Field(
-        default=False,
-        description="True only if the user said they prefer shorter walks / less walking.",
+    prefer_shorter_walks: bool | None = Field(
+        default=None,
+        description="Tri-state walking preference the user stated in THIS request. True = "
+        "prefers shorter / less walking. False = explicitly fine with long / lots of walking. "
+        "Null = not mentioned (so a saved preference may fill it — Request > Preference).",
     )
 
 
