@@ -19,11 +19,12 @@ from app.agent.environment import get_environment
 from app.agent.exclude_classifier import classify_excluded
 from app.agent.note_parser import parse_note
 from app.agent.orchestrator import (
+    _MIN_VIABLE,
+    _MORE_VIABLE,
     _RADIUS_EXPANDED_NOTICE,
-    _RADIUS_LADDER,
-    _SEARCH_RADIUS_M,
     _augment_with_keywords,
     _fetch_pool,
+    base_radius,
     collect_judged,
 )
 from app.core.trace import Trace
@@ -39,6 +40,7 @@ from app.domain.preferences_merge import (
 from app.domain.ranking import io_rank, type_preference_rank
 from app.domain.reasons import select_reasons
 from app.domain.route import (
+    MAX_DAY_STOPS,
     assemble_route,
     build_schedule,
     fit_count,
@@ -188,23 +190,25 @@ async def recommend_route(
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
     saved_open_preferences: list[str] | None = None,
+    want_more: bool = False,
+    max_stops: int | None = None,
 ) -> RouteData:
     # [위치 우선] 프롬프트(note) 지명이 있으면 기본입력보다 우선(결정론, A 와 동일 정책).
     start_loc = detect_location_in_text(ctx.note) or ctx.start_location
     lat, lng = resolve_start_coords(start_loc)
     origin = StartLocation(label=start_loc.label, lat=lat, lng=lng)
 
-    pool, env = await asyncio.gather(
-        _fetch_pool(lat, lng, trace, ctx.start_at.date()),
-        get_environment(lat, lng, trace),
-    )
-    # 교정된 조건이 오면 그대로, 아니면 note 를 파싱(후속 교정 "exclude museums" 등 반영).
-    # 관심사·이동 '균형 랭킹'은 여전히 B안 대기 — 여기선 '명시 배제'만 적용(옵션3 재사용).
+    # [조건 먼저] 걷기 선호가 기본 탐색 반경을 정하므로 조회 전에 구조화(A 와 동일 순서).
     cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
-    # 저장 선호를 note 침묵 시에만 Soft 로 채운다(Request 우선, A 와 동일 정책).
     cond = merge_saved_interests(cond, saved_interests)
     cond = merge_saved_open_preferences(cond, saved_open_preferences)
     cond = merge_saved_walks(cond, prefer_shorter_walks)
+    base = base_radius(cond.prefer_shorter_walks)  # 싫음 1.5·없음 3·좋음 5km(§6.6 soft)
+
+    pool, env = await asyncio.gather(
+        _fetch_pool(lat, lng, trace, ctx.start_at.date(), base),
+        get_environment(lat, lng, trace),
+    )
     route_notices: list[str] = []  # 반경 확대·충돌 등 투명 안내(RouteData.notices)
     # [충돌 투명 안내] 실내/외 ↔ 관심사 모순이면 알린다(Option 1, A 와 동일). 챗 루프가 먼저
     # 되물으면 해소된 cond 로 들어와 충돌이 없다 — 그 외(직접 호출·누락) 경로의 안전망.
@@ -213,14 +217,24 @@ async def recommend_route(
         route_notices.append(conflict_notice(cond.indoor_outdoor or "", conflicting))
 
     # [keyword] 특정 주제 키워드 검색 결과 병합(P4, A 와 동일) — 발견 범위만 확장, 사실 불변.
-    pool = await _augment_with_keywords(pool, lat, lng, _SEARCH_RADIUS_M, cond, trace)
+    pool = await _augment_with_keywords(pool, lat, lng, base, cond, trace)
 
     # [select+judge] 의미 관련도 선발(P2) + 적응형 반경(P1) — A 와 동일 정책을 공용 헬퍼로.
-    # feasible 가 2개도 안 되면 반경을 넓혀 재조회(루트 'unmet' 감소, 강제 채움 아님).
+    # feasible 가 부족하면 반경을 넓혀 재조회(루트 'unmet' 감소, 강제 채움 아님). '더' 요청 시
+    # 목표를 _MORE_VIABLE 로 올려 더 넓게 발굴(문제1).
     results, _hard, used_radius = await collect_judged(
-        lat, lng, ctx, cond, trace, first_pool=pool, enrich_pool=_ROUTE_POOL
+        lat,
+        lng,
+        ctx,
+        cond,
+        trace,
+        first_pool=pool,
+        enrich_pool=_ROUTE_POOL,
+        base=base,
+        # '더/추가'면 목표(prev+N)까지 feasible 를 모으도록 min_viable 을 올려 반경 확장을 유도.
+        min_viable=max(_MORE_VIABLE, max_stops or 0) if want_more else _MIN_VIABLE,
     )
-    if used_radius > _RADIUS_LADDER[0]:
+    if used_radius > base:
         route_notices.append(_RADIUS_EXPANDED_NOTICE)
     valid = [(c, txt) for (c, _, _, txt) in results]
     # 스톱별 Reason(코스 "왜 이 장소")용 판정 보관 — 관심사·시간·예산 근거 재사용(A와 동일).
@@ -261,11 +275,16 @@ async def recommend_route(
         excluded_pref=len(applied),
     )
 
-    stops = assemble_route(origin, preferred) if len(preferred) >= 2 else []
+    # 보통은 관심사 매칭(preferred) 우선 → 부족하면 폴백. 단 '더/아무거나(want_more)'면
+    # 처음부터 넓은 풀(feasible)로 조립해 매칭 밖 후보도 스톱으로 붙여 루트를 키운다(문제1).
+    # max_stops = 목표 상한(prev+N) — 지정 시 그만큼까지만(시간·walkable 이 추가로 trim).
+    cap = max_stops if max_stops else MAX_DAY_STOPS
+    primary = feasible if want_more else preferred
+    stops = assemble_route(origin, primary, max_stops=cap) if len(primary) >= 2 else []
     if len(stops) < 2:
-        stops = assemble_route(origin, io_base)
+        stops = assemble_route(origin, io_base, max_stops=cap)
     if len(stops) < 2:
-        stops = assemble_route(origin, feasible)
+        stops = assemble_route(origin, feasible, max_stops=cap)
     # 스톱별 Reason(코스 "왜 이 장소" — 관심사/시간/예산 근거). 근거 없으면 0개(강제 금지).
     # + AI 분류 근거 키워드(표시 전용, A 와 동일). 루트는 classify_places 미호출 →
     #   실내외는 유형 휴리스틱 fallback(io_verdict 없음). 사실 생성 아님·판정 불변(§6).
@@ -302,5 +321,10 @@ async def recommend_route(
         route_name=route.name,
     )
     return RouteData(
-        routes=[route], origin=origin, notices=route_notices, environment=env
+        routes=[route],
+        origin=origin,
+        notices=route_notices,
+        environment=env,
+        # 근처 feasible 가 담긴 스톱보다 많으면 '더 있는데 시간/도보로 못 담음' → 시간 연장 제안 근거.
+        more_feasible=len(feasible) > len(route.stops),
     )

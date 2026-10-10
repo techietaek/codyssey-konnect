@@ -82,11 +82,29 @@ _ENRICH_POOL = 8  # 판정 후 Hard 제외분을 다음 후보로 대체하기 �
 
 # [P1] 적응형 반경 ladder — 결과가 희소할 때만 단계적으로 넓혀 재조회(§7 P1, L1/L4).
 # 흔한 밀집 지역은 1단계(1500m)에서 바로 충족돼 확장이 트리거되지 않는다(지연 불변).
+# 최대 반경 5km: 걷기 선호가 좋음이면 5km 기본, 희소 시 확장 상한도 5km.
 _RADIUS_LADDER = (1500, 3000, 5000)
 _MIN_VIABLE = 2  # 유효 후보가 이 수 미만이면 '선택지 부족' → 반경 확대(강제 채움 아님)
+_MORE_VIABLE = (
+    6  # 사용자가 '더/추가'를 명시하면 이 목표까지 반경을 넓혀 후보 발굴(문제1)
+)
 _RADIUS_EXPANDED_NOTICE = (
     "Few options were nearby, so we widened the search area to find more."
 )
+
+
+def base_radius(prefer_shorter_walks: bool | None) -> int:
+    """걷기 선호 → 기본 탐색 반경(m). True(짧게)=1.5km · None(미언급)=3km · False(길게 OK)=5km.
+
+    하드 캡이 아니다(§6 soft): 희소(유효<2)하면 collect_judged 가 최대 5km 까지 확장하고,
+    확장 편입분은 from_widened_search → 프론트 'far' 라벨로 투명 표시. Product 결정(걷기 선호가
+    '기본' 발견 범위를 정하되 숨기지 않고 넓힐 수 있음) — CLAUDE §6.6 갱신 반영.
+    """
+    if prefer_shorter_walks is True:
+        return 1500
+    if prefer_shorter_walks is False:
+        return 5000  # 걷기 좋아함 → 최대 반경 5km
+    return 3000
 
 
 async def _fetch_tour_pool(
@@ -489,6 +507,7 @@ async def collect_judged(
     first_pool: list[dict],
     enrich_pool: int,
     min_viable: int = _MIN_VIABLE,
+    base: int = _SEARCH_RADIUS_M,
 ) -> tuple[list[EnrichResult], int, int]:
     """[P1 적응형 반경] 1단계 풀로 판정 → 유효가 min_viable 미만이면 반경 ladder 로 확대 재조회.
 
@@ -500,8 +519,9 @@ async def collect_judged(
     judged, hard, seen = await _rerank_and_judge(
         first_pool, ctx, cond, trace, enrich_pool
     )
-    used_radius = _RADIUS_LADDER[0]
-    for radius in _RADIUS_LADDER[1:]:
+    # 확장은 base(걷기 선호가 정한 기본 반경)보다 큰 단계만 — base 가 5km 면 확장 없음.
+    used_radius = base
+    for radius in (r for r in _RADIUS_LADDER if r > base):
         if len(judged) >= min_viable:
             break
         pool = await _fetch_pool(lat, lng, trace, ctx.start_at.date(), radius)
@@ -553,35 +573,29 @@ async def recommend_a(
     saved_interests: list[InterestCode] | None = None,
     prefer_shorter_walks: bool | None = None,
     saved_open_preferences: list[str] | None = None,
+    want_more: bool = False,
 ) -> RecommendData:
     # [위치 우선] 프롬프트(note)에 직접 밝힌 지명이 있으면 기본입력(앱 폼/컨텍스트)보다 우선.
     # 결정론 테이블 매칭 — 좌표 생성 아님. 모든 진입 경로(폼·챗)에서 일관 적용.
     start_loc = detect_location_in_text(ctx.note) or ctx.start_location
     lat, lng = resolve_start_coords(start_loc)
 
-    # [structure] 좌표 해석 + note 자연어 구조화(LLM)를 조회와 병렬로.
-    # 확인 시트에서 교정한 조건이 오면 재파싱하지 않고 그대로 사용(사용자 교정 우선).
-    if ctx.conditions is not None:
-        cond = ctx.conditions
-        pool, env = await asyncio.gather(
-            _fetch_pool(lat, lng, trace, ctx.start_at.date()),
-            get_environment(lat, lng, trace),
-        )
-    else:
-        cond, pool, env = await asyncio.gather(
-            parse_note(ctx.note),
-            _fetch_pool(lat, lng, trace, ctx.start_at.date()),
-            get_environment(lat, lng, trace),
-        )
-    # 저장 선호를 Request 우선으로 병합(note 침묵 시에만 관심사 Soft 채움, FR-L5).
-    # 걷기 선호는 수치 변환 없이 trace 로만 기록(FR-L4, 순위 반영은 Soft 랭킹 B안).
+    # [structure] 조건을 먼저 구조화 — 걷기 선호가 '기본 탐색 반경'을 정하므로 조회 전에 필요.
+    # 확인 시트/챗에서 교정한 조건(ctx.conditions)이 오면 재파싱 없이 그대로(사용자 교정 우선).
+    cond = ctx.conditions if ctx.conditions is not None else await parse_note(ctx.note)
+    # 저장 선호를 Request 우선으로 병합(note 침묵 시에만 Soft 채움, FR-L5).
     filled_from_saved = not cond.interests and bool(saved_interests)
     cond = merge_saved_interests(cond, saved_interests)
-    # 저장된 개방형 선호(P-09 자유입력 해석)도 note 침묵 시에만 Soft 로 채운다(Request 우선).
     cond = merge_saved_open_preferences(cond, saved_open_preferences)
-    # 걷기 선호도 동일 원칙 — note 가 걷기를 말했으면(예: '긴 산책 OK') 그게 최우선,
-    # 안 말했을 때만 저장값으로 채운다. 이후 cond.prefer_shorter_walks 가 '유효값'.
+    # 걷기 선호: note 가 말했으면 최우선, 안 했으면 저장값. 이후 cond.prefer_shorter_walks 가 유효값.
     cond = merge_saved_walks(cond, prefer_shorter_walks)
+    # [걷기 선호 → 기본 탐색 반경] 싫음 1.5·없음 3·좋음 5km(§6.6 soft — 희소 시 확장·far 라벨).
+    base = base_radius(cond.prefer_shorter_walks)
+
+    pool, env = await asyncio.gather(
+        _fetch_pool(lat, lng, trace, ctx.start_at.date(), base),
+        get_environment(lat, lng, trace),
+    )
 
     # [시간 프롬프트 우선, §11] note 가 명시한 종료시각('until 5pm')·소요시간('3 hours')이 있으면
     # 가용창을 '더 좁게'만 조정(보수적 — 없는 시간을 벌지 않음). 판정·available_minutes 에 반영.
@@ -613,18 +627,25 @@ async def recommend_a(
 
     # [keyword] 사용자가 특정 주제(서예·한복 등)를 말했으면 키워드 검색 결과를 풀에 병합(P4).
     # 좌표검색이 놓친 후보를 '발견 범위'에만 추가 — 사실·판정 불변(§6). 키워드 없으면 무변경.
-    pool = await _augment_with_keywords(pool, lat, lng, _SEARCH_RADIUS_M, cond, trace)
+    pool = await _augment_with_keywords(pool, lat, lng, base, cond, trace)
 
     # [select+judge] 의미 관련도 우선 선발(P2) + 적응형 반경(P1): 1단계 풀을 (관심사 enum →
     # 의미 유사도 → 실내외 → 거리)로 재정렬해 상위 K 를 판정하고, 유효가 부족하면 반경을 넓혀
     # 재조회한다(강제 채움 아님 — 선택지가 2개도 안 될 때만 확대). 사실·가용성은 _enrich 소유.
     judged, excluded_hard, used_radius = await collect_judged(
-        lat, lng, ctx, cond, trace, first_pool=pool, enrich_pool=_ENRICH_POOL
+        lat,
+        lng,
+        ctx,
+        cond,
+        trace,
+        first_pool=pool,
+        enrich_pool=_ENRICH_POOL,
+        base=base,
+        min_viable=_MORE_VIABLE if want_more else _MIN_VIABLE,
     )
     valid = list(judged)
-    radius_notices = (
-        [_RADIUS_EXPANDED_NOTICE] if used_radius > _RADIUS_LADDER[0] else []
-    )
+    # 확장 안내·far 라벨: base(사용자 기본 반경)를 넘겨 조회했을 때만(그들의 기본 범위는 아님).
+    radius_notices = [_RADIUS_EXPANDED_NOTICE] if used_radius > base else []
     # [충돌 투명 안내] 실내/외 선호 ↔ 관심사 모순(예: indoor + 궁궐)이면 조용히 처리하지 않고
     # 왜 이런 결과인지 알린다(Option 1 — 폼/즉시추천은 되묻지 않으므로 notice 로 투명성 확보).
     conflicting = io_interest_conflict(cond)

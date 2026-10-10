@@ -73,6 +73,9 @@ class RouteData(BaseModel):
     notices: list[str] = Field(default_factory=list)
     # 환경(날씨·대기질) Context — 악조건 시 주의 배너(PRD §6.6, Soft).
     environment: EnvironmentContext | None = None
+    # feasible 후보가 담긴 스톱 수보다 많음 — 즉 '근처엔 더 있는데 시간/도보로 못 담음'.
+    # '더 추가' 부족 시 "시간을 늘릴까?"를 구체적으로 제안하는 데 쓴다(발견 부족과 구분).
+    more_feasible: bool = False
     ai_notice: str = (
         "AI-assisted route · facts from official sources, unconfirmed details marked"
     )

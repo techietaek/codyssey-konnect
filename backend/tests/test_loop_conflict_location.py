@@ -130,7 +130,7 @@ def test_prompt_location_overrides_app_context(monkeypatch):
 
     captured = {}
 
-    async def fake_recommend_a(ctx, trace, saved=None, walks=None, open_prefs=None):
+    async def fake_recommend_a(ctx, trace, saved=None, walks=None, open_prefs=None, **kw):
         captured["loc"] = ctx.start_location
         return RecommendData(
             candidates=[Candidate(id="t1", title="A", status=ResultStatus.FITS)]

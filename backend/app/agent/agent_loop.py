@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 
 from langchain_core.messages import (
@@ -79,19 +80,131 @@ _SYSTEM = (
     "Use tools — never answer travel facts (prices, hours, availability, what's nearby) from "
     "your own knowledge. The tools own all facts; you only decide which tools to call and pass "
     "the user's own wording.\n"
-    "You may call tools across several turns: e.g. answer a question AND find experiences if the "
-    "user asked for both. When you have everything needed, reply WITHOUT a tool — a short, "
-    "friendly English message introducing the results (do not restate prices/hours; the app "
-    "renders those).\n"
-    "Tools:\n"
+    "Call exactly ONE recommendation tool per request — either plan_culture_route OR "
+    "recommend_experiences, NEVER both — unless the user clearly asks for two separate things. "
+    "When the user refines an earlier request ('make it shorter', 'only free ones', 'exclude "
+    "museums', 'more traditional'), call the SAME tool as the previous turn and carry ALL "
+    "still-relevant earlier conditions into the preferences plus the new one.\n"
+    "Choosing the tool:\n"
+    "- plan_culture_route is the DEFAULT. Use it whenever the user states interests, a place, "
+    "or a vibe and wants something to do — build them a small multi-stop culture walk. This is "
+    "what makes the chat different from the single-pick recommendation screen, so prefer it.\n"
+    "- recommend_experiences: ONLY when the user explicitly asks for individual options or a "
+    "single place instead of a route ('just recommend one place', 'a few spots to pick from', "
+    "'one thing to see', 'suggest individual places').\n"
     "- answer_travel_question: a factual/FAQ question (transport, money, etiquette, what a "
-    "cultural thing is).\n"
-    "- recommend_experiences: the user wants individual ideas for things to see or do now.\n"
-    "- plan_culture_route: the user wants a multi-stop day route / itinerary / course.\n"
-    "Carry forward still-relevant earlier conditions when the user refines a request. Location "
-    "and time come from the app context, never from you. If the user only greets or there is no "
-    "travel intent, reply without a tool and briefly ask what they'd like."
+    "cultural thing is). You may pair this with one recommendation tool only if the user asks a "
+    "question AND wants ideas.\n"
+    "When you have what you need, reply WITHOUT a tool. Write 2-3 natural, warm English "
+    "sentences about THIS result: name the places you actually found and suggest a sensible "
+    "order or how to enjoy them, and if you found fewer than the user asked for, say so plainly. "
+    "Add a brief, genuine reason they'll like it. Do NOT state prices, opening hours, booking, "
+    "or availability, and do not invent facts — the app renders all of those from official "
+    "data; you only add friendly framing around the places named in the tool result.\n"
+    "Location and time come from the app context, never from you. If the user only greets or "
+    "there is no travel intent, reply without a tool and briefly ask what they'd like."
 )
+
+_SPATIAL_TOOLS = {RecommendExperiences.__name__, PlanCultureRoute.__name__}
+# 챗봇 기본값 = route(추천A 단건과 구분). recommend 는 '개별/단건'을 명시했을 때만.
+# 명시적 루트 신호(기본이 route라 보조적 — route 쪽 확정용).
+_ROUTE_WORDS = (
+    "route",
+    "itinerary",
+    "course",
+    "plan ",
+    "a plan",
+    "tour",
+    "take me around",
+    "walk around",
+    "whole day",
+    "the day",
+    "rest of",
+)
+# 명시적 '개별/단건 추천' 신호 → recommend. 이게 있어야 route 기본을 벗어난다.
+_RECOMMEND_WORDS = (
+    "recommend",
+    "suggest",
+    "one place",
+    "a place",
+    "one thing",
+    "just one",
+    "only one",
+    "single",
+    "a spot",
+    "one spot",
+    "individual",
+    "an idea",
+    "one idea",
+    "few spots",
+    "pick from",
+    "options",
+)
+
+
+def _wants_route(message: str) -> bool:
+    return any(w in message.lower() for w in _ROUTE_WORDS)
+
+
+def _wants_recommend(message: str) -> bool:
+    return any(w in message.lower() for w in _RECOMMEND_WORDS)
+
+
+def _spatial_default(message: str) -> str:
+    """한 턴에 둘 다 왔을 때 기본 선택(결정론). 우선순위: 명시적 루트어 > 명시적 개별추천어
+    > 기본 route. 챗봇은 route 중심(추천A 단건 흐름과 구분)."""
+    if _wants_route(message):
+        return PlanCultureRoute.__name__
+    if _wants_recommend(message):
+        return RecommendExperiences.__name__
+    return PlanCultureRoute.__name__
+
+
+def _prior_spatial(history: list[ChatTurn] | None) -> str | None:
+    """가장 최근 assistant 턴이 route/recommend 중 무엇을 냈는지 → 팔로업 연속성용.
+    요약 마커로 판정(route 우선 — _present 의 kind 우선순위와 일치)."""
+    for t in reversed(history or []):
+        if t.role != "assistant":
+            continue
+        c = t.content.lower()
+        if "planned a route" in c:
+            return PlanCultureRoute.__name__
+        if "suggested experiences" in c or "no experiences fit" in c:
+            return RecommendExperiences.__name__
+    return None
+
+
+def _one_spatial(
+    calls: list[dict], history: list[ChatTurn] | None, message: str, trace: Trace
+) -> list[dict]:
+    """과다호출 억제(Fix A): 한 턴에 recommend+route 가 동시에 오면 하나만 남긴다.
+
+    선택 우선순위: (1) 직전 턴과 같은 tool(리파인 연속성), (2) 메시지의 명시적 루트 신호,
+    (3) 기본 recommend. 비공간 tool(answer_travel_question)은 그대로 유지한다.
+    """
+    present = [c["name"] for c in calls if c["name"] in _SPATIAL_TOOLS]
+    if len(present) <= 1:
+        return calls
+    keep = _prior_spatial(history)
+    if keep not in present:
+        kw = _spatial_default(message)
+        keep = kw if kw in present else present[0]
+    trace.step(
+        "loop_single_intent",
+        kept=keep,
+        dropped=[n for n in present if n != keep],
+    )
+    result: list[dict] = []
+    kept = False
+    for c in calls:
+        if c["name"] in _SPATIAL_TOOLS:
+            if c["name"] == keep and not kept:
+                result.append(c)
+                kept = True
+            # 나머지 공간 tool 은 실행에서 제외(아래에서 skip ToolMessage 로 계약만 충족)
+        else:
+            result.append(c)
+    return result
 
 
 @dataclass
@@ -123,6 +236,125 @@ def _ctx_summary(context: ChatContext | None) -> str:
     return (
         "\n\n[app context: no start location or time window yet — if the user wants "
         "recommendations or a route, ask them for it instead of guessing.]"
+    )
+
+
+_MAX_CONVO_TURNS = 12  # 조건 누적에 쓸 최근 user 발화 상한(토큰·안정)
+
+
+def accumulated_user_text(history: list[ChatTurn] | None, message: str) -> str:
+    """대화 전체의 user 발화를 모은다(최근 _MAX_CONVO_TURNS). 조건을 '사용자가 실제로 말한
+    것'에서 누적 추출하기 위함 — LLM 의 매턴 요약이 이전 제외·위치를 흘려도 유실되지 않게."""
+    turns = [t.content for t in (history or []) if t.role == "user"][-_MAX_CONVO_TURNS:]
+    turns.append(message.strip())
+    return "\n".join(t for t in turns if t and t.strip())
+
+
+def latest_route_summary(history: list[ChatTurn] | None) -> str | None:
+    """가장 최근 assistant 루트 요약에서 스톱 체인("A → B → C")만 추출(현재 루트 상태)."""
+    for t in reversed(history or []):
+        if t.role != "assistant" or "planned a route" not in t.content.lower():
+            continue
+        for line in t.content.splitlines():
+            if "planned a route" in line.lower() and ":" in line:
+                return line.split(":", 1)[1].strip()
+    return None
+
+
+def working_memory(history: list[ChatTurn] | None) -> str:
+    """최근 대화의 '현재 루트'를 LLM 에 명시(P2) — 추가/삭제/변경을 현재 루트 기준으로 이해하고
+    자연어 답변이 문맥을 유지하게. 실제 포함/제외는 코드(누적 conditions)가 결정론으로 강제."""
+    route = latest_route_summary(history)
+    if not route:
+        return ""
+    return (
+        "[conversation so far] The culture route you have already given the user is: "
+        f"{route}. If they ask to add to it, shorten it, swap, or remove a stop — or say they "
+        "dislike or have already visited a place — you MUST call plan_culture_route AGAIN to "
+        "rebuild it from live data. NEVER restate this route from memory without calling the "
+        "tool. The tool automatically keeps the stops they still want, drops anything they "
+        "rejected or already visited, and carries every earlier condition forward; the app "
+        "renders the facts. In your final reply, refer naturally to the route and what changed."
+    )
+
+
+# 현재 턴이 '추가/복원' 의도임을 나타내는 마커 — 과거 제외를 뒤집는 신호(Request > Preference).
+_ADDITIVE_MARKS = (
+    "add",
+    "include",
+    "one more",
+    "another",
+    "also",
+    "actually",
+    "put back",
+    "bring back",
+    "i want",
+    "i'd like",
+    "show me",
+    "back in",
+)
+
+
+_MORE_MARKS = ("more", "add", "another", "additional", "a few", "expand")
+_NUM_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "another": 1,
+    "couple": 2,
+    "few": 3,
+}
+
+
+def _wants_more(message: str) -> bool:
+    """현재 턴이 '더/추가' 요청인가 → 탐색 반경 목표 상향(문제1)."""
+    return any(w in message.lower() for w in _MORE_MARKS)
+
+
+def _parse_add_count(message: str) -> int:
+    """'몇 개 더' 추가인지 파싱(digit > number word > 기본 1). 안전상 1~5 로 clamp."""
+    m = message.lower()
+    mt = re.search(r"\b(\d+)\b", m)
+    if mt:
+        return min(max(int(mt.group(1)), 1), 5)
+    for w, n in _NUM_WORDS.items():
+        if re.search(rf"\b{w}\b", m):
+            return min(n, 5)
+    return 1  # '더'라고만 함 → 1 개
+
+
+def reconcile_reversals(cond: ParsedConditions, message: str) -> ParsedConditions:
+    """번복 처리(§6 Request > Preference): 현재 메시지가 과거에 제외한 대상을 '추가/복원'해
+    달라고 하면 그 대상을 제외에서 빼고(keywords 로 승격해 능동 검색). 예: 전에 "I don't like
+    statue" 로 statue 가 exclude_concepts 에 있어도, 지금 "add one more statue" 면 해제한다.
+    """
+    m = message.lower()
+    if not any(w in m for w in _ADDITIVE_MARKS):
+        return cond
+
+    def wanted(term: str) -> bool:
+        core = term.lower().rstrip("s")
+        return bool(core) and core in m
+
+    kept_concepts = [c for c in cond.exclude_concepts if not wanted(c)]
+    kept_places = [p for p in cond.exclude_places if not wanted(p)]
+    restored = [c for c in cond.exclude_concepts if wanted(c)] + [
+        p for p in cond.exclude_places if wanted(p)
+    ]
+    if not restored:
+        return cond
+    keywords = list(cond.keywords)
+    for term in restored:
+        if term not in keywords:
+            keywords.append(term)  # 능동 검색으로 승격 — 해제만으로 안 나올 수 있으니
+    return cond.model_copy(
+        update={
+            "exclude_concepts": kept_concepts,
+            "exclude_places": kept_places,
+            "keywords": keywords,
+        }
     )
 
 
@@ -165,13 +397,27 @@ async def _run_recommend_or_route(
         )
         return f"Invalid time window: {e.user_message}"
 
-    # 조건을 여기서 한 번만 구조화(아래 recommend 에 conditions 로 넘겨 재파싱 방지).
-    cond = await parse_note(preferences) if preferences else ParsedConditions()
+    # [누적 조건] 전 대화의 user 발화를 모아 1회 파싱 → 제외·위치·선호의 '합집합'을 얻는다.
+    # 라우팅 LLM 의 매턴 preferences 요약이 이전 제외를 흘려도, 사용자가 실제로 말한 조건을
+    # 직접 누적하므로 제거한 장소가 다시 안 나오고 위치도 유지된다(route_orchestrator 가
+    # exclude_places/concepts 를 하드 필터로 적용). 첫 턴은 현재 메시지만 → 기존과 동일.
+    convo_text = accumulated_user_text(state.history, state.message)
+    cond = await parse_note(convo_text) if convo_text.strip() else ParsedConditions()
+    # [번복] 현재 턴이 과거 제외 대상을 '추가/복원'하면 제외 해제(Request 가 Preference 를 이김).
+    before = (list(cond.exclude_concepts), list(cond.exclude_places))
+    cond = reconcile_reversals(cond, state.message)
+    if (cond.exclude_concepts, cond.exclude_places) != before:
+        trace.step(
+            "reversal",
+            concepts=cond.exclude_concepts,
+            places=cond.exclude_places,
+            keywords=cond.keywords,
+        )
 
     # [io 보강] 라우터 LLM 이 preferences 로 요약하며 'indoor/outdoor' 를 흘렸을 수 있다 →
-    # 원본 메시지에서 결정론으로 감지해 비어있을 때만 채운다(충돌 되묻기·실내외 랭킹 안정화).
+    # 누적 발화에서 결정론으로 감지해 비어있을 때만 채운다(충돌 되묻기·실내외 랭킹 안정화).
     if cond.indoor_outdoor is None:
-        io, strict = detect_indoor_outdoor(state.message)
+        io, strict = detect_indoor_outdoor(convo_text)
         if io:
             cond.indoor_outdoor = io
             cond.indoor_outdoor_strict = strict
@@ -191,9 +437,9 @@ async def _run_recommend_or_route(
             "Conflicting request (indoor/outdoor vs interests); ask the user to choose."
         )
 
-    # [위치 우선] 사용자가 프롬프트에 직접 밝힌 지명을 앱 컨텍스트보다 우선(결정론 조회).
-    # 원본 메시지에서 감지(preferences 는 선호만 담아 "I am at Myeongdong"을 누락할 수 있음).
-    loc = detect_location_in_text(state.message) or context.start_location
+    # [위치 우선·캐리포워드] 사용자가 대화 중 밝힌 지명을 앱 컨텍스트보다 우선(결정론 조회).
+    # 누적 발화에서 감지 → 처음 말한 뒤 후속 턴('공원 빼줘' 등)에도 위치가 유지된다.
+    loc = detect_location_in_text(convo_text) or context.start_location
     ctx = RequestContext(
         start_location=loc,
         start_at=context.start_at,
@@ -201,6 +447,8 @@ async def _run_recommend_or_route(
         note=(preferences or None),
         conditions=cond,
     )
+    # [문제1] 사용자가 '더/추가'를 명시하면 탐색 목표를 올려 반경을 넓혀 후보를 발굴한다.
+    want_more = _wants_more(state.message)
     if name == RecommendExperiences.__name__:
         from app.agent.orchestrator import recommend_a
 
@@ -210,10 +458,18 @@ async def _run_recommend_or_route(
             state.saved_interests,
             state.prefer_shorter_walks,
             state.saved_open_preferences,
+            want_more=want_more,
         )
         state.recommendation = data
         titles = ", ".join(c.title for c in data.candidates) or "none"
         return f"Found {len(data.candidates)} experiences: {titles}."
+
+    # [append] '더/추가' 요청이면 직전 루트 개수 + N 을 목표(max_stops)로 재생성 — 코드가
+    # 개수를 정한다(LLM 아님, §6). 누적 제외 + 안정적 풀이라 보통 이전 스톱을 유지하며 늘어난다.
+    prev = latest_route_summary(state.history)
+    prev_count = len([t for t in prev.split("→") if t.strip()]) if prev else 0
+    add_n = _parse_add_count(state.message) if want_more else 0
+    target = prev_count + add_n if (add_n and prev_count) else None
 
     from app.agent.route_orchestrator import recommend_route
 
@@ -223,12 +479,41 @@ async def _run_recommend_or_route(
         state.saved_interests,
         state.prefer_shorter_walks,
         state.saved_open_preferences,
+        want_more=want_more,
+        max_stops=target,
     )
     state.route = route_data
-    n = len(route_data.routes)
-    return (
-        f"Built {n} day route option(s)." if n else "No feasible route in the window."
-    )
+    if not route_data.routes:
+        return "No feasible route in the window."
+    r0 = route_data.routes[0]
+    stops = " → ".join(s.candidate.title for s in r0.stops)
+    delivered = len(r0.stops)
+    # [정직성·개수인지] 'N개 추가' 요청이면 실제 추가분을 세어, 못 채웠으면 그대로 알린다
+    # (§6: 안 한 일을 했다고 하지 않음). 사실(가격·시간)은 전달 안 함.
+    if target is not None:
+        added = max(0, delivered - prev_count)
+        if added < add_n:
+            # 부족 사유 구분: 근처에 더 있는데 시간이 모자란 경우(more_feasible) vs 진짜 없음.
+            if route_data.more_feasible:
+                hint = (
+                    "There ARE more cultural places nearby, but they don't fit the remaining "
+                    "time as one walk. ASK the user if they'd like to extend their time window "
+                    "to fit more stops."
+                )
+            else:
+                hint = (
+                    "No more feasible stops exist close enough — offer to widen the area or "
+                    "adjust preferences."
+                )
+            return (
+                f"Added only {added} of the {add_n} the user asked for. Route now has "
+                f"{delivered} stops: {stops}. Tell the user honestly how many you could add; "
+                f"do NOT claim you added more than this. {hint}"
+            )
+        return (
+            f"Added {added} stop(s) as asked. Route now has {delivered} stops: {stops}."
+        )
+    return f"Built a {delivered}-stop walking route: {stops}."
 
 
 async def _run_tool(name: str, args: dict, state: LoopState, trace: Trace) -> str:
@@ -315,6 +600,10 @@ async def run_chat_loop(
     ).bind_tools(_LOOP_TOOLS)
 
     messages: list[BaseMessage] = [SystemMessage(_SYSTEM)]
+    # [P2] 현재 루트를 명시한 working memory — 추가/삭제/변경을 현재 루트 기준으로.
+    wm = working_memory(history)
+    if wm:
+        messages.append(SystemMessage(wm))
     messages += to_lc_messages(history or [])
     messages.append(HumanMessage(message.strip() + _ctx_summary(context)))
 
@@ -337,16 +626,34 @@ async def run_chat_loop(
             return _present(state, ai)
 
         messages.append(ai)
-        # 같은 턴의 tool 들은 병렬 실행(멀티의도 지연↓). asyncio 단일스레드라 서로 다른
-        # state 필드 기록은 안전. gather 는 순서 보존 → ToolMessage 를 tool_call 순서대로 붙인다.
+        # [Fix A] 과다호출 억제 — 한 턴에 공간추천(recommend/route)이 둘 다 오면 하나만 실행.
+        run_calls = _one_spatial(calls, history, message.strip(), trace)
+        # 실행은 run_calls 만. 같은 턴 tool 들은 병렬(멀티의도 지연↓) — asyncio 단일스레드라
+        # 서로 다른 state 필드 기록은 안전. gather 는 순서 보존.
         observations = await asyncio.gather(
             *(
                 _run_tool(call["name"], call.get("args") or {}, state, trace)
-                for call in calls
+                for call in run_calls
             )
         )
-        for call, obs in zip(calls, observations):
-            messages.append(ToolMessage(obs, tool_call_id=call.get("id", call["name"])))
+        obs_by_id = {
+            call.get("id", call["name"]): obs
+            for call, obs in zip(run_calls, observations)
+        }
+        # 드롭된 tool_call 도 ToolMessage 를 붙여야 OpenAI 계약(모든 tool_call 응답)이 성립.
+        # 드롭분은 실행하지 않고 skip 관측만 — 무거운 오케스트레이터를 돌리지 않는다.
+        for call in calls:
+            cid = call.get("id", call["name"])
+            messages.append(
+                ToolMessage(
+                    obs_by_id.get(
+                        cid,
+                        "Skipped: only one recommendation tool runs per request; "
+                        "use the other only if the user explicitly asks for both.",
+                    ),
+                    tool_call_id=cid,
+                )
+            )
         if state.clarify is not None:  # 필수사실/선호 미비 → 즉시 되묻기
             return state.clarify
 

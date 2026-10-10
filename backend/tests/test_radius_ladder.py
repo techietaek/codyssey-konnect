@@ -138,6 +138,69 @@ def test_no_expand_when_enough(monkeypatch):
     assert calls["fetch"] == 0  # 확장 재조회 없음(밀집 → 지연 불변)
 
 
+def test_base_radius_by_walking_pref():
+    # Product: 싫음 1.5km · 미언급 3km · 좋음 5km(최대 반경).
+    assert orch.base_radius(True) == 1500
+    assert orch.base_radius(None) == 3000
+    assert orch.base_radius(False) == 5000
+
+
+def test_base_3000_expands_only_to_5000(monkeypatch):
+    # 기본 반경 3km(미언급) → 희소 시 5km 로만 확장(3km 는 이미 base, 1.5km 로 안 내려감).
+    async def fake_fetch(lat, lng, trace, on_date, radius):
+        assert radius == 5000  # base(3000)보다 큰 단계만
+        return [{"contentid": "b"}, {"contentid": "c"}]
+
+    async def fake_enrich(item, ctx, cond, trace):
+        return _hard() if item["contentid"] == "a" else _valid(item["contentid"], 4200)
+
+    monkeypatch.setattr(orch, "_fetch_pool", fake_fetch)
+    monkeypatch.setattr(orch, "semantic_similarities", _zeros)
+    monkeypatch.setattr(orch, "_enrich", fake_enrich)
+    judged, _h, used = asyncio.run(
+        orch.collect_judged(
+            37.57,
+            126.98,
+            _ctx(),
+            ParsedConditions(),
+            Trace(),
+            first_pool=[{"contentid": "a"}],
+            enrich_pool=8,
+            base=3000,
+        )
+    )
+    assert used == 5000 and len(judged) == 2
+
+
+def test_base_at_ceiling_no_expansion(monkeypatch):
+    # 걷기 좋아함 → base 5km(최대). 더 넓힐 단계가 없으니 희소해도 확장 안 함(래더 끝).
+    calls = {"fetch": 0}
+
+    async def fake_fetch(*a, **k):
+        calls["fetch"] += 1
+        return []
+
+    async def fake_enrich(item, ctx, cond, trace):
+        return _hard()  # 0 valid 지만 base 가 최대라 확장 불가
+
+    monkeypatch.setattr(orch, "_fetch_pool", fake_fetch)
+    monkeypatch.setattr(orch, "semantic_similarities", _zeros)
+    monkeypatch.setattr(orch, "_enrich", fake_enrich)
+    judged, _h, used = asyncio.run(
+        orch.collect_judged(
+            37.57,
+            126.98,
+            _ctx(),
+            ParsedConditions(),
+            Trace(),
+            first_pool=[{"contentid": "a"}],
+            enrich_pool=8,
+            base=5000,
+        )
+    )
+    assert used == 5000 and judged == [] and calls["fetch"] == 0
+
+
 def test_expands_to_last_radius_then_stops(monkeypatch):
     # 끝까지 희소해도 ladder 끝에서 멈춘다(무한 아님). 각 단계 새 아이템 1개씩.
     pools = {3000: [{"contentid": "b"}], 5000: [{"contentid": "c"}]}
@@ -164,5 +227,5 @@ def test_expands_to_last_radius_then_stops(monkeypatch):
         )
     )
     assert judged == []
-    assert used == 5000  # 마지막 단계까지 확장 후 종료
+    assert used == 5000  # 마지막 단계(5km)까지 확장 후 종료
     assert hard == 3  # a, b, c

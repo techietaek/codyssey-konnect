@@ -13,6 +13,7 @@ from app.models.recommend import StartLocation
 # FR-A5 대표 시작점 5개 + 흔한 표기. 값은 공개된 랜드마크 좌표(lat, lng).
 _QUICK_COORDS: dict[str, tuple[float, float]] = {
     "gyeongbokgung": (37.5796, 126.9770),
+    "gwanghwamun": (37.5725, 126.9769),
     "anguk": (37.5742, 126.9858),
     "insadong": (37.5740, 126.9850),
     "city hall": (37.5663, 126.9779),
