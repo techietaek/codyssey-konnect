@@ -105,6 +105,13 @@ _SYSTEM = (
     "there is no travel intent, reply without a tool and briefly ask what they'd like."
 )
 
+# 빈결과(공간 tool 이 돌았으나 0건) 시 LLM 자유문장 대신 쓰는 결정론 문구(§6 환각 차단).
+_NO_RESULTS = (
+    "I couldn't find anything open and reachable for that time and place right now. "
+    "Try a wider time window or a different area — I'll only suggest places I can "
+    "actually confirm."
+)
+
 _SPATIAL_TOOLS = {RecommendExperiences.__name__, PlanCultureRoute.__name__}
 # 챗봇 기본값 = route(추천A 단건과 구분). recommend 는 '개별/단건'을 명시했을 때만.
 # 명시적 루트 신호(기본이 route라 보조적 — route 쪽 확정용).
@@ -551,6 +558,18 @@ def _present(state: LoopState, final_ai: AIMessage | None) -> ChatResponse:
     if final_ai is not None and isinstance(final_ai.content, str):
         text = final_ai.content.strip()
     tool = ",".join(state.tools_used) or None
+
+    # [§6 환각 가드] 추천/루트 tool 이 돌았는데 실제 후보·루트가 0건이면(예: 심야·조건과잉),
+    # LLM 의 자유 서술을 그대로 내보내지 않는다 — 모델이 공식데이터 밖 장소를 지어내 "추천"하는
+    # 것을 차단(§6.2). 결정론 문구(route.unmet 우선)로 대체한다. FAQ 답(RAG, 자체 근거판정)이
+    # 있거나 공간 tool 이 아예 안 돈 순수 대화(인사·되묻기)면 LLM 문장을 그대로 둔다.
+    has_route = state.route is not None and bool(state.route.routes)
+    has_rec = state.recommendation is not None and bool(state.recommendation.candidates)
+    has_answer = state.answer is not None
+    spatial_ran = any(t in _SPATIAL_TOOLS for t in (state.tools_used or []))
+    if spatial_ran and not (has_route or has_rec or has_answer):
+        unmet = state.route.unmet if (state.route and state.route.unmet) else None
+        text = unmet or _NO_RESULTS
 
     # 멀티의도: 모은 결과(추천+루트+FAQ답)를 모두 싣는다 — 하나만 담아 나머지를 버리지 않는다.
     # kind 는 primary 힌트(route>recommendation>answer), 프론트는 실린 필드를 모두 렌더.

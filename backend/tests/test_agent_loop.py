@@ -16,7 +16,13 @@ from app.agent import orchestrator as orch
 from app.core.trace import Trace
 from app.models.chat import ChatContext, ChatKind
 from app.models.rag import RagAnswer
-from app.models.recommend import Candidate, RecommendData, ResultStatus, StartLocation
+from app.models.recommend import (
+    Candidate,
+    RecommendData,
+    ResultStatus,
+    StartLocation,
+)
+from app.models.route import RouteData
 
 
 class _FakeLLM:
@@ -207,3 +213,43 @@ def test_llm_failure_graceful(monkeypatch):
     resp = _run("ideas", _ctx())
     assert resp.kind is ChatKind.CLARIFY
     assert resp.message == al._FALLBACK
+
+
+def test_empty_route_suppresses_llm_prose(monkeypatch):
+    # §6 환각 가드: 루트 tool 이 0건을 내면 LLM 의 자유 서술(공식데이터 밖 장소 추천)을
+    # 그대로 내보내지 않고 route.unmet 결정론 문구로 대체한다.
+    _patch_llm(
+        monkeypatch,
+        [
+            _tool_call("PlanCultureRoute", {"preferences": "palaces"}),
+            _final("I suggest starting at Gyeongbokgung Palace, then Bukchon Village!"),
+        ],
+    )
+    from app.agent import route_orchestrator as ro
+
+    async def empty_route(ctx, trace, *a, **kw):
+        return RouteData(routes=[], origin=None, unmet="No route from what's open now.")
+
+    monkeypatch.setattr(ro, "recommend_route", empty_route)
+    resp = _run("plan my evening", _ctx())
+    assert "Gyeongbokgung" not in (resp.message or "")  # 환각 서술 억제
+    assert resp.message == "No route from what's open now."
+
+
+def test_empty_route_without_unmet_uses_no_results(monkeypatch):
+    _patch_llm(
+        monkeypatch,
+        [
+            _tool_call("PlanCultureRoute", {"preferences": "palaces"}),
+            _final("Here's a lovely walking route for you! Enjoy."),
+        ],
+    )
+    from app.agent import route_orchestrator as ro
+
+    async def empty_route(ctx, trace, *a, **kw):
+        return RouteData(routes=[], origin=None)
+
+    monkeypatch.setattr(ro, "recommend_route", empty_route)
+    resp = _run("plan my evening", _ctx())
+    assert resp.message == al._NO_RESULTS
+    assert "lovely walking route" not in (resp.message or "")

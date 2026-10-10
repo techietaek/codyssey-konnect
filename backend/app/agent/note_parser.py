@@ -23,7 +23,8 @@ logger = logging.getLogger("konnect.agent")
 # 무료만이 아니라 저렴함까지 포함 → budget_krw 로 매핑(free_only 아님). 결정론 안전망.
 CHEAP_KRW = 30000
 _CHEAP_RE = re.compile(
-    r"\b(free or cheap|cheap|affordable|budget[- ]friendly|inexpensive)\b", re.IGNORECASE
+    r"\b(free or cheap|cheap|affordable|budget[- ]friendly|inexpensive)\b",
+    re.IGNORECASE,
 )
 
 _SYSTEM = (
@@ -61,13 +62,15 @@ _SYSTEM = (
     "('free only', 'must be free', 'no paid experiences'). Never invent "
     "prices, times, or availability. "
     "For walking: 'shorter walks'/'less walking'/'not much walking' -> prefer_shorter_walks:true; "
-    "an explicit OK with lots of walking ('long walks are fine', 'I don't mind walking a lot', "
-    "'happy to walk') -> prefer_shorter_walks:false; if walking isn't mentioned, leave it null.\n"
+    "an explicit liking for OR OK with lots of walking ('long walks are fine', 'I don't mind "
+    "walking a lot', 'happy to walk', 'I love to walk', 'I love walking', 'walking is my "
+    "favourite') -> prefer_shorter_walks:false; if walking isn't mentioned, leave it null.\n"
     "Examples:\n"
     "- 'free or cheap' -> budget_krw:30000 (free_only stays false)\n"
     "- 'only free experiences' -> free_only:true\n"
     "- 'less walking please' -> prefer_shorter_walks:true\n"
     "- 'long walks are totally fine' -> prefer_shorter_walks:false\n"
+    "- 'I love to walk' -> prefer_shorter_walks:false\n"
     "- 'something near Insadong until 5pm' -> keywords:['Insadong'], end_time:'17:00'\n"
     "- 'I only have about 2 hours' -> duration_minutes:120\n"
     "- 'free galleries this afternoon' -> interests:[art_exhibitions], free_only:true "

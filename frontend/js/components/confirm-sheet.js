@@ -24,6 +24,8 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
   edited.interests = edited.interests || [];
   edited.avoid_interests = edited.avoid_interests || [];
   edited.exclude_concepts = edited.exclude_concepts || [];
+  edited.open_preferences = edited.open_preferences || [];
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
   return openSheet((close) => {
     const root = el("div", "confirm-sheet");
@@ -84,6 +86,14 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
         );
       });
     }
+    // 개방형 분위기 선호(예: 'quiet') — 이해한 것을 투명 노출(✕로 이번 요청에서 해제).
+    for (const pref of edited.open_preferences.slice()) {
+      addChip(cap(pref), () => {
+        edited.open_preferences = edited.open_preferences.filter(
+          (p) => p !== pref,
+        );
+      });
+    }
     if (edited.free_only)
       addChip("Free only", () => (edited.free_only = false));
     if (edited.budget_krw)
@@ -93,8 +103,10 @@ export function openConfirmSheet({ request, conditions, onShow, onEdit }) {
         edited.indoor_outdoor === "indoor" ? "Indoor only" : "Outdoor only",
         () => (edited.indoor_outdoor = null),
       );
-    if (edited.prefer_shorter_walks)
-      addChip("Less walking", () => (edited.prefer_shorter_walks = false));
+    if (edited.prefer_shorter_walks === true)
+      addChip("Less walking", () => (edited.prefer_shorter_walks = null));
+    if (edited.prefer_shorter_walks === false)
+      addChip("Happy to walk", () => (edited.prefer_shorter_walks = null));
 
     if (chips.children.length) {
       root.append(el("p", "confirm-label", "FROM WHAT YOU WROTE"));
