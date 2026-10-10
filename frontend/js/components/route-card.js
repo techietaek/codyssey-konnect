@@ -2,7 +2,7 @@
 // 헤드라인·날짜/시간 → WHY THIS ROUTE(루트 상태) → 확인필요 요약 → 범례 →
 // 타임라인(Start→구간→스톱, 스톱별 이유·사실·Remove) → 종료 → 총계.
 // 체류시간은 주장하지 않는다(B-T01) — 각 스톱 '예정 분'은 표기 안 함.
-import { TYPE_GLYPH } from "./result-card.js";
+import { TYPE_GLYPH, farChip } from "./result-card.js";
 
 const STATUS_LABEL = {
   fits: "Fits your conditions",
@@ -68,6 +68,8 @@ function stopRow(stop, onRemove) {
     el("span", "route-stop-glyph", `${TYPE_GLYPH[c.type] ?? TYPE_GLYPH.default}`),
     badge,
   );
+  const far = farChip(c); // 반경 확대로 편입된 스톱 → 분홍 "Far" 칩
+  if (far) titleLine.append(far);
   body.append(titleLine);
   // 분류 근거(signals)는 루트 요약 아래 "✦ AI" 배지로 통합(10/8) — per-stop ✨ 제거.
 

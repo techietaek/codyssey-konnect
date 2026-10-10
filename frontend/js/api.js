@@ -38,6 +38,16 @@ export function postChat(message, context, history, signal) {
   });
 }
 
+// ── 대화 영속 (L4 · Long-term memory) — 정식 로그인 사용자 전용 ──
+// GET: 전체 누적 대화 복구(재접근·기기 간). DELETE: Clear chat 초기화.
+export function getChatHistory() {
+  return request("/api/chat/history");
+}
+
+export function clearChatHistory() {
+  return request("/api/chat/history", { method: "DELETE" });
+}
+
 // 확인 시트용 — note 를 '이해한 조건'으로만 구조화(추천 조회 없음).
 export function postParse(note) {
   return request("/api/parse", {

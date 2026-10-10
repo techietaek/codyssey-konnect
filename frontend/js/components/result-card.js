@@ -54,6 +54,19 @@ export function aiSignalsToggle(signals, { inline = false } = {}) {
   return { button, row };
 }
 
+// 반경 확대로 편입된 '조금 떨어진' 후보 → 분홍 "Far" 칩(투명 표시). 거리 있으면 함께.
+// null 반환(평범한 근접 후보)이면 호출부가 추가하지 않는다.
+export function farChip(c) {
+  if (!c.from_widened_search) return null;
+  let label = "Far";
+  if (c.distance_m != null)
+    label +=
+      c.distance_m >= 1000
+        ? ` · ${(c.distance_m / 1000).toFixed(1)} km`
+        : ` · ${c.distance_m} m`;
+  return el("span", "far-chip", label);
+}
+
 // Google Maps 길찾기 딥링크 (외부 상세 길찾기, DESIGN §3.4).
 // 대중교통 모드 — 구글맵은 한국에서 도보 경로를 제공하지 않는다(도보는 내부 Tmap).
 export function directionsUrl(origin, c) {
@@ -77,7 +90,10 @@ export function renderResultCard(c, origin, index = 0) {
   const headText = el("div", "card-head-text");
   const badge = el("span", "badge", STATUS_LABEL[c.status] ?? c.status);
   badge.dataset.status = c.status;
-  headText.append(badge, el("h2", "card-title", c.title));
+  headText.append(badge);
+  const far = farChip(c); // 반경 확대 편입 시 분홍 "Far" 칩
+  if (far) headText.append(far);
+  headText.append(el("h2", "card-title", c.title));
   head.append(thumb, headText);
   // 분류 근거(signals)는 결과 상단 "✦ AI" 배지로 통합(10/8) — per-card ✨ 버튼 제거.
   card.append(head);
@@ -103,14 +119,7 @@ export function renderResultCard(c, origin, index = 0) {
     if (c.movement.provenance === "estimate") m.classList.add("is-estimate");
     meta.append(m);
   }
-  // 반경 확대로 편입된 후보 — 출발점 직선거리 라벨(조금 떨어진 곳임을 투명하게).
-  if (c.from_widened_search && c.distance_m != null) {
-    const d =
-      c.distance_m >= 1000
-        ? `${(c.distance_m / 1000).toFixed(1)} km`
-        : `${c.distance_m} m`;
-    meta.append(el("span", "meta-item is-widened", `📍 ${d} away`));
-  }
+  // (반경 확대 '조금 떨어진' 표시는 head 의 분홍 "Far" 칩으로 이동 — farChip)
   if (meta.childNodes.length) card.append(meta);
 
   // 4. 미확인 flags — 앰버 칩. 미확인을 무료/가능으로 바꾸지 않는다.

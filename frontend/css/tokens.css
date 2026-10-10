@@ -30,6 +30,9 @@
   /* ---------- Color · Unconfirmed flag 칩 ---------- */
   --c-flag-bg: #fbf1de;   --c-flag-text: #9a5b00;
 
+  /* ---------- Color · Far (반경 확대로 편입된 '조금 떨어진' 후보) ---------- */
+  --c-far-bg: #fbe3ef;    --c-far-text: #b03a76;   /* 분홍 — 멀리서 찾은 결과 투명 표시 */
+
   /* ---------- Color · Error (입력 검증 — Field Row 에러 상태) ---------- */
   --c-error: #c23b3b;     --c-error-bg: #fdeeee;   --c-error-border: #e4a9a9;
 

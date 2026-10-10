@@ -185,6 +185,12 @@ body {
 .badge[data-status="fits"]         { background: var(--c-fits-bg);  color: var(--c-fits-text); }
 .badge[data-status="check_needed"] { background: var(--c-check-bg); color: var(--c-check-text); }
 .badge[data-status="alternative"]  { background: var(--c-alt-bg);   color: var(--c-alt-text); }
+/* 반경 확대로 편입된 '조금 떨어진' 후보 — 분홍 "Far" 칩(투명 표시, farChip) */
+.far-chip {
+  align-self: flex-start; padding: var(--space-3) var(--space-8);
+  border-radius: var(--r-badge); font-size: var(--fs-badge); font-weight: var(--fw-semibold);
+  background: var(--c-far-bg); color: var(--c-far-text);
+}
 
 .reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .reason { display: flex; align-items: flex-start; gap: var(--space-4); font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--c-primary-ink); }
@@ -857,6 +863,8 @@ body {
 .chat { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--c-bg); }
 .chat-header { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-10); padding: var(--space-12) var(--space-14) var(--space-6); }
 .chat-title { font-size: var(--fs-title); font-weight: var(--fw-bold); color: var(--c-text); }
+.chat-clear { margin-left: auto; background: transparent; border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-4) var(--space-12); font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text-muted); cursor: pointer; }
+.chat-clear:hover { color: var(--c-text); border-color: var(--c-text-muted); }
 .chat-trip { flex: 0 0 auto; display: flex; gap: var(--space-6); padding: 0 var(--space-14) var(--space-6); flex-wrap: wrap; }
 .trip-chip { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-full); padding: var(--space-4) var(--space-10); font-size: var(--fs-badge); font-weight: var(--fw-semibold); color: var(--c-text); cursor: pointer; }
 .chat-planday { margin-left: auto; background: var(--c-primary); color: var(--c-on-primary); border: 0; border-radius: var(--r-full); padding: var(--space-4) var(--space-12); font-size: var(--fs-badge); font-weight: var(--fw-bold); cursor: pointer; }

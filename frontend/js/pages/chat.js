@@ -1,7 +1,8 @@
 // AG-4 · 단일 챗봇 — FAQ(RAG) · 즉시추천 · 문화루트를 하나의 대화 흐름으로.
 // 자연어 → /api/chat(LLM tool-calling) → kind 별 렌더(answer/recommendation/route/clarify).
 // 사실은 백엔드 코드 소유 — 여기서는 받은 fact 객체를 신뢰 분리해 '표시'만 한다.
-import { postChat } from "../api.js";
+import { postChat, getChatHistory, clearChatHistory } from "../api.js";
+import { ready as authReady, isSignedIn } from "../auth.js";
 import { openLocationSheet } from "../components/location-sheet.js";
 import { openTimeSheet } from "../components/time-sheet.js";
 import { renderResultCard } from "../components/result-card.js";
@@ -78,7 +79,12 @@ export function renderChatView({ onBack }) {
   if (onBack) back.addEventListener("click", onBack);
   const titleWrap = el("div", "chat-title-wrap");
   titleWrap.append(el("span", "chat-title", "KONNECT chat"));
-  header.append(back, titleWrap);
+  // Clear chat(초기화, L4) — 로컬 로그 비우고, 로그인 사용자면 저장 대화도 삭제.
+  const clearBtn = el("button", "chat-clear", "Clear");
+  clearBtn.type = "button";
+  clearBtn.setAttribute("aria-label", "Clear chat");
+  clearBtn.addEventListener("click", () => clearChat());
+  header.append(back, titleWrap, clearBtn);
   root.append(header);
 
   const tripBar = el("div", "chat-trip");
@@ -216,10 +222,7 @@ export function renderChatView({ onBack }) {
       );
       return;
     }
-    bubble(
-      "assistant",
-      `Here ${cands.length > 1 ? "are" : "is"} ${cands.length} you could do near ${data.origin?.label ?? "you"}:`,
-    );
+    // 소개 문구는 renderResponse 가 AI 생성 message 로 이미 냈다(하드코딩 제거).
     for (const n of data.notices ?? []) bubble("assistant", n);
     // 지도: 출발점 + 후보 핀. 카드보다 먼저.
     const mapEl = el("div", "chat-map");
@@ -261,7 +264,7 @@ export function renderChatView({ onBack }) {
       );
       return;
     }
-    bubble("assistant", "Here's a walking culture route for your day:");
+    // 소개 문구는 renderResponse 가 AI 생성 message 로 이미 냈다(하드코딩 제거).
     for (const r of routes) {
       const mapEl = el("div", "chat-map");
       assistantBlock(mapEl);
@@ -302,9 +305,14 @@ export function renderChatView({ onBack }) {
   }
 
   function renderResponse(data) {
+    // AI가 생성한 자연어 답변(message)을 결과 '소개'로 사용 — 하드코딩 문구 대체.
+    const intro = (data.message || "").trim();
+    const hasRoute = data.route && (data.route.routes ?? []).length;
+    const hasRec = data.recommendation && (data.recommendation.candidates ?? []).length;
+    if (intro && (hasRoute || hasRec)) bubble("assistant", intro);
     // 멀티의도: 실린 결과를 모두 렌더(route→recommendation→answer). 한 종류만 그리지 않는다.
     let rendered = false;
-    if (data.route && (data.route.routes ?? []).length) {
+    if (hasRoute) {
       renderRoute(data.route);
       rendered = true;
     }
@@ -316,11 +324,11 @@ export function renderChatView({ onBack }) {
       renderAnswer(data.answer);
       rendered = true;
     }
-    // 아무 결과도 없으면(clarify/빈 결과) 텍스트 되묻기
+    // 아무 결과도 없으면(clarify/빈 결과) AI 텍스트 또는 되묻기
     if (!rendered) {
       bubble(
         "assistant",
-        data.message || "Could you tell me a bit more about what you'd like?",
+        intro || "Could you tell me a bit more about what you'd like?",
       );
     }
   }
@@ -384,7 +392,11 @@ export function renderChatView({ onBack }) {
         history.push({ role: "assistant", content: m });
       } else {
         renderResponse(env.data);
-        history.push({ role: "assistant", content: summarize(env.data) });
+        // 맥락 요약은 백엔드가 내려준 값(영속 저장과 동일) 우선, 없으면 로컬 fallback.
+        history.push({
+          role: "assistant",
+          content: env.data.history_summary || summarize(env.data),
+        });
       }
     } catch {
       const m = "I couldn't reach the service. Please try again.";
@@ -408,6 +420,53 @@ export function renderChatView({ onBack }) {
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
   });
+
+  // 여러 줄 맥락 요약(assistant)을 줄바꿈 보존해 버블로. 복구 트랜스크립트용.
+  function multiline(text) {
+    const wrap = el("div");
+    (text || "").split("\n").forEach((line, i) => {
+      if (i) wrap.append(el("br"));
+      wrap.append(document.createTextNode(line));
+    });
+    return wrap;
+  }
+
+  // Clear chat(L4) — 로컬 로그·맥락 비우고, 로그인 사용자면 저장 대화도 삭제(graceful).
+  async function clearChat() {
+    if (busy) return;
+    if (!history.length && !log.querySelector(".chat-row")) return;
+    if (!window.confirm("Clear this conversation?")) return;
+    history.length = 0;
+    log.replaceChildren(suggest); // 로그 비우고 첫 화면 제안 복원
+    try {
+      await clearChatHistory(); // 익명/비로그인은 서버 no-op — 실패해도 로컬은 이미 정리.
+    } catch {
+      /* 저장 삭제 실패가 로컬 초기화를 막지 않게 */
+    }
+  }
+
+  // 재진입 복구(L4) — 정식 로그인 사용자의 전체 누적 대화를 트랜스크립트로 재생 +
+  // 멀티턴 맥락(history) 시드. 사실 카드가 아니라 '대화 기록'을 그린다(오래된 사실을
+  // 현재처럼 재렌더하지 않음 — 새 결과가 필요하면 다시 물으면 라이브 재조회).
+  (async () => {
+    await authReady();
+    if (!isSignedIn()) return;
+    let env;
+    try {
+      env = await getChatHistory();
+    } catch {
+      return; // 복구 실패는 조용히 — 빈 대화로 시작(graceful).
+    }
+    const turns = env?.ok ? env.data?.turns ?? [] : [];
+    if (!turns.length) return;
+    suggest.remove(); // 과거 대화가 있으면 첫 화면 제안 숨김
+    for (const t of turns) {
+      history.push({ role: t.role, content: t.content });
+      if (t.role === "user") bubble("user", t.content);
+      else bubble("assistant", multiline(t.content));
+    }
+    scrollDown();
+  })();
 
   root.append(inputBar);
   return root;
