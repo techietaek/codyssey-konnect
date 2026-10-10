@@ -183,3 +183,29 @@ def test_route_checks_aggregates_flags():
     s2 = Candidate(id="s2", title="Park", status=ResultStatus.FITS)  # flag 없음
     checks = route_checks([s1, s2])
     assert checks == ["Price needs checking · Belfry"]
+
+
+def test_assemble_route_pins_prior_stops_and_appends():
+    # '더/추가' 턴: 직전 루트(A→B→C)를 순서대로 유지하고 새 스톱만 덧붙인다(§6.6 append).
+    o = StartLocation(label="Gwanghwamun", lat=37.5725, lng=126.9769)
+    pool = [
+        _c("A", 37.5728),
+        _c("B", 37.5735),
+        _c("C", 37.5742),
+        _c("D", 37.5722),
+        _c("E", 37.5750),
+    ]
+    prev = [c for c in pool if c.id in ("A", "B", "C")]
+    # pin 없으면 자유 재조립이라 순서/구성이 바뀔 수 있다(기존 버그 재현 여지).
+    pinned = assemble_route(o, pool, max_stops=4, pinned=prev)
+    assert [c.id for c in pinned[:3]] == ["A", "B", "C"]  # prefix 보존(순서까지)
+    assert len(pinned) == 4 and pinned[3].id in ("D", "E")  # 새 스톱 1개만 append
+
+
+def test_assemble_route_pin_does_not_truncate_below_target():
+    o = StartLocation(label="Gwanghwamun", lat=37.5725, lng=126.9769)
+    pool = [_c("A", 37.5728), _c("B", 37.5735), _c("C", 37.5742)]
+    prev = [c for c in pool if c.id in ("A", "B")]
+    # target(2)이 pinned 수와 같으면 pinned 그대로(새 스톱 강제 추가 없음).
+    out = assemble_route(o, pool, max_stops=2, pinned=prev)
+    assert [c.id for c in out] == ["A", "B"]

@@ -467,9 +467,13 @@ async def _run_recommend_or_route(
     # [append] '더/추가' 요청이면 직전 루트 개수 + N 을 목표(max_stops)로 재생성 — 코드가
     # 개수를 정한다(LLM 아님, §6). 누적 제외 + 안정적 풀이라 보통 이전 스톱을 유지하며 늘어난다.
     prev = latest_route_summary(state.history)
-    prev_count = len([t for t in prev.split("→") if t.strip()]) if prev else 0
+    prev_stops = [t.strip() for t in prev.split("→") if t.strip()] if prev else []
+    prev_count = len(prev_stops)
     add_n = _parse_add_count(state.message) if want_more else 0
     target = prev_count + add_n if (add_n and prev_count) else None
+    # [append·pin] '더/추가' 턴이면 직전 스톱을 고정 prefix 로 유지하고 새 스톱만 덧붙인다 —
+    # 전체 재조립으로 기존 스톱이 바뀌는 것 방지(사용자가 본 루트 연속성). 그 외 턴은 pin 없음.
+    pin_titles = prev_stops if (want_more and prev_stops) else None
 
     from app.agent.route_orchestrator import recommend_route
 
@@ -481,6 +485,7 @@ async def _run_recommend_or_route(
         state.saved_open_preferences,
         want_more=want_more,
         max_stops=target,
+        pin_titles=pin_titles,
     )
     state.route = route_data
     if not route_data.routes:

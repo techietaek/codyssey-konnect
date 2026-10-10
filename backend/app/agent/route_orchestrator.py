@@ -184,6 +184,27 @@ async def _build_route(
     )
 
 
+def _resolve_pinned(
+    titles: list[str] | None, feasible: list[Candidate]
+) -> list[Candidate]:
+    """직전 루트 스톱 제목 → 이번 턴 feasible 후보로 결정론 매칭(순서=기존 루트 순서).
+
+    제목은 요약("A → B → C")에서 온 것이라 현재 후보의 title 과 동일 소스다. 정규화(소문자·
+    공백) 동일성으로 매칭하고, 이번 턴에 없는(운영종료 등) 스톱은 조용히 빠진다(억지 유지 금지).
+    """
+    if not titles:
+        return []
+    by_title = {(c.title or "").strip().lower(): c for c in feasible}
+    out: list[Candidate] = []
+    seen: set[str] = set()
+    for t in titles:
+        c = by_title.get((t or "").strip().lower())
+        if c and c.id not in seen:
+            out.append(c)
+            seen.add(c.id)
+    return out
+
+
 async def recommend_route(
     ctx: RequestContext,
     trace: Trace,
@@ -192,6 +213,7 @@ async def recommend_route(
     saved_open_preferences: list[str] | None = None,
     want_more: bool = False,
     max_stops: int | None = None,
+    pin_titles: list[str] | None = None,
 ) -> RouteData:
     # [위치 우선] 프롬프트(note) 지명이 있으면 기본입력보다 우선(결정론, A 와 동일 정책).
     start_loc = detect_location_in_text(ctx.note) or ctx.start_location
@@ -280,11 +302,20 @@ async def recommend_route(
     # max_stops = 목표 상한(prev+N) — 지정 시 그만큼까지만(시간·walkable 이 추가로 trim).
     cap = max_stops if max_stops else MAX_DAY_STOPS
     primary = feasible if want_more else preferred
-    stops = assemble_route(origin, primary, max_stops=cap) if len(primary) >= 2 else []
+    # [append·pin] '더/추가' 턴이면 직전 루트 스톱(제목 매칭)을 고정 prefix 로 유지하고 새 스톱만
+    # 이어붙인다 — 전체 재조립으로 기존 스톱이 바뀌지 않게(§6.6 widen 은 새 스톱에만 작용).
+    pinned = _resolve_pinned(pin_titles, feasible) if pin_titles else None
+    if pinned:
+        trace.step("route_pin", requested=len(pin_titles or []), pinned=len(pinned))
+    stops = (
+        assemble_route(origin, primary, max_stops=cap, pinned=pinned)
+        if len(primary) >= 2 or pinned
+        else []
+    )
     if len(stops) < 2:
-        stops = assemble_route(origin, io_base, max_stops=cap)
+        stops = assemble_route(origin, io_base, max_stops=cap, pinned=pinned)
     if len(stops) < 2:
-        stops = assemble_route(origin, feasible, max_stops=cap)
+        stops = assemble_route(origin, feasible, max_stops=cap, pinned=pinned)
     # 스톱별 Reason(코스 "왜 이 장소" — 관심사/시간/예산 근거). 근거 없으면 0개(강제 금지).
     # + AI 분류 근거 키워드(표시 전용, A 와 동일). 루트는 classify_places 미호출 →
     #   실내외는 유형 휴리스틱 fallback(io_verdict 없음). 사실 생성 아님·판정 불변(§6).

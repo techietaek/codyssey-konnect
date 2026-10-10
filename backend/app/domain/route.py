@@ -113,13 +113,35 @@ def assemble_route(
     *,
     min_stops: int = 2,
     max_stops: int = MAX_DAY_STOPS,
+    pinned: list[Candidate] | None = None,
 ) -> list[Candidate]:
     """feasible 후보(거리순) → 하루 동선(걸을 수 있는 만큼 이어붙인 체인, 방문 순서 확정).
 
     개수 고정 제한 없음(Product: 하루 동선) — walkable leg 상한으로 자연 종료, 실제 길이는
     호출부의 시간창 트림(fit_count)이 결정. 2개 미만이면 빈 리스트(성립 실패 → 개별 전환).
+
+    pinned 가 오면(= '더/추가' 턴에서 직전 루트 스톱) 그 순서·구성을 고정 prefix 로 **유지**하고
+    새 스톱만 마지막 고정 스톱에서 greedy 로 이어붙인다(기존 스톱 drop/reorder 금지). 전체
+    재조립이 아니라 진짜 append — 사용자가 본 루트가 유지된다(working_memory 약속과 일치).
     """
     eligible = [c for c in candidates if route_eligible(c)]
+    if pinned:
+        # route_eligible 한 기존 스톱만 고정. 이번 턴 운영조건에서 빠진 스톱 제거는 호출부
+        # (_resolve_pinned 가 feasible 교집합만 넘김)가 담당 — 여기선 좌표/유형만 방어.
+        kept = [c for c in pinned if route_eligible(c)]
+        if kept:
+            pin_ids = {c.id for c in kept}
+            rest_pool = [c for c in eligible if c.id not in pin_ids]
+            budget = max_stops - len(kept)
+            if budget <= 0:
+                picked = kept[:max_stops]
+            else:
+                # kept[-1] 에서 새 스톱만 budget 개까지 이어붙임(prefix 는 그대로 보존).
+                chain = _greedy_from(kept[-1], [kept[-1], *rest_pool], budget + 1)
+                picked = kept + chain[1:]
+            if len(picked) < min_stops:
+                return []
+            return picked
     if len(eligible) < min_stops:
         return []
     # seed = 시작점에서 가장 가까운 feasible(없으면 거리순 첫째). 거기서 레그 상한 안
