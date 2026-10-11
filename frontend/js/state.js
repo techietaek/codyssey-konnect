@@ -2,11 +2,6 @@
 import { getSession, postRoute, putSession } from "./api.js";
 import { isSignedIn } from "./auth.js";
 
-function _localIso(d) {
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
-}
-
 export const state = {
   request: null, // 마지막 추천 요청 조건(payload)
   candidates: [], // 현재 후보 목록
@@ -132,23 +127,28 @@ export async function clearRoute() {
   }
 }
 
-// 저장된 ref → 라이브 재조립(사실·경로선 신선). 시간창은 '지금부터 저장 소요시간'으로 롤 —
-// 저장 당시 시계시간을 오늘에 그대로 쓰면 시간대에 따라 전부 closed 로 사라질 수 있어서다.
+// 저장된 ref → 라이브 재조립(사실·경로선 신선). 시간창은 **저장 당시 시계시간을 오늘 날짜로**
+// 쓴다 — 시간 판정은 '지금'이 아니라 '창 대비 운영시간'이라, 지금이 몇 시든 저장한 방문 시간대
+// (예: 14:00–18:00) 기준으로 판정돼 루트가 유지된다(now 기준 창은 심야엔 전부 closed 가 됨).
 // pin_titles 로 저장 스톱을 고정 복원하고, 못 찾은 스톱은 조용히 빠진다. 실패/빈결과는 null.
 export async function rebuildSavedRoute(ref) {
   if (!ref?.stops?.length) return null;
-  const [sh, sm] = String(ref.start_hm || "10:00").split(":").map(Number);
-  const [eh, em] = String(ref.end_hm || "18:00").split(":").map(Number);
-  let durMin = eh * 60 + em - (sh * 60 + sm);
-  if (!(durMin > 0)) durMin = 4 * 60; // 안전 기본 4시간
-  const start = new Date();
-  start.setSeconds(0, 0);
-  const end = new Date(start.getTime() + durMin * 60000);
+  const sh = String(ref.start_hm || "10:00");
+  let eh = String(ref.end_hm || "18:00");
+  // 종료가 시작 이하(비정상)면 안전하게 시작+4시간으로.
+  if (eh <= sh) {
+    const [h, m] = sh.split(":").map(Number);
+    const e = new Date();
+    e.setHours(h + 4, m, 0, 0);
+    eh = `${String(e.getHours()).padStart(2, "0")}:${String(e.getMinutes()).padStart(2, "0")}`;
+  }
+  const d = new Date();
+  const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   try {
     const env = await postRoute({
       start_location: ref.origin || { label: "Current location" },
-      start_at: _localIso(start),
-      end_at: _localIso(end),
+      start_at: `${ymd}T${sh}:00`,
+      end_at: `${ymd}T${eh}:00`,
       pin_titles: ref.stops,
     });
     return env?.ok ? (env.data ?? null) : null;

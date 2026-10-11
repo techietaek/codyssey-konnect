@@ -180,14 +180,14 @@ export function renderHomeView({
   (async () => {
     const ref = await loadRoute();
     if (!ref) return;
-    const data = await rebuildSavedRoute(ref);
-    const cardEl = data ? renderSavedRouteCard(data, {
+    const data = await rebuildSavedRoute(ref); // 비면 ref 스톱으로 폴백 렌더
+    const cardEl = renderSavedRouteCard(data, ref, {
       onClear: () => {
         clearRoute();
         routeSlot.replaceChildren();
       },
       onView: () => onOpenChat?.(),
-    }) : null;
+    });
     if (cardEl) routeSlot.append(cardEl);
   })();
 

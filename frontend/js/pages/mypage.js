@@ -243,15 +243,17 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
   // 결과(savedRouteData)를 캐시해, render() 가 여러 번 불려도 카드가 사라지지 않게 다시 그린다.
   let routeChecked = false;
   let savedRouteData = null;
+  let savedRouteRef = null;
   function renderRouteSlot() {
     const slot = el("div", "mypage-route-slot");
     const paint = () => {
       slot.replaceChildren();
-      if (!savedRouteData) return;
-      const card = renderSavedRouteCard(savedRouteData, {
+      if (!savedRouteRef) return;
+      const card = renderSavedRouteCard(savedRouteData, savedRouteRef, {
         onClear: () => {
           clearRoute();
           savedRouteData = null;
+          savedRouteRef = null;
           slot.replaceChildren();
         },
       });
@@ -260,6 +262,7 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     if (!routeChecked) {
       routeChecked = true;
       loadRoute().then(async (ref) => {
+        savedRouteRef = ref;
         if (ref) savedRouteData = await rebuildSavedRoute(ref);
         paint();
       });
