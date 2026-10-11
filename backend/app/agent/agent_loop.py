@@ -302,6 +302,32 @@ _ADDITIVE_MARKS = (
 )
 
 
+# 제거 의도 신호 — 이게 있으면 reconcile 가 그 턴의 제외를 '복원'으로 되돌리지 않는다(현재
+# 제거 의도가 co-occurring 'add' 보다 우선). pin-on-refine 판정에도 쓴다.
+_REMOVE_MARKS = (
+    "remove",
+    "don't like",
+    "dont like",
+    "do not like",
+    "without",
+    "no more",
+    "skip",
+    "exclude",
+    "drop",
+    "hate",
+    "get rid",
+    "take out",
+    "not the",
+    "don't want",
+    "dont want",
+)
+
+
+def _wants_removal(message: str) -> bool:
+    """현재 턴이 '무언가 빼달라'는 제거/제외 의도인가(정제 턴 — 나머지는 유지)."""
+    return any(w in message.lower() for w in _REMOVE_MARKS)
+
+
 _MORE_MARKS = ("more", "add", "another", "additional", "a few", "expand")
 _NUM_WORDS = {
     "one": 1,
@@ -340,10 +366,13 @@ def reconcile_reversals(cond: ParsedConditions, message: str) -> ParsedCondition
     m = message.lower()
     if not any(w in m for w in _ADDITIVE_MARKS):
         return cond
+    # 같은 메시지가 '제거'도 말하면(예: "remove statues and add 2 more contents") 그 제외는
+    # 되돌리지 않는다 — 여기서 'add'는 다른 대상에 대한 것이므로 현재 제거 의도가 우선(§6).
+    removing = _wants_removal(message)
 
     def wanted(term: str) -> bool:
         core = term.lower().rstrip("s")
-        return bool(core) and core in m
+        return not removing and bool(core) and core in m
 
     kept_concepts = [c for c in cond.exclude_concepts if not wanted(c)]
     kept_places = [p for p in cond.exclude_places if not wanted(p)]
@@ -471,16 +500,15 @@ async def _run_recommend_or_route(
         titles = ", ".join(c.title for c in data.candidates) or "none"
         return f"Found {len(data.candidates)} experiences: {titles}."
 
-    # [append] '더/추가' 요청이면 직전 루트 개수 + N 을 목표(max_stops)로 재생성 — 코드가
-    # 개수를 정한다(LLM 아님, §6). 누적 제외 + 안정적 풀이라 보통 이전 스톱을 유지하며 늘어난다.
+    # [정제=pin] 직전 루트가 있고 이번 턴이 '추가(more)' 또는 '제거(remove)' 면, 기존 스톱을
+    # 고정(pin)해 **나머지는 유지**하고 델타만 반영한다 — 전면 재조립으로 멀쩡한 스톱이 뒤섞이는
+    # 것 방지(§6 연속성). 제거된/마감된 스톱은 feasible 에서 빠져 pin 에서도 자동 제외된다.
+    # 'shorter'·'swap' 같은 다른 정제는 pin 하지 않고 재조립(개수/구성 변경이 의도이므로).
     prev = latest_route_summary(state.history)
     prev_stops = [t.strip() for t in prev.split("→") if t.strip()] if prev else []
-    prev_count = len(prev_stops)
     add_n = _parse_add_count(state.message) if want_more else 0
-    target = prev_count + add_n if (add_n and prev_count) else None
-    # [append·pin] '더/추가' 턴이면 직전 스톱을 고정 prefix 로 유지하고 새 스톱만 덧붙인다 —
-    # 전체 재조립으로 기존 스톱이 바뀌는 것 방지(사용자가 본 루트 연속성). 그 외 턴은 pin 없음.
-    pin_titles = prev_stops if (want_more and prev_stops) else None
+    refine = want_more or _wants_removal(state.message)
+    pin_titles = prev_stops if (refine and prev_stops) else None
 
     from app.agent.route_orchestrator import recommend_route
 
@@ -491,7 +519,7 @@ async def _run_recommend_or_route(
         state.prefer_shorter_walks,
         state.saved_open_preferences,
         want_more=want_more,
-        max_stops=target,
+        add_n=add_n,
         pin_titles=pin_titles,
     )
     state.route = route_data
@@ -500,12 +528,13 @@ async def _run_recommend_or_route(
     r0 = route_data.routes[0]
     stops = " → ".join(s.candidate.title for s in r0.stops)
     delivered = len(r0.stops)
-    # [정직성·개수인지] 'N개 추가' 요청이면 실제 추가분을 세어, 못 채웠으면 그대로 알린다
-    # (§6: 안 한 일을 했다고 하지 않음). 사실(가격·시간)은 전달 안 함.
-    if target is not None:
-        added = max(0, delivered - prev_count)
+    removed_turn = _wants_removal(state.message)
+    # [정직성·개수인지] 순수 'N개 추가'(제거 없음)면 실제 추가분을 세어, 못 채웠으면 그대로
+    # 알린다(§6: 안 한 일을 했다고 하지 않음). 제거가 섞이면 생존 스톱 수를 여기서 알 수 없어
+    # 개수 주장을 하지 않고 중립적으로 전달(LLM 이 바뀐 점을 서술). 사실(가격·시간)은 전달 안 함.
+    if add_n and not removed_turn:
+        added = max(0, delivered - len(prev_stops))
         if added < add_n:
-            # 부족 사유 구분: 근처에 더 있는데 시간이 모자란 경우(more_feasible) vs 진짜 없음.
             if route_data.more_feasible:
                 hint = (
                     "There ARE more cultural places nearby, but they don't fit the remaining "
@@ -524,6 +553,13 @@ async def _run_recommend_or_route(
             )
         return (
             f"Added {added} stop(s) as asked. Route now has {delivered} stops: {stops}."
+        )
+    if removed_turn:
+        # 제거 턴: 기존 스톱은 유지하고 거부·마감된 것만 빠진다(pin). 지어낸 개수 주장 금지.
+        return (
+            f"Updated the route — kept the stops you still want and dropped the ones you "
+            f"rejected. It now has {delivered} stops: {stops}. Describe what changed; do NOT "
+            f"claim any place is included or removed beyond this list."
         )
     return f"Built a {delivered}-stop walking route: {stops}."
 

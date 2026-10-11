@@ -214,6 +214,7 @@ async def recommend_route(
     want_more: bool = False,
     max_stops: int | None = None,
     pin_titles: list[str] | None = None,
+    add_n: int = 0,
 ) -> RouteData:
     # [위치 우선] 프롬프트(note) 지명이 있으면 기본입력보다 우선(결정론, A 와 동일 정책).
     start_loc = detect_location_in_text(ctx.note) or ctx.start_location
@@ -299,14 +300,23 @@ async def recommend_route(
 
     # 보통은 관심사 매칭(preferred) 우선 → 부족하면 폴백. 단 '더/아무거나(want_more)'면
     # 처음부터 넓은 풀(feasible)로 조립해 매칭 밖 후보도 스톱으로 붙여 루트를 키운다(문제1).
-    # max_stops = 목표 상한(prev+N) — 지정 시 그만큼까지만(시간·walkable 이 추가로 trim).
-    cap = max_stops if max_stops else MAX_DAY_STOPS
     primary = feasible if want_more else preferred
-    # [append·pin] '더/추가' 턴이면 직전 루트 스톱(제목 매칭)을 고정 prefix 로 유지하고 새 스톱만
-    # 이어붙인다 — 전체 재조립으로 기존 스톱이 바뀌지 않게(§6.6 widen 은 새 스톱에만 작용).
-    pinned = _resolve_pinned(pin_titles, feasible) if pin_titles else None
-    if pinned:
-        trace.step("route_pin", requested=len(pin_titles or []), pinned=len(pinned))
+    # [정제·pin] 직전 루트 스톱(제목 매칭)을 고정 prefix 로 유지하고 델타만 반영한다. 제거·마감된
+    # 스톱은 feasible 에서 빠져 pin 에서도 자동 제외 → '나머지는 유지'. 개수는 생존 pin 수 + add_n
+    # (제거분 백필 금지 — 뺀 자리를 새 장소로 메우지 않음, §6). pin 없으면 max_stops/기본값.
+    # 빈 리스트(제목 매칭 0 — 전부 제거/마감/불일치)면 None 으로 폴백해 일반 조립(cap=0 방지).
+    pinned = (_resolve_pinned(pin_titles, feasible) or None) if pin_titles else None
+    if pinned is not None:
+        cap = len(pinned) + max(0, add_n)
+        trace.step(
+            "route_pin",
+            requested=len(pin_titles or []),
+            pinned=len(pinned),
+            add_n=add_n,
+            cap=cap,
+        )
+    else:
+        cap = max_stops if max_stops else MAX_DAY_STOPS
     stops = (
         assemble_route(origin, primary, max_stops=cap, pinned=pinned)
         if len(primary) >= 2 or pinned

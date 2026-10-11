@@ -92,6 +92,18 @@ def test_reversal_no_match_keeps_exclusions():
     assert out.keywords == []
 
 
+def test_reversal_not_triggered_by_removal_plus_add():
+    # 버그 재현: "remove statues AND add 2 more contents" — 여기 'add'는 다른 대상에 대한 것.
+    # 같은 메시지가 제거를 말하면 그 제외는 복원하지 않는다(현재 제거 의도 우선).
+    cond = ParsedConditions(exclude_concepts=["statue"])
+    out = reconcile_reversals(
+        cond,
+        "I don't like statue. please remove statues. and add 2 more another contents.",
+    )
+    assert out.exclude_concepts == ["statue"]  # 제외 유지(복원 X)
+    assert "statue" not in out.keywords  # 능동 검색으로 승격되지 않음
+
+
 def test_parse_add_count():
     assert _parse_add_count("add two more") == 2
     assert _parse_add_count("add one more any content") == 1
