@@ -105,7 +105,8 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     const s = el("div", "mypage-prefs");
     const list = prefs?.interests ?? [];
     const extras = [...(prefs?.open_preferences ?? [])];
-    if (prefs?.prefer_shorter_walks) extras.push("Shorter walks");
+    if (prefs?.prefer_shorter_walks === true) extras.push("Shorter walks");
+    else if (prefs?.prefer_shorter_walks === false) extras.push("Happy to walk");
     const hasAny = list.length || extras.length;
 
     const head = el("div", "mypage-prefs-head");
@@ -154,7 +155,7 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     s.append(el("h2", "mypage-prefs-title", "Your preferences"));
     const form = createPreferenceForm({
       interests: prefs?.interests ?? [],
-      preferShorterWalks: !!prefs?.prefer_shorter_walks,
+      preferShorterWalks: prefs?.prefer_shorter_walks ?? null, // tri-state 보존
       openPreferences: prefs?.open_preferences ?? [],
       autoParse: false,
     });

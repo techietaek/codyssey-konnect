@@ -58,7 +58,9 @@ export function openPrefConfirm({
     editBtn.addEventListener("click", close);
     c.append(saveBtn, editBtn);
 
-    function fill() {
+    // 관심사는 파싱이 필요 없다 → 즉시 렌더(모달이 비어 보이지 않게). "Also"(자유입력 해석)만
+    // 비동기로 채운다. parsing=true 면 Also 자리에 스피너, 아니면 최종 칩.
+    function fill(parsing) {
       results.replaceChildren();
       const v = form.getValues();
       if (v.interests.length) {
@@ -68,8 +70,18 @@ export function openPrefConfirm({
           chips.append(el("span", "parsed-chip", INTEREST_LABEL[code] || code));
         results.append(chips);
       }
+      if (parsing) {
+        const reading = el("p", "pref-status");
+        reading.append(
+          el("span", "pref-spinner"),
+          el("span", null, "Reading your note…"),
+        );
+        results.append(reading);
+        return;
+      }
       const extras = [...v.open_preferences];
-      if (v.prefer_shorter_walks) extras.push("Shorter walks");
+      if (v.prefer_shorter_walks === true) extras.push("Shorter walks");
+      else if (v.prefer_shorter_walks === false) extras.push("Happy to walk");
       if (extras.length) {
         results.append(el("p", "onb-confirm-label", "Also"));
         const chips = el("div", "remember-chips");
@@ -81,7 +93,7 @@ export function openPrefConfirm({
           x.setAttribute("aria-label", `Remove ${p}`);
           x.addEventListener("click", () => {
             form.removeExtra(p);
-            fill();
+            fill(false);
           });
           chip.append(x);
           chips.append(chip);
@@ -98,14 +110,17 @@ export function openPrefConfirm({
         );
     }
 
-    const reading = el("p", "pref-status");
-    reading.append(el("span", "pref-spinner"), el("span", null, "Reading your note…"));
-    results.append(reading);
-    (async () => {
-      if (form.hasNote()) await form.runParse();
-      fill();
-      saveBtn.disabled = false;
-    })();
+    const hasNote = form.hasNote();
+    fill(hasNote); // 즉시: 관심사 노출 + (노트 있으면) Also 스피너
+    if (!hasNote) {
+      saveBtn.disabled = false; // 파싱할 게 없으면 바로 저장 가능
+    } else {
+      (async () => {
+        await form.runParse();
+        fill(false);
+        saveBtn.disabled = false;
+      })();
+    }
 
     return c;
   });

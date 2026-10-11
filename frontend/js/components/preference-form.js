@@ -26,15 +26,24 @@ function el(tag, className, text) {
 //   → { element, getValues, runParse, hasNote, isBusy, onBusyChange }
 //   getValues(): { interests, prefer_shorter_walks, open_preferences }
 //   runParse(): 자유입력을 해석해 상태에 병합(async, 반환 = 뭔가 추가됐는지).
+// 걷기 선호 tri-state 라벨: true=덜 걷기, false=걷기 좋아함, null=미언급(라벨 없음).
+function walkLabel(w) {
+  return w === true ? "Shorter walks" : w === false ? "Happy to walk" : null;
+}
+
 export function createPreferenceForm({
   interests = [],
-  preferShorterWalks = false,
+  preferShorterWalks = null,
   openPreferences = [],
   autoParse = true,
 } = {}) {
   const root = el("div", "pref-form");
   const selected = new Set(interests);
-  let walks = !!preferShorterWalks;
+  // tri-state 보존: true/false/null 그대로(불리언 강제 금지 — false=걷기 좋아함을 잃지 않게).
+  let walks =
+    preferShorterWalks === true || preferShorterWalks === false
+      ? preferShorterWalks
+      : null;
   let opens = [...openPreferences];
   let busy = false;
   const busyListeners = [];
@@ -104,7 +113,8 @@ export function createPreferenceForm({
     if (!rememberChips) return;
     rememberChips.replaceChildren();
     const items = [];
-    if (walks) items.push({ text: "Shorter walks", remove: () => (walks = false) });
+    const wl = walkLabel(walks);
+    if (wl) items.push({ text: wl, remove: () => (walks = null) });
     for (const p of opens)
       items.push({ text: p, remove: () => (opens = opens.filter((x) => x !== p)) });
     for (const it of items) {
@@ -135,7 +145,7 @@ export function createPreferenceForm({
     );
     root.append(remember);
     renderRemember();
-    setStatus(walks || opens.length ? "none" : "hint");
+    setStatus(walks !== null || opens.length ? "none" : "hint");
     ta.addEventListener("blur", () => runParse());
   }
 
@@ -151,12 +161,12 @@ export function createPreferenceForm({
     lastParsedText = text;
     // 직전 해석 기여분 되돌리기(노트 바뀌면 교체, 누적 X).
     opens = opens.filter((p) => !parseOpens.includes(p));
-    if (parseSetWalks) walks = false;
+    if (parseSetWalks) walks = null;
     parseOpens = [];
     parseSetWalks = false;
     if (!text) {
       renderRemember();
-      setStatus(walks || opens.length ? "none" : "hint");
+      setStatus(walks !== null || opens.length ? "none" : "hint");
       return false;
     }
     setBusy(true);
@@ -173,8 +183,12 @@ export function createPreferenceForm({
             added = true;
           }
         }
-        if (c.prefer_shorter_walks && !walks) {
-          walks = true;
+        // tri-state: 해석이 걷기 선호(싫음 true / 좋아함 false)를 주고, 아직 미설정이면 반영.
+        if (
+          (c.prefer_shorter_walks === true || c.prefer_shorter_walks === false) &&
+          walks === null
+        ) {
+          walks = c.prefer_shorter_walks;
           parseSetWalks = true;
           added = true;
         }
@@ -193,7 +207,7 @@ export function createPreferenceForm({
       /* 실패도 '결과 없음'으로(진행 막지 않음) */
     } finally {
       setBusy(false);
-      setStatus(walks || opens.length ? "none" : "empty");
+      setStatus(walks !== null || opens.length ? "none" : "empty");
     }
     return added;
   }
@@ -201,14 +215,14 @@ export function createPreferenceForm({
   function getValues() {
     return {
       interests: [...selected],
-      prefer_shorter_walks: walks ? true : null,
+      prefer_shorter_walks: walks, // tri-state: true / false / null 그대로
       open_preferences: opens,
     };
   }
 
   // 확인 모달의 "Also" 칩 × 제거용(걷기 또는 개방형 선호 하나 제거).
   function removeExtra(text) {
-    if (text === "Shorter walks") walks = false;
+    if (text === "Shorter walks" || text === "Happy to walk") walks = null;
     else opens = opens.filter((p) => p !== text);
     renderRemember();
   }
