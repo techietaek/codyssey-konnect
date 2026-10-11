@@ -24,6 +24,15 @@ export function postRecommend(payload, signal) {
   });
 }
 
+// B 문화루트 직접 조회. pin_titles 가 있으면 저장된 루트를 그 스톱으로 라이브 재조립(다시보기).
+export function postRoute(payload, signal) {
+  return request("/api/route", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
 // 단일 챗봇 Agent (AG-1/2·AG-3) — 자연어 + 대화 히스토리를 tool-calling 으로 라우팅.
 // history = 이전 턴들(멀티턴 맥락, 후속 교정용). 서버는 stateless.
 export function postChat(message, context, history, signal) {

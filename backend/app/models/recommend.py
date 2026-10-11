@@ -248,6 +248,15 @@ class RecommendRequest(BaseModel):
     conditions: ParsedConditions | None = None
 
 
+class RouteRequest(RecommendRequest):
+    """B 문화루트 요청. 입력은 A(RecommendRequest)와 동일 + 저장 루트 재조립용 pin_titles.
+
+    pin_titles 가 오면(저장된 루트 다시보기) 그 스톱들을 고정 prefix 로 유지해 라이브 재조립한다
+    — 저장은 참조(제목)만, 사실·경로선은 매번 신선 재조회(캐싱 금지 규약 준수)."""
+
+    pin_titles: list[str] | None = None
+
+
 class ParseRequest(BaseModel):
     """확인 시트용 — note 를 '이해한 조건'으로만 구조화(추천 조회 없음)."""
 

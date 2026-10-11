@@ -8,6 +8,7 @@ import { openTimeSheet } from "../components/time-sheet.js";
 import { renderResultCard } from "../components/result-card.js";
 import { renderRouteCard } from "../components/route-card.js";
 import { renderMap, renderRouteMap } from "../map.js";
+import { saveRoute } from "../state.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -275,7 +276,35 @@ export function renderChatView({ onBack }) {
           onRemove: (title) => send(`Remove ${title} from the route`),
         }),
       );
+      assistantBlock(routeSaveBar(r, data.origin));
     }
+  }
+
+  // "Save this route" — 로그인 사용자만(DB 영속). 참조(스톱 제목·origin·시간창)만 저장하고
+  // 열 때 라이브 재조립(캐싱 금지 준수). 선택 ≠ 방문 — 예약/방문 확정이 아님을 문구로 유지.
+  function routeSaveBar(route, origin) {
+    const bar = el("div", "route-save-bar");
+    const btn = el("button", "btn-save-route", "Save this route");
+    btn.type = "button";
+    if (!isSignedIn()) {
+      btn.disabled = true;
+      btn.title = "Sign in to save your route";
+    }
+    const note = el("p", "route-save-note", "Saving ≠ booking. We'll show it on your home & My Page.");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+      const ok = await saveRoute({
+        stops: route.stops.map((s) => s.candidate.title),
+        origin,
+        start_hm: startValue,
+        end_hm: endValue,
+      });
+      btn.textContent = ok ? "Saved ✓" : "Couldn't save — try again";
+      if (!ok) btn.disabled = false;
+    });
+    bar.append(btn, note);
+    return bar;
   }
 
   // 어시스턴트 턴을 짧은 텍스트로 요약(멀티턴 맥락 — LLM 이 후속 교정을 이해하도록).

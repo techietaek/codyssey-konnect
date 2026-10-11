@@ -23,7 +23,7 @@ async def get_session(user_id: str) -> dict[str, Any] | None:
         res = (
             get_client()
             .table(_TABLE)
-            .select("last_request,current_choice,updated_at")
+            .select("last_request,current_choice,current_route,updated_at")
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -42,7 +42,9 @@ async def get_session(user_id: str) -> dict[str, Any] | None:
 async def upsert_session(user_id: str, fields: dict[str, Any]) -> None:
     """제공된 필드만 upsert(부분 갱신). 빈 fields 면 no-op."""
     allowed = {
-        k: v for k, v in fields.items() if k in ("last_request", "current_choice")
+        k: v
+        for k, v in fields.items()
+        if k in ("last_request", "current_choice", "current_route")
     }
     if not allowed:
         return

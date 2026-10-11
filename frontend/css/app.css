@@ -134,6 +134,17 @@ body {
 }
 .btn-cta:disabled { background: var(--c-border); color: var(--c-text-muted); cursor: not-allowed; }
 
+/* ── 채팅 루트 저장 바(Save this route) ── */
+.route-save-bar { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-6); }
+.btn-save-route {
+  align-self: flex-start; cursor: pointer; border: 1px solid var(--c-primary);
+  background: var(--c-surface); color: var(--c-primary);
+  border-radius: var(--r-full); padding: var(--space-8) var(--space-12);
+  font-size: var(--fs-meta); font-weight: var(--fw-bold);
+}
+.btn-save-route:disabled { border-color: var(--c-border); color: var(--c-text-muted); cursor: default; }
+.route-save-note { font-size: var(--fs-badge); color: var(--c-text-muted); }
+
 /* ── 결과 뷰 ── */
 .ai-notice {
   display: inline-block; margin: var(--space-12) 0;

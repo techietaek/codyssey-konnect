@@ -6,7 +6,8 @@ import { getPreferences, putPreferences } from "../api.js";
 import { createPreferenceForm, INTERESTS } from "../components/preference-form.js";
 import { openPrefConfirm } from "../components/pref-confirm.js";
 import { openSheet, el as sheetEl } from "../components/sheet.js";
-import { loadChoice } from "../state.js";
+import { clearRoute, loadChoice, loadRoute, rebuildSavedRoute } from "../state.js";
+import { renderSavedRouteCard } from "../components/saved-route-card.js";
 
 const LABEL = Object.fromEntries(INTERESTS); // code → 표시 라벨
 const CHEVRON =
@@ -237,10 +238,41 @@ export function renderMyPageView({ onBack, onHome, onViewChoice } = {}) {
     return btn;
   }
 
+  // 저장된 B 문화루트 슬롯 — DB에서 참조 로드 → 라이브 재조립해 표시. 한 번만 네트워크 조회하고
+  // 결과(savedRouteData)를 캐시해, render() 가 여러 번 불려도 카드가 사라지지 않게 다시 그린다.
+  let routeChecked = false;
+  let savedRouteData = null;
+  function renderRouteSlot() {
+    const slot = el("div", "mypage-route-slot");
+    const paint = () => {
+      slot.replaceChildren();
+      if (!savedRouteData) return;
+      const card = renderSavedRouteCard(savedRouteData, {
+        onClear: () => {
+          clearRoute();
+          savedRouteData = null;
+          slot.replaceChildren();
+        },
+      });
+      if (card) slot.append(card);
+    };
+    if (!routeChecked) {
+      routeChecked = true;
+      loadRoute().then(async (ref) => {
+        if (ref) savedRouteData = await rebuildSavedRoute(ref);
+        paint();
+      });
+    } else {
+      paint();
+    }
+    return slot;
+  }
+
   function render() {
     body.replaceChildren();
     body.append(renderAccount());
     body.append(renderCurrentChoice());
+    body.append(renderRouteSlot());
     body.append(mode === "edit" ? renderPreferencesEdit() : renderPreferencesView());
     body.append(renderSignOut());
   }

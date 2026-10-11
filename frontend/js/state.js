@@ -1,6 +1,11 @@
 // 클라이언트 상태 컨테이너. 화면 로직(pages/)과 분리.
-import { putSession } from "./api.js";
+import { getSession, postRoute, putSession } from "./api.js";
 import { isSignedIn } from "./auth.js";
+
+function _localIso(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`;
+}
 
 export const state = {
   request: null, // 마지막 추천 요청 조건(payload)
@@ -59,4 +64,55 @@ export function clearChoice() {
     /* noop */
   }
   putSession({ current_choice: null }).catch(() => {}); // 서버 미러도 비움
+}
+
+// ── 저장된 B 문화루트 (DB 정본 — 로그아웃·기기 변경에도 유지. 참조만 저장, 열 때 라이브 재조립) ──
+// ref = { stops:[title...], origin, start_at, end_at, note, conditions }. 사실(가격·경로선)은
+// 저장하지 않는다 — 캐싱 금지 규약 준수 + 신선도(home/mypage 가 postRoute 로 매번 재조회).
+export async function saveRoute(ref) {
+  const env = await putSession({ current_route: { ...ref, at: Date.now() } });
+  return env?.ok ?? false;
+}
+
+export async function loadRoute() {
+  if (!isSignedIn()) return null; // 세션/토큰 없으면 호출 안 함(불필요한 401 방지)
+  try {
+    const env = await getSession();
+    return env?.ok ? (env.data?.current_route ?? null) : null;
+  } catch {
+    return null; // 세션없음 → 저장 루트 없음(graceful)
+  }
+}
+
+export async function clearRoute() {
+  try {
+    await putSession({ current_route: null });
+  } catch {
+    /* noop */
+  }
+}
+
+// 저장된 ref → 라이브 재조립(사실·경로선 신선). 시간창은 '지금부터 저장 소요시간'으로 롤 —
+// 저장 당시 시계시간을 오늘에 그대로 쓰면 시간대에 따라 전부 closed 로 사라질 수 있어서다.
+// pin_titles 로 저장 스톱을 고정 복원하고, 못 찾은 스톱은 조용히 빠진다. 실패/빈결과는 null.
+export async function rebuildSavedRoute(ref) {
+  if (!ref?.stops?.length) return null;
+  const [sh, sm] = String(ref.start_hm || "10:00").split(":").map(Number);
+  const [eh, em] = String(ref.end_hm || "18:00").split(":").map(Number);
+  let durMin = eh * 60 + em - (sh * 60 + sm);
+  if (!(durMin > 0)) durMin = 4 * 60; // 안전 기본 4시간
+  const start = new Date();
+  start.setSeconds(0, 0);
+  const end = new Date(start.getTime() + durMin * 60000);
+  try {
+    const env = await postRoute({
+      start_location: ref.origin || { label: "Current location" },
+      start_at: _localIso(start),
+      end_at: _localIso(end),
+      pin_titles: ref.stops,
+    });
+    return env?.ok ? (env.data ?? null) : null;
+  } catch {
+    return null;
+  }
 }

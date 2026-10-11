@@ -12,6 +12,8 @@ class SessionState(BaseModel):
 
     last_request: dict[str, Any] | None = None
     current_choice: dict[str, Any] | None = None
+    # 저장된 B 문화루트(참조만 — origin·스톱 제목·시간창·조건). 열 때 라이브 재조립.
+    current_route: dict[str, Any] | None = None
     updated_at: str | None = None
 
 
@@ -20,3 +22,4 @@ class SessionUpdate(BaseModel):
 
     last_request: dict[str, Any] | None = None
     current_choice: dict[str, Any] | None = None
+    current_route: dict[str, Any] | None = None

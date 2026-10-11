@@ -3,7 +3,15 @@
 // 현재 선택이 있으면(A6 localStorage) 재접근 카드 + 미니맵을 상단에 노출.
 import { displayName, signInWithGoogle } from "../auth.js";
 import { renderMiniMap } from "../map.js";
-import { clearChoice, isLoggedIn, loadChoice } from "../state.js";
+import {
+  clearChoice,
+  clearRoute,
+  isLoggedIn,
+  loadChoice,
+  loadRoute,
+  rebuildSavedRoute,
+} from "../state.js";
+import { renderSavedRouteCard } from "../components/saved-route-card.js";
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -164,6 +172,24 @@ export function renderHomeView({
     // 미니맵: 실제 좌표·실제 경로만(임의 직선 금지). 실패 시 패널 숨김.
     renderMiniMap(miniEl, saved.env.data.origin, savedCand).catch(() => {});
   }
+
+  // 저장된 B 문화루트(DB 정본) — 비동기 로드 후 라이브 재조립해 선택 카드 아래 삽입.
+  // 참조만 저장했으므로 매번 신선 재조회(캐싱 금지 준수). 로그인·세션 없으면 조용히 생략.
+  const routeSlot = el("div", "home-route-slot");
+  content.append(routeSlot);
+  (async () => {
+    const ref = await loadRoute();
+    if (!ref) return;
+    const data = await rebuildSavedRoute(ref);
+    const cardEl = data ? renderSavedRouteCard(data, {
+      onClear: () => {
+        clearRoute();
+        routeSlot.replaceChildren();
+      },
+      onView: () => onOpenChat?.(),
+    }) : null;
+    if (cardEl) routeSlot.append(cardEl);
+  })();
 
   const exploreLabel = el(
     "p",
