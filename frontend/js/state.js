@@ -32,19 +32,22 @@ const CHOICE_KEY = "konnect.currentChoice";
 
 export function saveChoice(request, env, candidateId) {
   state.selectedId = candidateId;
+  const at = Date.now();
   try {
     localStorage.setItem(
       CHOICE_KEY,
-      JSON.stringify({ request, env, candidateId, at: Date.now() }),
+      JSON.stringify({ request, env, candidateId, at }),
     );
   } catch {
     /* 저장 불가(시크릿 모드 등)여도 현 세션 선택은 유지 */
   }
-  // 서버(계정·익명)에도 미러 — 연속성·마이그레이션(L1d) 대비. 실패해도 UI 무영향.
-  // env(후보 전체)는 저장하지 않는다 — 요청·선택 id만(복원 시 재조회가 정본).
+  // 서버(계정)에도 영속 — 로그아웃·재로그인·기기 변경에도 '내가 고른 결과'가 유지되게(FR-L2).
+  // 사용자가 고른 그 후보 1개 + origin 을 저장(참조+표시 스냅샷). 이는 '현재 선택' 상태 저장
+  // (§4.4)이지 외부 API 응답 캐시가 아니다 — 추천 질의에 재사용하거나 타인에게 제공하지 않는다.
+  const candidate = (env?.data?.candidates || []).find((c) => c.id === candidateId);
   putSession({
     last_request: request,
-    current_choice: { candidateId, at: Date.now() },
+    current_choice: { candidateId, at, candidate, origin: env?.data?.origin, request },
   }).catch(() => {});
 }
 
@@ -56,6 +59,43 @@ export function loadChoice() {
   }
 }
 
+// 서버(DB)에 저장된 현재 선택을 로컬로 복원 — 재로그인·기기 변경 시 '내가 고른 결과' 재현.
+// 로그인 사용자만. 성공 시 localStorage 를 DB 스냅샷으로 채워 home/mypage(loadChoice)가 렌더.
+export async function restoreChoiceFromServer() {
+  if (!isSignedIn()) return false;
+  if (loadChoice()) return true; // 로컬에 이미 있으면 덮어쓰지 않음(토큰 갱신 시 clobber 방지)
+  try {
+    const env = await getSession();
+    const cc = env?.ok ? env.data?.current_choice : null;
+    if (!cc?.candidate || !cc?.candidateId) return false;
+    state.selectedId = cc.candidateId;
+    const local = {
+      request: cc.request,
+      candidateId: cc.candidateId,
+      at: cc.at,
+      env: { data: { candidates: [cc.candidate], origin: cc.origin } },
+    };
+    try {
+      localStorage.setItem(CHOICE_KEY, JSON.stringify(local));
+    } catch {
+      /* noop */
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 로그아웃 시 로컬 뷰만 비운다(DB 는 유지 → 재로그인하면 복원). 서버 삭제는 명시적 ✕ 때만.
+export function clearLocalChoice() {
+  state.selectedId = null;
+  try {
+    localStorage.removeItem(CHOICE_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 export function clearChoice() {
   state.selectedId = null;
   try {
@@ -63,7 +103,7 @@ export function clearChoice() {
   } catch {
     /* noop */
   }
-  putSession({ current_choice: null }).catch(() => {}); // 서버 미러도 비움
+  putSession({ current_choice: null }).catch(() => {}); // 명시적 삭제 → 서버도 비움
 }
 
 // ── 저장된 B 문화루트 (DB 정본 — 로그아웃·기기 변경에도 유지. 참조만 저장, 열 때 라이브 재조립) ──

@@ -13,7 +13,12 @@ import { renderChatView } from "./pages/chat.js";
 import { renderOnboardingView } from "./pages/onboarding.js";
 import { renderMyPageView } from "./pages/mypage.js";
 import { renderChoiceView } from "./pages/choice.js";
-import { loadChoice, setResults } from "./state.js";
+import {
+  clearLocalChoice,
+  loadChoice,
+  restoreChoiceFromServer,
+  setResults,
+} from "./state.js";
 
 const viewEl = document.getElementById("view");
 const WELCOME_KEY = "konnect.seenWelcome";
@@ -227,7 +232,9 @@ try {
 
 // 세션(익명/정식) 준비 후 첫 화면을 그린다 → 홈의 로그인 상태(Hello·Log out)가
 // 첫 페인트에 반영된다. auth 실패해도 화면은 그린다(비인증 진행).
-authReady().finally(() => {
+authReady().finally(async () => {
+  // 로그인 사용자면 DB에 저장된 '현재 선택'을 로컬로 복원(재로그인·기기 변경에도 유지, FR-L2).
+  await restoreChoiceFromServer();
   if (seen) showHome();
   else showWelcome();
   // 가입 직후 복귀면(정식 로그인) 1회 온보딩. 홈 위에 덮어씀.
@@ -235,7 +242,10 @@ authReady().finally(() => {
 });
 
 // 로그인/로그아웃/OAuth 복귀로 세션이 바뀌면, 홈이 떠 있을 때 재렌더(Hello·Log out 반영).
-onAuthChange(() => {
+onAuthChange(async () => {
+  // 로그아웃 → 로컬 선택 숨김(DB 유지). 로그인 → DB 선택 복원. 그 후 홈 재렌더.
+  if (!isSignedIn()) clearLocalChoice();
+  else await restoreChoiceFromServer();
   if (document.querySelector(".home")) showHome();
   // 익명→Google 승격 직후 첫 로그인이면 온보딩(1회). 결과/선택 화면 위에는 띄우지 않음.
   if (document.querySelector(".home") || document.querySelector(".welcome"))
