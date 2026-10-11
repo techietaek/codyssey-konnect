@@ -1,6 +1,30 @@
 """개방형 명시 배제 선별·0건-세이프 (domain/exclusion) — 결정론 로직."""
 
-from app.domain.exclusion import match_excluded_places, select_with_exclusion
+from app.domain.exclusion import (
+    lexical_excluded,
+    match_excluded_places,
+    select_with_exclusion,
+)
+
+
+def test_lexical_excluded_matches_title_word_and_plural():
+    items = [
+        ("a", "Statue of Admiral Yi Sun-Shin"),
+        ("b", "King Sejong Statue"),
+        ("c", "Gwanghwamun Gate"),
+        ("d", "Sejong-ro Park"),
+    ]
+    out = lexical_excluded(items, ["statue"])  # 단수 개념 → statue/statues 제목 매칭
+    assert out == {"a", "b"}  # 두 statue 모두(분류기가 놓쳐도 결정론으로 제외)
+    assert lexical_excluded(items, ["park"]) == {"d"}
+
+
+def test_lexical_excluded_skips_multiword_and_short():
+    items = [("a", "Jogyesa Temple"), ("b", "Religious Center")]
+    # 다단어(추상) 개념은 어휘로 판단 안 함 → LLM 분류에 맡김(빈 집합).
+    assert lexical_excluded(items, ["religious sites"]) == set()
+    assert lexical_excluded(items, ["no"]) == set()  # 너무 짧음
+
 
 _IDS = ["a", "b", "c", "d", "e", "f"]
 

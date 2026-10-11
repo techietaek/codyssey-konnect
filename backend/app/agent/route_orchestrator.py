@@ -30,7 +30,11 @@ from app.agent.orchestrator import (
 from app.core.trace import Trace
 from app.domain.budget import BudgetVerdict
 from app.domain.conflict import conflict_notice, io_interest_conflict
-from app.domain.exclusion import match_excluded_places, select_with_exclusion
+from app.domain.exclusion import (
+    lexical_excluded,
+    match_excluded_places,
+    select_with_exclusion,
+)
 from app.domain.locations import detect_location_in_text, resolve_start_coords
 from app.domain.preferences_merge import (
     merge_saved_interests,
@@ -272,10 +276,14 @@ async def recommend_route(
         valid = [v for v in valid if v[0].id not in place_ids]
         trace.step("exclude_places", places=cond.exclude_places, removed=len(place_ids))
 
-    # [filter] 개방형 명시 배제: LLM 의미분류로 매칭 후보 제거(사실은 코드, 0건-세이프).
+    # [filter] 개방형 명시 배제: 어휘(제목 단어) 결정론 + LLM 의미분류의 합집합으로 제거.
+    # 어휘 pre-pass 는 'statue' 처럼 제목에 명백히 든 경우를 분류기 과소제외와 무관하게 확실히
+    # 잡는다(사실은 코드, 0건-세이프). 다단어·추상 개념은 LLM 이 담당.
     exclude_ids: set[str] = set()
     if cond.exclude_concepts and valid:
-        exclude_ids = await classify_excluded(
+        exclude_ids = lexical_excluded(
+            [(c.id, c.title) for c, _ in valid], cond.exclude_concepts
+        ) | await classify_excluded(
             [(c.id, txt) for c, txt in valid], cond.exclude_concepts, trace
         )
     by_id = {c.id: c for c, _ in valid}

@@ -29,7 +29,11 @@ from app.domain.budget import BudgetVerdict, judge_budget
 from app.domain.conflict import conflict_notice, io_interest_conflict
 from app.domain.curation import is_cultural_experience
 from app.domain.dedup import dedup_cross_source
-from app.domain.exclusion import match_excluded_places, select_with_exclusion
+from app.domain.exclusion import (
+    lexical_excluded,
+    match_excluded_places,
+    select_with_exclusion,
+)
 from app.domain.locations import detect_location_in_text, resolve_start_coords
 from app.domain.normalize import (
     _seoul_type,
@@ -694,7 +698,10 @@ async def recommend_a(
     #   - 사실 생성 없음(이미 판정된 fact 후보 위에서 '고르기'만). graceful=빈 집합.
     exclude_ids: set[str] = set()
     if cond.exclude_concepts and valid:
-        exclude_ids = await classify_excluded(
+        # 어휘(제목 단어) 결정론 + LLM 의미분류 합집합 — 'statue' 같은 명백한 건 확실히 제외.
+        exclude_ids = lexical_excluded(
+            [(c.id, c.title) for (c, _, _, _) in valid], cond.exclude_concepts
+        ) | await classify_excluded(
             [(c.id, txt) for (c, _, _, txt) in valid], cond.exclude_concepts, trace
         )
     by_id = {c.id: (c, t, b) for (c, t, b, _) in valid}

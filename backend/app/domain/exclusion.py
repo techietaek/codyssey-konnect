@@ -11,6 +11,31 @@ LLM(agent/exclude_classifier)은 "어떤 후보가 배제 개념에 매칭되나
 
 from __future__ import annotations
 
+import re
+
+
+def lexical_excluded(items: list[tuple[str, str]], concepts: list[str]) -> set[str]:
+    """제목에 배제 개념이 '단어'로 명백히 든 후보 id (결정론). LLM 의미분류의 과소제외를 보완한다
+    — 'statue' 같은 구체 단일어 개념은 "King Sejong Statue" 처럼 제목에 그대로 나타나면 확실히
+    제외한다(분류기가 보수적으로 놓치는 명백한 어휘 일치). 다단어·추상 개념(예: 'religious
+    sites')은 어휘로 판단하지 않고 LLM 분류에 맡긴다. 복수형(statues)도 함께 매칭.
+
+    입력 title 만 본다(overview 의 우연한 단어로 과잉 제외하지 않게). 너무 짧은(<3) 개념은 무시.
+    """
+    tokens: list[str] = []
+    for c in concepts:
+        core = (c or "").strip().lower().rstrip("s")
+        if core and " " not in core and len(core) >= 3:
+            tokens.append(core)
+    if not tokens:
+        return set()
+    out: set[str] = set()
+    for cid, title in items:
+        t = (title or "").lower()
+        if t and any(re.search(rf"\b{re.escape(tok)}s?\b", t) for tok in tokens):
+            out.add(cid)
+    return out
+
 
 def match_excluded_places(items: list[tuple[str, str]], places: list[str]) -> set[str]:
     """(id, title) 중 사용자가 명시 제외한 '특정 장소명'과 매칭되는 id (결정론 title 매칭).
